@@ -368,7 +368,7 @@ export default function UpdateProfile() {
                 placeholderTextColor="gray"
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={[styles.inputField, { outline: 'none' }]}
+                style={[styles.inputField, { outlineColor: 'none' }]}
               />
               <Pressable
                 onPress={checkUsername}

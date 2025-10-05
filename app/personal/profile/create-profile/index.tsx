@@ -174,7 +174,7 @@ export default function CreateProfile() {
               placeholderTextColor="gray"
               autoCapitalize="none"
               autoCorrect={false}
-              style={[styles.inputField, { outline: 'none' }]}
+              style={[styles.inputField, { outlineColor: 'none' }]}
             />
             <Pressable onPress={checkUsername} style={({ pressed }) => [
               styles.inputButton,

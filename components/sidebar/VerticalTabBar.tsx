@@ -84,7 +84,7 @@ export default function VerticalTabBar() {
       {(mode === 'public' ? publicTabs : personalTabs).map((tab) => {
         let isActive = false
 
-        isActive = segments[1] === tab.slug
+        isActive = segments.at(1) === tab.slug
 
         const iconColor = isActive ? styles.activeTabText.color : styles.tabText.color
 
