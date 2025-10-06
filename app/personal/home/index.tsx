@@ -94,7 +94,10 @@ const styles = StyleSheet.create((theme, rt) => ({
   modeToggle: {
     paddingHorizontal: 10,
     // paddingVertical: 2,
-    borderRadius: 14,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 30,
+    borderBottomRightRadius: 8,
     backgroundColor: theme.colors.primaryDark,
   },
   modeText: {

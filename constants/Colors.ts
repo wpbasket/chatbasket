@@ -41,7 +41,7 @@ export const Colors = {
     green: '#00bb77',
     primaryDarkShadow: '#00bb77',
     neutral: 'rgba(115, 115, 115, 0.3)',
-    neutral5: 'rgba(115, 115, 115, 0.5)',
+    neutral5: 'rgba(115, 115, 115, 0.8)',
     neutral2: 'rgba(115, 115, 115, 0.7)',
     neutral3: 'rgba(115, 115, 115, 0.1)',
     neutral0: 'rgba(115, 115, 115, 0.1)',

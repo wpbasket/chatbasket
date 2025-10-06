@@ -120,15 +120,15 @@ export default function Settings() {
       <ThemedViewWithSidebar.Main>
 
         <ThemedView style={styles.mainContainer}>
+          <Header
+            leftButton={{
+              child: <IconSymbol name='arrow.left' />,
+              onPress: goBack,
+            }}
+            centerIcon={true}
+            Icon={<ThemedText type='subtitle'>Settings</ThemedText>}
+          />
           <View style={styles.container}>
-            <Header
-              leftButton={{
-                child: <IconSymbol name='arrow.left' />,
-                onPress: goBack,
-              }}
-              centerIcon={true}
-              Icon={<ThemedText type='subtitle'>Settings</ThemedText>}
-            />
             <View style={[styles.flex1, { marginTop: -20 }]}>
               <ThemedText style={styles.sectionHeader}>Security</ThemedText>
               <View style={styles.section}>
@@ -232,12 +232,13 @@ const styles = StyleSheet.create((theme, rt) => (({
   mainContainer: {
     flex: 1,
     paddingTop: rt.insets.top,
-    paddingHorizontal: 20,
+    gap: 20,
 
   },
   container: {
     flex: 1,
     gap: 20,
+    paddingHorizontal: 20,
     // backgroundColor: theme.colors.yellow,
   },
   flex1: {
@@ -306,7 +307,7 @@ const styles = StyleSheet.create((theme, rt) => (({
   },
   modalInput: {
     height: 40,
-    fontSize:18,
+    fontSize: 18,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: theme.colors.neutral4,

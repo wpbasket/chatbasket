@@ -60,14 +60,17 @@ const styles = StyleSheet.create((theme) => ({
   },
   modeToggle: {
     paddingHorizontal: 10,
-    // paddingVertical: 0.5,
-    borderRadius: 14,
+    // paddingVertical: 1,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 30,
+    borderBottomRightRadius: 8,
     backgroundColor: theme.colors.primaryDark,
   },
   modeText: {
     fontSize: 14,
     color: theme.colors.reverseText,
-    fontWeight: 'bold',
+    // fontWeight: 'bold',
   },
 
 
