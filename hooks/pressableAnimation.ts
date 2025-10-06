@@ -1,10 +1,8 @@
-import { useCallback } from 'react';
-
 export const pressableAnimation = () => {
-  const handlePressIn = useCallback(() => {
+  const handlePressIn = () => {
     setTimeout(() => null, 500);
-  }, []);
-  
+  };
+
   return {
     handlePressIn,
   };

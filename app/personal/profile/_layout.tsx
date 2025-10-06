@@ -4,11 +4,11 @@ import { ThemedView } from "@/components/ui/common/ThemedView";
 import { UnistylesRuntime } from "react-native-unistyles";
 import { DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { StyleSheet } from "react-native-unistyles";
-import { use$ } from "@legendapp/state/react";
+import { useLegend$ } from "@/hooks/useLegend";
 import { authState } from "@/state/auth/auth.state";
 
 export default function PersonalProfileScreenLayout() {
-  const isInTheProfileUpdateMode = use$(authState.isInTheProfileUpdateMode);
+  const isInTheProfileUpdateMode = useLegend$(authState.isInTheProfileUpdateMode);
 
   return (
     <>

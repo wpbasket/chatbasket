@@ -1,8 +1,8 @@
 import { StyleSheet, useUnistyles } from "react-native-unistyles"
 import { ThemedView } from "@/components/ui/common/ThemedView"
 import { ThemedText } from "@/components/ui/common/ThemedText"
-import { PersonalCreateProfile$ } from "@/state/personalState/profile/createProfile.state"
-import { use$ } from "@legendapp/state/react"
+import { createProfile$ } from "@/state/publicState/profile/createProfile.state"
+import { useLegend$ } from "@/hooks/useLegend"
 import { Platform, Pressable, TextInput } from "react-native"
 import { pressableAnimation } from "@/hooks/pressableAnimation";
 import { Dropdown } from "@/components/ui/common/DropDown"
@@ -32,33 +32,33 @@ export default function CreateProfile() {
   };
 
   // All hooks must be called at the top level
-  const userId= use$(authState.userId)
-  const name = use$(PersonalCreateProfile$.name)
-  const payloadUsername = use$(PersonalCreateProfile$.username)
-  const profileVisibleTo = use$(PersonalCreateProfile$.profileVisibleTo)
-  const bio = use$(PersonalCreateProfile$.bio)
-  const isUsernameSubmitted = use$(PersonalCreateProfile$.usernameSubmitted)
-  const isSubmitted = use$(PersonalCreateProfile$.submitted)
-  const isUsernameChecked = use$(PersonalCreateProfile$.usernameChecked)
-  const isNameValid = use$(PersonalCreateProfile$.isNameValid)
-  const isUsernameValid = use$(PersonalCreateProfile$.isUsernameValid)
-  const isProfileVisibleToValid = use$(PersonalCreateProfile$.isProfileVisibleToValid)
-  const isBioValid = use$(PersonalCreateProfile$.isBioValid)
-  const isValid = use$(PersonalCreateProfile$.isValid)
+  const userId= useLegend$(authState.userId)
+  const name = useLegend$(createProfile$.name)
+  const payloadUsername = useLegend$(createProfile$.username)
+  const profileVisibleTo = useLegend$(createProfile$.profileVisibleTo)
+  const bio = useLegend$(createProfile$.bio)
+  const isUsernameSubmitted = useLegend$(createProfile$.usernameSubmitted)
+  const isSubmitted = useLegend$(createProfile$.submitted)
+  const isUsernameChecked = useLegend$(createProfile$.usernameChecked)
+  const isNameValid = useLegend$(createProfile$.isNameValid)
+  const isUsernameValid = useLegend$(createProfile$.isUsernameValid)
+  const isProfileVisibleToValid = useLegend$(createProfile$.isProfileVisibleToValid)
+  const isBioValid = useLegend$(createProfile$.isBioValid)
+  const isValid = useLegend$(createProfile$.isValid)
   const { handlePressIn } = pressableAnimation();
   const { theme } = useUnistyles();
 
   useEffect(() => {
     // Clean up when component unmounts
     return () => {
-      PersonalCreateProfile$.reset()
+      createProfile$.reset()
       authState.isInTheProfileUpdateMode.set(false)
     };
   }, []);
 
   const checkUsername = async () => {
     if (!isUsernameValid) {
-      PersonalCreateProfile$.usernameSubmit()
+      createProfile$.usernameSubmit()
       showAlert('Username is not valid\nOnly letters, numbers, . and _ are allowed\nMaximum length is 30 characters')
       return;
     }
@@ -69,7 +69,7 @@ export default function CreateProfile() {
         { message: 'Checking username' }
       );
       if (response.status) {
-        PersonalCreateProfile$.usernameChecked.set(true);
+        createProfile$.usernameChecked.set(true);
       }
     } catch (error) {
       showAlert('Something went wrong try again')
@@ -78,7 +78,7 @@ export default function CreateProfile() {
 
   const handleProfileCreation = async () => {
     if (!isValid) {
-      PersonalCreateProfile$.submit();
+      createProfile$.submit();
       return;
     }
 
@@ -96,7 +96,7 @@ export default function CreateProfile() {
       if (response) {
         // Update the global auth state
         authState.user.set(response);
-        PersonalCreateProfile$.userNotFound.set(false);
+        createProfile$.userNotFound.set(false);
         // Navigate back to profile screen
         router.back();
       }
@@ -154,7 +154,7 @@ export default function CreateProfile() {
             inputMode='text'
             maxLength={70}
             value={name ?? ""}
-            onChangeText={(text) => PersonalCreateProfile$.name.set(text)}
+            onChangeText={(text) => createProfile$.name.set(text)}
             textContentType='name'
             placeholderTextColor="gray"
             autoCapitalize="none"
@@ -169,12 +169,12 @@ export default function CreateProfile() {
               maxLength={30}
               inputMode='text'
               value={payloadUsername ?? ""}
-              onChangeText={(text) => { PersonalCreateProfile$.username.set(text); PersonalCreateProfile$.usernameChecked.set(false) }}
+              onChangeText={(text) => { createProfile$.username.set(text); createProfile$.usernameChecked.set(false) }}
               textContentType='username'
               placeholderTextColor="gray"
               autoCapitalize="none"
               autoCorrect={false}
-              style={[styles.inputField, { outlineColor: 'none' }]}
+              style={[styles.inputField, { outline:'none' }]}
             />
             <Pressable onPress={checkUsername} style={({ pressed }) => [
               styles.inputButton,
@@ -193,7 +193,7 @@ export default function CreateProfile() {
             placeholder="Bio"
             inputMode='text'
             value={bio ?? ""}
-            onChangeText={(text) => PersonalCreateProfile$.bio.set(text)}
+            onChangeText={(text) => createProfile$.bio.set(text)}
             placeholderTextColor="gray"
             autoCapitalize="none"
             autoCorrect={false}
@@ -202,7 +202,7 @@ export default function CreateProfile() {
             style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
           />
 
-          <ThemedView style={[styles.profileVisibleToContainer, { backgroundColor: theme.colors.neutral1 }]} >
+          <ThemedView style={[styles.profileVisibleToContainer]} >
             <Dropdown
               options={[
                 { label: 'Public', value: 'public' },
@@ -214,8 +214,7 @@ export default function CreateProfile() {
               error={!isProfileVisibleToValid && isSubmitted}
               searchable={false}
               style={styles.reverseModalBackground}
-              modalStyles={{ container: styles.modalBackground }}
-              onSelect={(value) => PersonalCreateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+              onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
             />
 
           </ThemedView>
@@ -253,10 +252,13 @@ const styles = StyleSheet.create((theme, rt) => ({
   input: {
     height: 40,
     width: 350,
-    borderColor: theme.colors.neutral2,
+    borderColor: theme.colors.neutral5,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    paddingHorizontal: 16,
     color: theme.colors.text,
   },
   inputError: {
@@ -278,10 +280,14 @@ const styles = StyleSheet.create((theme, rt) => ({
   bio: {
     height: 100,
     width: 350,
-    borderColor: theme.colors.neutral2,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    borderColor: theme.colors.neutral5,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     color: theme.colors.text,
   },
   inputContainer: {
@@ -290,9 +296,12 @@ const styles = StyleSheet.create((theme, rt) => ({
     width: 350,
     height: 40,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    borderColor: theme.colors.neutral2,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    paddingHorizontal: 16,
+    borderColor: theme.colors.neutral5,
   },
   inputField: {
     flex: 1,
@@ -307,14 +316,21 @@ const styles = StyleSheet.create((theme, rt) => ({
   profileVisibleToContainer: {
     width: 350,
     height: 40,
-    borderRadius: 5,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    borderColor: theme.colors.neutral5,
+    borderWidth: 1,
   },
   reverseModalBackground: {
-    backgroundColor: Platform.OS === 'web' ? theme.colors.BackgroundSelect2 : theme.colors.background,
-  },
-  modalBackground: {
-    borderColor: theme.colors.neutral2,
-    borderWidth: Platform.OS === 'web' ? 1 : 0,
+    height: 38,
+    width: 340,
+    borderWidth: 0,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 8,
+    borderTopRightRadius: 25,
+    paddingHorizontal: 16,
   }
-
 }))

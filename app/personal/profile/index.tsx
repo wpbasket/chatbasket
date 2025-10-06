@@ -1,25 +1,25 @@
-import { useEffect, useState, useCallback } from 'react';
-import { StyleSheet } from 'react-native-unistyles';
+import Header from '@/components/header/Header';
+import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import Header from '@/components/header/Header';
-import { Image, Pressable } from 'react-native';
+import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { router } from 'expo-router';
-import { use$ } from '@legendapp/state/react';
-import { authState } from '@/state/auth/auth.state';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
 import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
 import { clearSession } from '@/lib/storage/auth.storage';
+import { authState } from '@/state/auth/auth.state';
+import { createProfile$ } from '@/state/publicState/profile/createProfile.state';
 import { showConfirmDialog } from '@/utils/modal.util';
-import { PersonalCreateProfile$ } from '@/state/personalState/profile/createProfile.state';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import Sidebar from '@/components/sidebar/Sidebar';
-import { useFocusEffect } from '@react-navigation/native';
 import { getUser } from '@/utils/profile.util';
+import { useLegend$ } from '@/hooks/useLegend';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import { useCallback } from 'react';
+import { Image, Pressable } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 
 // Empty State Component
 function ProfileEmptyState() {
@@ -63,9 +63,9 @@ function ProfileEmptyState() {
 }
 
 export default function ProfileScreen() {
-  const user = use$(authState.user);
-  const userNotFound = use$(PersonalCreateProfile$.userNotFound);
-  const avatarUrl = use$(authState.avatarUri);
+  const user = useLegend$(authState.user);
+  const userNotFound = useLegend$(createProfile$.userNotFound);
+  const avatarUrl = useLegend$(authState.avatarUri);
   const { handlePressIn } = pressableAnimation();
 
 
@@ -202,7 +202,7 @@ export default function ProfileScreen() {
                   </ThemedView>
                   {/* Profile Mode End */}
 
-                  {/* Known profiles */}
+                  {/* Followers */}
                   <Pressable
                     onPressIn={handlePressIn}
                     style={({ pressed }) => [
@@ -211,10 +211,38 @@ export default function ProfileScreen() {
                     ]}>
                     <EntypoIcon name="bucket" size={20} color={bucketColor} />
                     <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      0
+                      {user?.followers}
                     </ThemedText>
                   </Pressable>
-                  {/* Known profiles End */}
+                  {/* Followers End */}
+
+                  {/* Following */}
+                  <Pressable
+                    onPressIn={handlePressIn}
+                    style={({ pressed }) => [
+                      { opacity: pressed ? 0.1 : 1 },
+                      styles.bucketContainer
+                    ]}>
+                    <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
+                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                      {user?.following}
+                    </ThemedText>
+                  </Pressable>
+                  {/* Following End */}
+
+                  {/* Posts  */}
+                  <Pressable
+                    onPressIn={handlePressIn}
+                    style={({ pressed }) => [
+                      { opacity: pressed ? 0.1 : 1 },
+                      styles.bucketContainer
+                    ]}>
+                    <FontAwesome5Icon name="list" size={22} color={bucketColor} />
+                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                      Posts
+                    </ThemedText>
+                  </Pressable>
+                  {/* Posts End */}
 
                   {/* Settings  */}
                   <Pressable

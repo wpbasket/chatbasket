@@ -1,28 +1,27 @@
-import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles'
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
+import { router } from 'expo-router';
+import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
 // import { authState } from '@/state/auth/auth';
-import CreateSettingsFlows from './settings.flows';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
+import Header from '@/components/header/Header';
+import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
 import Sidebar from '@/components/sidebar/Sidebar';
-import { Pressable, View } from 'react-native';
-import { useEffect } from 'react';
-import { PreferencesStorage } from '@/lib/storage/preferences.storage';
-import { setAppMode } from '@/state/appMode/mode.state';
+import { Dropdown } from '@/components/ui/common/DropDown';
+import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { useResendCooldown } from '@/utils/resendCooldown.util'
-import Header from '@/components/header/Header';
-import { showControllersModal } from '@/utils/modal.util';
-import { hideModal } from '@/utils/modal.util';
-import { use$ } from '@legendapp/state/react';
-import { setting$ } from '@/state/settings/setting.state';
+import { useLegend$ } from '@/hooks/useLegend';
 import { settingApi } from '@/lib/publicLib/api/settingApi/api.setting';
+import { PreferencesStorage } from '@/lib/storage/preferences.storage';
+import { setAppMode } from '@/state/appMode/mode.state';
 import { authState } from '@/state/auth/auth.state';
-import { Dropdown } from '@/components/ui/common/DropDown';
-import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
+import { setting$ } from '@/state/settings/setting.state';
+import { hideModal, showControllersModal } from '@/utils/modal.util';
+import { useResendCooldown } from '@/utils/resendCooldown.util';
+import { useEffect } from 'react';
+import { Pressable, View } from 'react-native';
+import CreateSettingsFlows from './settings.flows';
 
 export default function Settings() {
   const MAX_RESENDS = 3;
@@ -36,10 +35,9 @@ export default function Settings() {
   }, []);
 
   const { handlePressIn } = pressableAnimation();
-  const email = use$(authState.user.email);
+  const email = useLegend$(authState.user.email);
 
   const { editEmail, editPassword } = CreateSettingsFlows({
-    setting$,
     settingApi,
     showControllersModal,
     hideModal,
@@ -285,7 +283,7 @@ const styles = StyleSheet.create((theme, rt) => (({
   themePickerContainer: {
     width: 267,
     height: 30,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     borderWidth: 1,
     borderTopLeftRadius: 25,
     borderBottomLeftRadius: 25,

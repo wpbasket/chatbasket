@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
@@ -13,8 +13,8 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import Sidebar from '@/components/sidebar/Sidebar';
 
 export default function PostDetailsPage() {
-    const post = use$(currentPostStore.post);
-    const user = use$(currentUserStore.user);
+    const post = useLegend$(currentPostStore.post);
+    const user = useLegend$(currentUserStore.user);
     const { handlePressIn } = pressableAnimation();
 
 

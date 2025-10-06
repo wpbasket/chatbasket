@@ -1,27 +1,25 @@
 // import '../unistyles'
-import { SplashScreen, Stack } from 'expo-router';
-import { initUserPosts } from '@/state/publicState/initUserPosts.state';
-import { useFonts } from 'expo-font';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react'; // Import useState
-import 'react-native-reanimated';
-import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
-import { UnistylesRuntime } from 'react-native-unistyles';
-import { ThemedView } from '@/components/ui/common/ThemedView';
-import { Platform } from 'react-native';
-import { authState } from '@/state/auth/auth.state';
-import { use$ } from '@legendapp/state/react';
-import { restoreAuthState } from '@/lib/storage/auth.storage';
-import { initializeSecureStorage } from '@/lib/storage/auth.storage';
 import { AppModal } from '@/components/modals/AppModal';
-import { StyleSheet } from 'react-native-unistyles';
+import { ThemedView } from '@/components/ui/common/ThemedView';
+import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/auth.storage';
+import { appMode$ } from '@/state/appMode/mode.state';
+import { authState } from '@/state/auth/auth.state';
+import { initUserPosts } from '@/state/publicState/initUserPosts.state';
 import { initializeGlobalNetworkTracking } from '@/state/tools/network.state';
 import { getUser } from '@/utils/profile.util';
 import Entypo from '@expo/vector-icons/Entypo';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { appMode$ } from '@/state/appMode/mode.state';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useLegend$ } from '@/hooks/useLegend';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
+import { SplashScreen, Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react'; // Import useState
+import { Platform } from 'react-native';
+import 'react-native-reanimated';
+import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
 
 
 if (Platform.OS === 'android' || Platform.OS === 'ios') {
@@ -52,9 +50,9 @@ export default function RootLayout() {
   }, []); // This runs only once on mount
 
   // const lock = true;
-  const lock = use$(authState.isLoggedIn);
-  const sentOtp = use$(authState.isSentOtp);
-  const mode = use$(appMode$.mode);
+  const lock = useLegend$(authState.isLoggedIn);
+  const sentOtp = useLegend$(authState.isSentOtp);
+  const mode = useLegend$(appMode$.mode);
 
   const themeName = UnistylesRuntime.themeName;
 

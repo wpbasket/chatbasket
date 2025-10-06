@@ -5,13 +5,13 @@ import { StyleSheet } from 'react-native-unistyles';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { Pressable } from 'react-native';
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
 import { appMode$, setAppMode } from '@/state/appMode/mode.state';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
 
 export default function Home() {
   const { handlePressIn } = pressableAnimation();
-  const currentMode = use$(appMode$.mode);
+  const currentMode = useLegend$(appMode$.mode);
 
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';
@@ -93,7 +93,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   modeToggle: {
     paddingHorizontal: 10,
-    paddingVertical: 2,
+    // paddingVertical: 2,
     borderRadius: 14,
     backgroundColor: theme.colors.primaryDark,
   },

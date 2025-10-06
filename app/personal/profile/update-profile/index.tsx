@@ -1,24 +1,25 @@
-import { StyleSheet, useUnistyles } from 'react-native-unistyles'
+import Header from '@/components/header/Header';
+import Sidebar from '@/components/sidebar/Sidebar';
+import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import Header from '@/components/header/Header';
-import { router } from 'expo-router';
-import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { PersonalUpdateProfile$ } from '@/state/personalState/profile/updateProfile.state'; 
-import { use$ } from '@legendapp/state/react';
-import { Image, Platform, Pressable, TextInput } from 'react-native';
-import { Dropdown } from '@/components/ui/common/DropDown';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { authState } from '@/state/auth/auth.state';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { showAlert, showControllersModal, runWithLoading } from '@/utils/modal.util';
-import * as ImagePicker from 'expo-image-picker';
-import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
-import { ApiError } from '@/lib/publicLib/api';
-import { useEffect } from 'react';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import Sidebar from '@/components/sidebar/Sidebar';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import { pressableAnimation } from '@/hooks/pressableAnimation';
+import { useLegend$ } from '@/hooks/useLegend';
+import { ApiError } from '@/lib/publicLib/api';
+import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
+import { authState } from '@/state/auth/auth.state';
 import { modalActions } from '@/state/modals/modals.state';
+import { updateProfile$ } from '@/state/publicState/profile/updateProfile.state';
+import { runWithLoading, showAlert, showControllersModal } from '@/utils/modal.util';
+import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { Image, Platform, Pressable, TextInput } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { buildFormDataFromAsset } from '@/utils/upload.util';
 
 
 export default function UpdateProfile() {
@@ -26,7 +27,7 @@ export default function UpdateProfile() {
   useEffect(() => {
     // Clean up when component unmounts
     return () => {
-      PersonalUpdateProfile$.reset()
+      updateProfile$.reset()
       authState.isInTheProfileUpdateMode.set(false)
     };
   }, []);
@@ -36,29 +37,30 @@ export default function UpdateProfile() {
     router.back();
   };
   
-  const user = use$(authState.user)
-  const avatarUri = use$(authState.avatarUri)
-  const username = use$(PersonalUpdateProfile$.username);
-  const name = use$(PersonalUpdateProfile$.name);
-  const bio = use$(PersonalUpdateProfile$.bio)
-  const profileVisibleTo = use$(PersonalUpdateProfile$.profileVisibleTo)
-  const avatar = use$(PersonalUpdateProfile$.avatar)
-  const avatarFile = use$(PersonalUpdateProfile$.avatarFile)
-  const avatarTokens = use$(PersonalUpdateProfile$.avatarTokens)
-  const isAvatarSubmitted = use$(PersonalUpdateProfile$.avatarSubmitted)
-  const isAvatarChecked = use$(PersonalUpdateProfile$.isAvatarChecked)
-  const isAvatarValid = use$(PersonalUpdateProfile$.isAvatarValid)
-  const isSubmitted = use$(PersonalUpdateProfile$.submitted)
-  const isUsernameSubmitted = use$(PersonalUpdateProfile$.usernameSubmitted)
-  const isUsernameChecked = use$(PersonalUpdateProfile$.usernameChecked)
-  const isUsernameCheckedWhileNull = use$(PersonalUpdateProfile$.isUsernameChecked)
-  const isNameValid = use$(PersonalUpdateProfile$.isNameValid)
-  const isUsernameValid = use$(PersonalUpdateProfile$.isUsernameValid)
-  const isProfileVisibleToValid = use$(PersonalUpdateProfile$.isProfileVisibleToValid)
-  const isBioValid = use$(PersonalUpdateProfile$.isBioValid)
-  const isValid = use$(PersonalUpdateProfile$.isValid)
-  const isNull = use$(PersonalUpdateProfile$.isNull)
-  const isAvatarRemoved = use$(PersonalUpdateProfile$.removeAvatarDone)
+  const user = useLegend$(authState.user)
+  const avatarUri = useLegend$(authState.avatarUri)
+  const username = useLegend$(updateProfile$.username)
+  const name = useLegend$(updateProfile$.name)
+  const bio = useLegend$(updateProfile$.bio)
+  const profileVisibleTo = useLegend$(updateProfile$.profileVisibleTo)
+  const avatar = useLegend$(updateProfile$.avatar)
+  const avatarFile = useLegend$(updateProfile$.avatarFile)
+  const avatarTokens = useLegend$(updateProfile$.avatarTokens)
+  const isAvatarSubmitted = useLegend$(updateProfile$.avatarSubmitted)
+  const isAvatarChecked = useLegend$(updateProfile$.isAvatarChecked)
+  const isAvatarValid = useLegend$(updateProfile$.isAvatarValid)
+  const isSubmitted = useLegend$(updateProfile$.submitted)
+  const isUsernameSubmitted = useLegend$(updateProfile$.usernameSubmitted)
+  const isUsernameChecked = useLegend$(updateProfile$.usernameChecked)
+  const isUsernameCheckedWhileNull = useLegend$(updateProfile$.isUsernameChecked)
+  const isNameValid = useLegend$(updateProfile$.isNameValid)
+  const isUsernameValid = useLegend$(updateProfile$.isUsernameValid)
+  const isProfileVisibleToValid = useLegend$(updateProfile$.isProfileVisibleToValid)
+  const isBioValid = useLegend$(updateProfile$.isBioValid)
+  const isValid = useLegend$(updateProfile$.isValid)
+  const isNull = useLegend$(updateProfile$.isNull)
+  const isAvatarRemoved = useLegend$(updateProfile$.removeAvatarDone)
+  
   const { theme } = useUnistyles();
   const { handlePressIn } = pressableAnimation();
 
@@ -85,8 +87,8 @@ export default function UpdateProfile() {
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        PersonalUpdateProfile$.avatarFile.set(result.assets[0]);
-        PersonalUpdateProfile$.avatarChecked.set(false);
+        updateProfile$.avatarFile.set(result.assets[0]);
+        updateProfile$.avatarChecked.set(false);
         // Enable Apply dynamically once an avatar is chosen
         modalActions.update({ confirmDisabled: false });
       }
@@ -109,8 +111,8 @@ export default function UpdateProfile() {
         });
 
         if (!result.canceled && result.assets && result.assets[0]) {
-          PersonalUpdateProfile$.avatarFile.set(result.assets[0]);
-          PersonalUpdateProfile$.avatarChecked.set(false);
+          updateProfile$.avatarFile.set(result.assets[0]);
+          updateProfile$.avatarChecked.set(false);
           // Enable Apply dynamically once a photo is taken
           modalActions.update({ confirmDisabled: false });
         }
@@ -133,7 +135,7 @@ export default function UpdateProfile() {
         );
         if (response.status) {
           authState.avatarUri.set(null)
-          PersonalUpdateProfile$.removeAvatarDone.set(true);
+          updateProfile$.removeAvatarDone.set(true);
           modalActions.update({ confirmDisabled: false })
           showAlert('Profile picture removed')
           // After a successful removal, disable Apply; nothing left to apply here
@@ -157,8 +159,8 @@ export default function UpdateProfile() {
     }
 
     const performUpload = async () => {
-      const currentAvatarFile = PersonalUpdateProfile$.avatarFile.get();
-      const currentIsAvatarValid = PersonalUpdateProfile$.isAvatarValid.get();
+      const currentAvatarFile = updateProfile$.avatarFile.get();
+      const currentIsAvatarValid = updateProfile$.isAvatarValid.get();
       console.log("from performUpload" + isAvatarRemoved)
       if (isAvatarRemoved) {
         showAlert('Profile picture removed')
@@ -166,26 +168,13 @@ export default function UpdateProfile() {
       }
 
       if (!currentIsAvatarValid || !currentAvatarFile) {
-        PersonalUpdateProfile$.avatarSubmit()
+        updateProfile$.avatarSubmit()
         showAlert('No avatar selected')
         return
       }
 
       try {
-        const formData = new FormData();
-
-        if (currentAvatarFile.uri.startsWith('data:')) {
-          const response = await fetch(currentAvatarFile.uri);
-          const blob = await response.blob();
-          formData.append('avatar', blob, currentAvatarFile.fileName || `avatar_${Date.now()}.jpg`);
-        } else {
-          const fileObject = {
-            uri: currentAvatarFile.uri,
-            name: currentAvatarFile.fileName || `avatar_${Date.now()}.jpg`,
-            type: currentAvatarFile.mimeType || 'image/jpeg',
-          };
-          formData.append('avatar', fileObject as unknown as Blob);
-        }
+        const formData = await buildFormDataFromAsset(currentAvatarFile, { fieldName: 'avatar' });
 
         const response: any = await runWithLoading(
           () => profileApi.uploadAvatar(formData),
@@ -193,9 +182,9 @@ export default function UpdateProfile() {
         );
 
         if (response.fileId.length > 0) {
-          PersonalUpdateProfile$.avatar.set(response.fileId)
-          PersonalUpdateProfile$.avatarTokens.set(response.avatarTokens)
-          PersonalUpdateProfile$.avatarChecked.set(true)
+          updateProfile$.avatar.set(response.fileId)
+          updateProfile$.avatarTokens.set(response.avatarTokens)
+          updateProfile$.avatarChecked.set(true)
         }
       } catch (error) {
         if (error instanceof ApiError) {
@@ -204,8 +193,8 @@ export default function UpdateProfile() {
           showAlert('An unexpected error occurred. Please try again.');
         }
 
-        PersonalUpdateProfile$.avatarSubmit()
-        PersonalUpdateProfile$.avatarFile.set(null)
+        updateProfile$.avatarSubmit()
+        updateProfile$.avatarFile.set(null)
       }
     }
 
@@ -227,7 +216,7 @@ export default function UpdateProfile() {
     ).then((result) => {
       // Only perform upload if result is true AND we're not in a removed state
       // AND we actually have a file to upload
-      if (result && !PersonalUpdateProfile$.removeAvatarDone.get()) {
+      if (result && !updateProfile$.removeAvatarDone.get()) {
         performUpload()
       }
     });
@@ -235,7 +224,7 @@ export default function UpdateProfile() {
 
   const checkUsername = async () => {
     if (!isUsernameValid) {
-      PersonalUpdateProfile$.usernameSubmit()
+      updateProfile$.usernameSubmit()
       showAlert('Username is not valid\nOnly letters, numbers, . and _ are allowed\nMaximum length is 30 characters')
       return;
     }
@@ -246,11 +235,11 @@ export default function UpdateProfile() {
         { message: 'Checking username' }
       );
       if (response.status) {
-        PersonalUpdateProfile$.usernameChecked.set(true);
+        updateProfile$.usernameChecked.set(true);
       }
     } catch (error) {
       showAlert('Something went wrong try again')
-      PersonalUpdateProfile$.usernameSubmit()
+      updateProfile$.usernameSubmit()
     }
   }
 
@@ -260,7 +249,7 @@ export default function UpdateProfile() {
     console.log("from handleUpdateProfile" + isAvatarRemoved)
     console.log(isNull)
     if (isNull && isAvatarRemoved) {
-      PersonalUpdateProfile$.reset()
+      updateProfile$.reset()
       router.back();
       return;
     }
@@ -270,7 +259,7 @@ export default function UpdateProfile() {
     }
 
     if (!isValid) {
-      PersonalUpdateProfile$.submit();
+      updateProfile$.submit();
       showAlert('Please fill all the fields')
       return;
     }
@@ -288,7 +277,7 @@ export default function UpdateProfile() {
       )
       if (response) {
         // authState.user.set(response)
-        PersonalUpdateProfile$.reset()
+        updateProfile$.reset()
         router.back()
       }
     } catch (error) {
@@ -348,7 +337,7 @@ export default function UpdateProfile() {
               inputMode='text'
               maxLength={70}
               value={name ?? user?.name}
-              onChangeText={(text) => PersonalUpdateProfile$.name.set(text)}
+              onChangeText={(text) => updateProfile$.name.set(text)}
               textContentType='name'
               placeholderTextColor="gray"
               autoCapitalize="none"
@@ -363,12 +352,12 @@ export default function UpdateProfile() {
                 maxLength={30}
                 inputMode='text'
                 value={username ?? user?.username}
-                onChangeText={(text) => { PersonalUpdateProfile$.username.set(text); PersonalUpdateProfile$.usernameChecked.set(false) }}
+                onChangeText={(text) => { updateProfile$.username.set(text); updateProfile$.usernameChecked.set(false) }}
                 textContentType='username'
                 placeholderTextColor="gray"
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={[styles.inputField, { outlineColor: 'none' }]}
+                style={[styles.inputField, { outline:'none' }]}
               />
               <Pressable
                 onPress={checkUsername}
@@ -390,7 +379,7 @@ export default function UpdateProfile() {
               placeholder="Bio"
               inputMode='text'
               value={bio ?? user?.bio}
-              onChangeText={(text) => PersonalUpdateProfile$.bio.set(text)}
+              onChangeText={(text) => updateProfile$.bio.set(text)}
               placeholderTextColor="gray"
               autoCapitalize="none"
               autoCorrect={false}
@@ -411,7 +400,7 @@ export default function UpdateProfile() {
                 style={styles.dropdownBorder}
                 error={!isProfileVisibleToValid && isSubmitted}
                 searchable={false}
-                onSelect={(value) => PersonalUpdateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+                onSelect={(value) => updateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
               />
 
             </ThemedView>
@@ -456,7 +445,7 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomLeftRadius: 25,
     borderTopRightRadius: 25,
     borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     paddingHorizontal: 16,
     color: theme.colors.text,
   },
@@ -489,7 +478,7 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomLeftRadius: 25,
     borderTopRightRadius: 25,
     borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     paddingHorizontal: 16,
     paddingVertical: 10,
     color: theme.colors.text,
@@ -504,7 +493,7 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomLeftRadius: 25,
     borderTopRightRadius: 25,
     borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     paddingRight: 16,
   },
   inputField: {
@@ -521,7 +510,7 @@ const styles = StyleSheet.create((theme, rt) => (({
   profileVisibleToContainer: {
     width: 350,
     height: 40,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     borderWidth: 1,
     borderTopLeftRadius: 25,
     borderBottomLeftRadius: 25,

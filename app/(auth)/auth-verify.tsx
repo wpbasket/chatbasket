@@ -5,7 +5,7 @@ import { ThemedText } from '@/components/ui/common/ThemedText'
 import { runWithLoading, showAlert } from '@/utils/modal.util'
 
 import { loginOrSignup$ } from '@/state/auth/loginOrSignup.state'
-import { use$ } from '@legendapp/state/react'
+import { useLegend$ } from '@/hooks/useLegend'
 import { useEffect } from 'react'
 import { useResendCooldown } from '@/utils/resendCooldown.util'
 import { authState } from '@/state/auth/auth.state'
@@ -16,17 +16,16 @@ import { getUser } from '@/utils/profile.util'
 import { ApiError } from '@/lib/publicLib/api'
 
 export default function AuthVerification() {
-    const otp = use$(loginOrSignup$.otp)
-    const isOtpValid = use$(loginOrSignup$.isOtpValid)
-    const email = use$(loginOrSignup$.email)
-    const isSubmited = use$(loginOrSignup$.submitted)
-    const isSignup = use$(loginOrSignup$.isSignup)
-    const isSentOtp = use$(authState.isSentOtp)
-    const resendCooldown = use$(loginOrSignup$.resendCooldown)
-    const resendAttempts = use$(loginOrSignup$.resendAttempts)
-    const resendExpiryAt = use$(loginOrSignup$.resendExpiryAt)
+    const otp = useLegend$(loginOrSignup$.otp)
+    const isOtpValid = useLegend$(loginOrSignup$.isOtpValid)
+    const email = useLegend$(loginOrSignup$.email)
+    const isSubmited = useLegend$(loginOrSignup$.submitted)
+    const isSignup = useLegend$(loginOrSignup$.isSignup)
+    const isSentOtp = useLegend$(authState.isSentOtp)
+    const resendCooldown = useLegend$(loginOrSignup$.resendCooldown)
+    const resendAttempts = useLegend$(loginOrSignup$.resendAttempts)
+    const resendExpiryAt = useLegend$(loginOrSignup$.resendExpiryAt)
     const MAX_RESENDS = 3
-
 
     useEffect(() => {
         // Reset isSentOtp, email, and password when this component unmounts (route change, back, etc)

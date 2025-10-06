@@ -1,4 +1,4 @@
-import { use$ } from "@legendapp/state/react";
+import { useLegend$ } from "@/hooks/useLegend";
 import { Stack } from "expo-router";
 import { authState } from "@/state/auth/auth.state";
 import { ThemeProvider } from "@react-navigation/native";
@@ -8,7 +8,7 @@ import { DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { StyleSheet } from "react-native-unistyles";
 
 export default function ProfileScreenLayout() {
-  const isInTheProfileUpdateMode = use$(authState.isInTheProfileUpdateMode);
+  const isInTheProfileUpdateMode = useLegend$(authState.isInTheProfileUpdateMode);
 
   return (
     <>

@@ -2,7 +2,7 @@ import { HelloWave } from '@/components/ui/common/HelloWave';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { LegendList } from "@legendapp/list";
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
 import { StyleSheet } from 'react-native-unistyles';
 import Postcard from '@/components/publicComponents/post/Postcard';
 import userPostsStore from '@/state/publicState/userPostsStore.state';
@@ -14,9 +14,8 @@ import { appMode$, setAppMode } from '@/state/appMode/mode.state';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
 
 export default function Home() {
-  const posts_for_user = use$(userPostsStore.posts);
-  const currentMode = use$(appMode$.mode);
-  const { handlePressIn } = pressableAnimation();
+  const posts_for_user = useLegend$(userPostsStore.posts);
+  const currentMode = useLegend$(appMode$.mode);
 
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';
@@ -34,7 +33,6 @@ export default function Home() {
             <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
             <Pressable
               onPress={toggleMode}
-              onPressIn={handlePressIn}
               style={({ pressed }) => [
                 { opacity: pressed ? 0.1 : 1 },
                 styles.modeToggle
@@ -108,7 +106,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   modeToggle: {
     paddingHorizontal: 10,
-    paddingVertical: 2,
+    // paddingVertical: 2,
     borderRadius: 14,
     backgroundColor: theme.colors.primaryDark,
   },

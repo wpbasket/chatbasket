@@ -1,17 +1,17 @@
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { useLegend$ } from '@/hooks/useLegend';
+import { ApiError } from '@/lib/publicLib/api';
+import { setUserInStorage } from '@/lib/storage/auth.storage';
+import { authState } from '@/state/auth/auth.state';
+import { setting$ } from '@/state/settings/setting.state';
+import { showGenericError } from '@/utils/error.util';
+import { runWithLoading, showAlert } from '@/utils/modal.util';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { use$ } from '@legendapp/state/react';
-import { ThemedText } from '@/components/ui/common/ThemedText';
-import { ApiError } from '@/lib/publicLib/api';
-import { showAlert, runWithLoading } from '@/utils/modal.util';
-import { authState } from '@/state/auth/auth.state';
-import { setUserInStorage } from '@/lib/storage/auth.storage';
-import { showGenericError } from '@/utils/error.util';
 
 
 
 export type SettingsFlowsDeps = {
-  setting$: any;
   settingApi: any;
   showControllersModal: (controllers: { id: string; content: React.ReactNode }[], options: any) => Promise<any>;
   hideModal: () => void;
@@ -23,7 +23,6 @@ export type SettingsFlowsDeps = {
 };
 
 export default function CreateSettingsFlows({
-  setting$,
   settingApi,
   showControllersModal,
   hideModal,
@@ -60,7 +59,7 @@ export default function CreateSettingsFlows({
 
     const openIdentityModalForEmail = async () => {
       const OtpInfo = () => {
-        const email = use$(currentEmail$);
+        const email = useLegend$(currentEmail$);
         return (
           <ThemedText>
             Enter OTP sent to the current email <ThemedText style={styles.primaryText}>{email}</ThemedText>
@@ -68,9 +67,9 @@ export default function CreateSettingsFlows({
         );
       };
       const OtpInput = () => {
-        const currentOtp = use$(setting$.otp);
-        const valid = use$(setting$.isOtpValid);
-        const submitted = use$(setting$.submitted);
+        const currentOtp = useLegend$(setting$.otp);
+        const valid = useLegend$(setting$.isOtpValid);
+        const submitted = useLegend$(setting$.submitted);
         return (
           <TextInput
             placeholder="6 digit OTP"
@@ -89,8 +88,8 @@ export default function CreateSettingsFlows({
       };
 
       const ResendRow = () => {
-        const attempts = use$(setting$.resendAttempts);
-        const cooldown = use$(setting$.resendCooldown);
+        const attempts = useLegend$(setting$.resendAttempts);
+        const cooldown = useLegend$(setting$.resendCooldown);
         return (
           <View style={styles.resendRow}>
             <View style={{ gap: 6 }}>
@@ -172,9 +171,9 @@ export default function CreateSettingsFlows({
 
     const openEmailUpdateFlow = async () => {
       const EmailInput = () => {
-        const currentEmail = use$(setting$.email);
-        const valid = use$(setting$.isEmailValid);
-        const submitted = use$(setting$.submitted);
+        const currentEmail = useLegend$(setting$.email);
+        const valid = useLegend$(setting$.isEmailValid);
+        const submitted = useLegend$(setting$.submitted);
         return (
           <TextInput
             inputMode='email'
@@ -242,9 +241,9 @@ export default function CreateSettingsFlows({
         </ThemedText>
       );
       const VerifyInput = () => {
-        const currentOtp = use$(setting$.otp);
-        const valid = use$(setting$.isOtpValid);
-        const submitted = use$(setting$.submitted);
+        const currentOtp = useLegend$(setting$.otp);
+        const valid = useLegend$(setting$.isOtpValid);
+        const submitted = useLegend$(setting$.submitted);
         return (
           <TextInput
             placeholder="6 digit OTP"
@@ -263,8 +262,8 @@ export default function CreateSettingsFlows({
       };
 
       const ResendEmailRow = () => {
-        const attempts = use$(setting$.resendAttempts);
-        const cooldown = use$(setting$.resendCooldown);
+        const attempts = useLegend$(setting$.resendAttempts);
+        const cooldown = useLegend$(setting$.resendCooldown);
         return (
           <View style={styles.resendRow}>
             <View style={{ gap: 6 }}>
@@ -389,7 +388,7 @@ export default function CreateSettingsFlows({
 
     const openIdentityModalForPassword = async () => {
       const OtpInfo = () => {
-        const email = use$(currentEmail$);
+        const email = useLegend$(currentEmail$);
         return (
           <ThemedText>
             Enter OTP sent to the current email <ThemedText style={styles.primaryText}>{email}</ThemedText>
@@ -397,9 +396,9 @@ export default function CreateSettingsFlows({
         );
       };
       const OtpInput = () => {
-        const currentOtp = use$(setting$.otp);
-        const valid = use$(setting$.isOtpValid);
-        const submitted = use$(setting$.submitted);
+        const currentOtp = useLegend$(setting$.otp);
+        const valid = useLegend$(setting$.isOtpValid);
+        const submitted = useLegend$(setting$.submitted);
         return (
           <TextInput
             placeholder="6 digit OTP"
@@ -418,8 +417,8 @@ export default function CreateSettingsFlows({
       };
 
       const ResendRow = () => {
-        const attempts = use$(setting$.resendAttempts);
-        const cooldown = use$(setting$.resendCooldown);
+        const attempts = useLegend$(setting$.resendAttempts);
+        const cooldown = useLegend$(setting$.resendCooldown);
         return (
           <View style={styles.resendRow}>
             <View style={{ gap: 6 }}>
@@ -495,9 +494,9 @@ export default function CreateSettingsFlows({
 
     const openPasswordChangeFlow = async () => {
       const PasswordInput = () => {
-        const password = use$(setting$.password);
-        const isPasswordValid = use$(setting$.isPasswordValid);
-        const isSubmitted = use$(setting$.submitted);
+        const password = useLegend$(setting$.password);
+        const isPasswordValid = useLegend$(setting$.isPasswordValid);
+        const isSubmitted = useLegend$(setting$.submitted);
         return (
           <TextInput
             placeholder="Set 6 digit PIN"

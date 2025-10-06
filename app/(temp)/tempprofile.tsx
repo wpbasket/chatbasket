@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { StyleSheet } from 'react-native-unistyles';
@@ -13,7 +13,7 @@ import Sidebar from '@/components/sidebar/Sidebar';
 
 type TABS = 'Posts' | 'Followers' | 'Following'
 export default function Profile() {
-    const user = use$(currentUserStore.user);
+    const user = useLegend$(currentUserStore.user);
 
     const [activeTab, setActiveTab] = useState<TABS>('Posts');
 
@@ -21,15 +21,15 @@ export default function Profile() {
         setActiveTab(tab);
     }, []);
 
+    const goBack = () => {
+        router.back();
+    };
+
     if (!user) {
         return (
             <NotFoundScreen />
         )
     }
-
-    const goBack = () => {
-        router.back();
-    };
 
     return (
         <ThemedViewWithSidebar>

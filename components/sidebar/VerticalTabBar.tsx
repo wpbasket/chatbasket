@@ -5,7 +5,7 @@ import { ThemedText } from "../ui/common/ThemedText"
 import { ThemedView } from "../ui/common/ThemedView"
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol'
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons'
-import { use$ } from '@legendapp/state/react'
+import { useLegend$ } from '@/hooks/useLegend'
 import { appMode$ } from '@/state/appMode/mode.state'
 
 const publicTabs = [
@@ -77,7 +77,7 @@ const personalTabs = [
 export default function VerticalTabBar() {
   const router = useRouter()
   const segments = useSegments()
-  const mode = use$(appMode$.mode)
+  const mode = useLegend$(appMode$.mode)
 
   return (
     <ThemedView style={styles.sidebar}>

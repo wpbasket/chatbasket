@@ -1,11 +1,11 @@
 import React, { useMemo, useCallback } from 'react';
-import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
+import { StyleSheet } from 'react-native-unistyles';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { LegendList } from '@legendapp/list';
 import { User } from '@/model/User';
 import { Post } from '@/model/Post';
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
 import UserInfoSection from './sections/UserInfoSection';
 import TabsSection from './sections/TabsSection';
 import Postcard from '@/components/publicComponents/post/Postcard';
@@ -39,9 +39,9 @@ type ProfileListProps = {
 
 const ProfileList = React.memo(({ user, activeTab, onTabPress }: ProfileListProps) => {
   // Move hook calls to the top level of the component
-  const postsData = use$(user?.id ? activeUserPosts(user.id) : []);
-  const followersData = use$(user?.id ? activeUserFollowers(user.id) : []);
-  const followingData = use$(user?.id ? activeUserFollowing(user.id) : []);
+  const postsData = useLegend$(user?.id ? activeUserPosts(user.id) : []);
+  const followersData = useLegend$(user?.id ? activeUserFollowers(user.id) : []);
+  const followingData = useLegend$(user?.id ? activeUserFollowing(user.id) : []);
   
   // Get content data based on active tab
   const contentData = useMemo((): ListItem[] => {

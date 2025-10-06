@@ -1,11 +1,12 @@
 // components/ui/Dropdown.tsx
-import React from 'react';
-import { Pressable, ViewStyle, TextStyle } from 'react-native';
-import { ThemedText } from './ThemedText';
-import { StyleSheet } from 'react-native-unistyles';
-import { modalActions, modal$ } from '@/state/modals/modals.state';
-import { useObservable, useObserve, use$ } from '@legendapp/state/react';
 import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
+import { modal$, modalActions } from '@/state/modals/modals.state';
+import { useObservable, useObserve } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
+import React from 'react';
+import { Pressable, TextStyle, ViewStyle } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
+import { ThemedText } from './ThemedText';
 
 interface DropdownProps<T = any> {
   value?: T;
@@ -151,7 +152,7 @@ export function Dropdown<T = any>({
       <ThemedText style={[
         styles.arrow, 
         arrowStyle,
-        use$(dropdownState$.isModalOpen) && { transform: [{ rotate: '-90deg' }] }
+        useLegend$(dropdownState$.isModalOpen) && { transform: [{ rotate: '-90deg' }] }
       ]}>
         ◀
       </ThemedText>

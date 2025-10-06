@@ -3,14 +3,14 @@ import { ThemedView } from '../ui/common/ThemedView';
 import { ThemedText } from '../ui/common/ThemedText';
 import VerticalTabBar from './VerticalTabBar';
 import { Pressable, View } from 'react-native';
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
+
 import { appMode$, setAppMode } from '@/state/appMode/mode.state';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
 
 export default function Sidebar() {
-  const currentMode = use$(appMode$.mode);
+  const currentMode = useLegend$(appMode$.mode);
   const { handlePressIn } = pressableAnimation();
-
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';
     setAppMode(next);
@@ -60,7 +60,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   modeToggle: {
     paddingHorizontal: 10,
-    paddingVertical: 2,
+    // paddingVertical: 0.5,
     borderRadius: 14,
     backgroundColor: theme.colors.primaryDark,
   },

@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { Pressable, TextInput } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { loginOrSignup$ } from '@/state/auth/loginOrSignup.state';
-import { use$ } from '@legendapp/state/react';
+import { useLegend$ } from '@/hooks/useLegend';
 import { authState } from '@/state/auth/auth.state';
 import { pressableAnimation } from '@/hooks/pressableAnimation';
 import { authApi } from '@/lib/publicLib/api/authApi/api.auth';
@@ -16,17 +16,16 @@ import { View } from 'react-native';
 
 export default function Auth() {
   const { method } = useLocalSearchParams();
-  const email = use$(loginOrSignup$.email)
-  const password = use$(loginOrSignup$.password)
-  const name = use$(loginOrSignup$.name)
-  const isLoginValid = use$(loginOrSignup$.isLoginValid)
-  const isSignupValid = use$(loginOrSignup$.isSignupValid)
-  const isEmailValid = use$(loginOrSignup$.isEmailValid)
-  const isSubmited = use$(loginOrSignup$.submitted)
-  const isNameValid = use$(loginOrSignup$.isNameValid)
-  const isPasswordValid = use$(loginOrSignup$.isPasswordValid)
-  const isLoginPasswordValid = use$(loginOrSignup$.isLoginPasswordValid)
-  const { handlePressIn } = pressableAnimation();
+  const email = useLegend$(loginOrSignup$.email)
+  const password = useLegend$(loginOrSignup$.password)
+  const name = useLegend$(loginOrSignup$.name)
+  const isLoginValid = useLegend$(loginOrSignup$.isLoginValid)
+  const isSignupValid = useLegend$(loginOrSignup$.isSignupValid)
+  const isEmailValid = useLegend$(loginOrSignup$.isEmailValid)
+  const isSubmited = useLegend$(loginOrSignup$.submitted)
+  const isNameValid = useLegend$(loginOrSignup$.isNameValid)
+  const isPasswordValid = useLegend$(loginOrSignup$.isPasswordValid)
+  const isLoginPasswordValid = useLegend$(loginOrSignup$.isLoginPasswordValid)
 
 
 
@@ -171,7 +170,6 @@ export default function Auth() {
                 { opacity: pressed ? 0.1 : 1 }
               ]}
               onPress={handleLogin}
-              onPressIn={handlePressIn}
             >
               <ThemedText style={styles.submitText} selectable={false}>Submit</ThemedText>
             </Pressable>
@@ -232,7 +230,6 @@ export default function Auth() {
                 { opacity: pressed ? 0.1 : 1 }
               ]}
               onPress={handleSignup}
-              onPressIn={handlePressIn}
             >
               <ThemedText style={styles.submitText} selectable={false}>Submit</ThemedText>
             </Pressable>

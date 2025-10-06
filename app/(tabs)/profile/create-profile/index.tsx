@@ -2,7 +2,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles"
 import { ThemedView } from "@/components/ui/common/ThemedView"
 import { ThemedText } from "@/components/ui/common/ThemedText"
 import { createProfile$ } from "@/state/publicState/profile/createProfile.state"
-import { use$ } from "@legendapp/state/react"
+import { useLegend$ } from "@/hooks/useLegend"
 import { Platform, Pressable, TextInput } from "react-native"
 import { pressableAnimation } from "@/hooks/pressableAnimation";
 import { Dropdown } from "@/components/ui/common/DropDown"
@@ -32,19 +32,19 @@ export default function CreateProfile() {
   };
 
   // All hooks must be called at the top level
-  const userId= use$(authState.userId)
-  const name = use$(createProfile$.name)
-  const payloadUsername = use$(createProfile$.username)
-  const profileVisibleTo = use$(createProfile$.profileVisibleTo)
-  const bio = use$(createProfile$.bio)
-  const isUsernameSubmitted = use$(createProfile$.usernameSubmitted)
-  const isSubmitted = use$(createProfile$.submitted)
-  const isUsernameChecked = use$(createProfile$.usernameChecked)
-  const isNameValid = use$(createProfile$.isNameValid)
-  const isUsernameValid = use$(createProfile$.isUsernameValid)
-  const isProfileVisibleToValid = use$(createProfile$.isProfileVisibleToValid)
-  const isBioValid = use$(createProfile$.isBioValid)
-  const isValid = use$(createProfile$.isValid)
+  const userId= useLegend$(authState.userId)
+  const name = useLegend$(createProfile$.name)
+  const payloadUsername = useLegend$(createProfile$.username)
+  const profileVisibleTo = useLegend$(createProfile$.profileVisibleTo)
+  const bio = useLegend$(createProfile$.bio)
+  const isUsernameSubmitted = useLegend$(createProfile$.usernameSubmitted)
+  const isSubmitted = useLegend$(createProfile$.submitted)
+  const isUsernameChecked = useLegend$(createProfile$.usernameChecked)
+  const isNameValid = useLegend$(createProfile$.isNameValid)
+  const isUsernameValid = useLegend$(createProfile$.isUsernameValid)
+  const isProfileVisibleToValid = useLegend$(createProfile$.isProfileVisibleToValid)
+  const isBioValid = useLegend$(createProfile$.isBioValid)
+  const isValid = useLegend$(createProfile$.isValid)
   const { handlePressIn } = pressableAnimation();
   const { theme } = useUnistyles();
 
@@ -174,7 +174,7 @@ export default function CreateProfile() {
               placeholderTextColor="gray"
               autoCapitalize="none"
               autoCorrect={false}
-              style={[styles.inputField, { outlineColor: 'none' }]}
+              style={[styles.inputField, { outline:'none' }]}
             />
             <Pressable onPress={checkUsername} style={({ pressed }) => [
               styles.inputButton,
@@ -202,7 +202,7 @@ export default function CreateProfile() {
             style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
           />
 
-          <ThemedView style={[styles.profileVisibleToContainer, { backgroundColor: theme.colors.neutral1 }]} >
+          <ThemedView style={[styles.profileVisibleToContainer]} >
             <Dropdown
               options={[
                 { label: 'Public', value: 'public' },
@@ -214,7 +214,6 @@ export default function CreateProfile() {
               error={!isProfileVisibleToValid && isSubmitted}
               searchable={false}
               style={styles.reverseModalBackground}
-              modalStyles={{ container: styles.modalBackground }}
               onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
             />
 
@@ -253,10 +252,13 @@ const styles = StyleSheet.create((theme, rt) => ({
   input: {
     height: 40,
     width: 350,
-    borderColor: theme.colors.neutral2,
+    borderColor: theme.colors.neutral5,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    paddingHorizontal: 16,
     color: theme.colors.text,
   },
   inputError: {
@@ -278,10 +280,14 @@ const styles = StyleSheet.create((theme, rt) => ({
   bio: {
     height: 100,
     width: 350,
-    borderColor: theme.colors.neutral2,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    borderColor: theme.colors.neutral5,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     color: theme.colors.text,
   },
   inputContainer: {
@@ -290,9 +296,12 @@ const styles = StyleSheet.create((theme, rt) => ({
     width: 350,
     height: 40,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    borderColor: theme.colors.neutral2,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    paddingHorizontal: 16,
+    borderColor: theme.colors.neutral5,
   },
   inputField: {
     flex: 1,
@@ -307,14 +316,21 @@ const styles = StyleSheet.create((theme, rt) => ({
   profileVisibleToContainer: {
     width: 350,
     height: 40,
-    borderRadius: 5,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
+    borderColor: theme.colors.neutral5,
+    borderWidth: 1,
   },
   reverseModalBackground: {
-    backgroundColor: Platform.OS === 'web' ? theme.colors.BackgroundSelect2 : theme.colors.background,
-  },
-  modalBackground: {
-    borderColor: theme.colors.neutral2,
-    borderWidth: Platform.OS === 'web' ? 1 : 0,
+    height: 38,
+    width: 340,
+    borderWidth: 0,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 8,
+    borderTopRightRadius: 25,
+    paddingHorizontal: 16,
   }
-
 }))

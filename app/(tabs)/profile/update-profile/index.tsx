@@ -1,24 +1,25 @@
-import { StyleSheet, useUnistyles } from 'react-native-unistyles'
+import Header from '@/components/header/Header';
+import Sidebar from '@/components/sidebar/Sidebar';
+import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import Header from '@/components/header/Header';
-import { router } from 'expo-router';
-import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { updateProfile$ } from '@/state/publicState/profile/updateProfile.state';
-import { use$ } from '@legendapp/state/react';
-import { Image, Platform, Pressable, TextInput } from 'react-native';
-import { Dropdown } from '@/components/ui/common/DropDown';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { authState } from '@/state/auth/auth.state';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { showAlert, showControllersModal, runWithLoading } from '@/utils/modal.util';
-import * as ImagePicker from 'expo-image-picker';
-import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
-import { ApiError } from '@/lib/publicLib/api';
-import { useEffect } from 'react';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import Sidebar from '@/components/sidebar/Sidebar';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import { pressableAnimation } from '@/hooks/pressableAnimation';
+import { useLegend$ } from '@/hooks/useLegend';
+import { ApiError } from '@/lib/publicLib/api';
+import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
+import { authState } from '@/state/auth/auth.state';
 import { modalActions } from '@/state/modals/modals.state';
+import { updateProfile$ } from '@/state/publicState/profile/updateProfile.state';
+import { runWithLoading, showAlert, showControllersModal } from '@/utils/modal.util';
+import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { Image, Platform, Pressable, TextInput } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { buildFormDataFromAsset } from '@/utils/upload.util';
 
 
 export default function UpdateProfile() {
@@ -36,29 +37,30 @@ export default function UpdateProfile() {
     router.back();
   };
   
-  const user = use$(authState.user)
-  const avatarUri = use$(authState.avatarUri)
-  const username = use$(updateProfile$.username);
-  const name = use$(updateProfile$.name);
-  const bio = use$(updateProfile$.bio)
-  const profileVisibleTo = use$(updateProfile$.profileVisibleTo)
-  const avatar = use$(updateProfile$.avatar)
-  const avatarFile = use$(updateProfile$.avatarFile)
-  const avatarTokens = use$(updateProfile$.avatarTokens)
-  const isAvatarSubmitted = use$(updateProfile$.avatarSubmitted)
-  const isAvatarChecked = use$(updateProfile$.isAvatarChecked)
-  const isAvatarValid = use$(updateProfile$.isAvatarValid)
-  const isSubmitted = use$(updateProfile$.submitted)
-  const isUsernameSubmitted = use$(updateProfile$.usernameSubmitted)
-  const isUsernameChecked = use$(updateProfile$.usernameChecked)
-  const isUsernameCheckedWhileNull = use$(updateProfile$.isUsernameChecked)
-  const isNameValid = use$(updateProfile$.isNameValid)
-  const isUsernameValid = use$(updateProfile$.isUsernameValid)
-  const isProfileVisibleToValid = use$(updateProfile$.isProfileVisibleToValid)
-  const isBioValid = use$(updateProfile$.isBioValid)
-  const isValid = use$(updateProfile$.isValid)
-  const isNull = use$(updateProfile$.isNull)
-  const isAvatarRemoved = use$(updateProfile$.removeAvatarDone)
+  const user = useLegend$(authState.user)
+  const avatarUri = useLegend$(authState.avatarUri)
+  const username = useLegend$(updateProfile$.username)
+  const name = useLegend$(updateProfile$.name)
+  const bio = useLegend$(updateProfile$.bio)
+  const profileVisibleTo = useLegend$(updateProfile$.profileVisibleTo)
+  const avatar = useLegend$(updateProfile$.avatar)
+  const avatarFile = useLegend$(updateProfile$.avatarFile)
+  const avatarTokens = useLegend$(updateProfile$.avatarTokens)
+  const isAvatarSubmitted = useLegend$(updateProfile$.avatarSubmitted)
+  const isAvatarChecked = useLegend$(updateProfile$.isAvatarChecked)
+  const isAvatarValid = useLegend$(updateProfile$.isAvatarValid)
+  const isSubmitted = useLegend$(updateProfile$.submitted)
+  const isUsernameSubmitted = useLegend$(updateProfile$.usernameSubmitted)
+  const isUsernameChecked = useLegend$(updateProfile$.usernameChecked)
+  const isUsernameCheckedWhileNull = useLegend$(updateProfile$.isUsernameChecked)
+  const isNameValid = useLegend$(updateProfile$.isNameValid)
+  const isUsernameValid = useLegend$(updateProfile$.isUsernameValid)
+  const isProfileVisibleToValid = useLegend$(updateProfile$.isProfileVisibleToValid)
+  const isBioValid = useLegend$(updateProfile$.isBioValid)
+  const isValid = useLegend$(updateProfile$.isValid)
+  const isNull = useLegend$(updateProfile$.isNull)
+  const isAvatarRemoved = useLegend$(updateProfile$.removeAvatarDone)
+  
   const { theme } = useUnistyles();
   const { handlePressIn } = pressableAnimation();
 
@@ -172,20 +174,7 @@ export default function UpdateProfile() {
       }
 
       try {
-        const formData = new FormData();
-
-        if (currentAvatarFile.uri.startsWith('data:')) {
-          const response = await fetch(currentAvatarFile.uri);
-          const blob = await response.blob();
-          formData.append('avatar', blob, currentAvatarFile.fileName || `avatar_${Date.now()}.jpg`);
-        } else {
-          const fileObject = {
-            uri: currentAvatarFile.uri,
-            name: currentAvatarFile.fileName || `avatar_${Date.now()}.jpg`,
-            type: currentAvatarFile.mimeType || 'image/jpeg',
-          };
-          formData.append('avatar', fileObject as unknown as Blob);
-        }
+        const formData = await buildFormDataFromAsset(currentAvatarFile, { fieldName: 'avatar' });
 
         const response: any = await runWithLoading(
           () => profileApi.uploadAvatar(formData),
@@ -368,7 +357,7 @@ export default function UpdateProfile() {
                 placeholderTextColor="gray"
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={[styles.inputField, { outlineColor: 'none' }]}
+                style={[styles.inputField, { outline:'none' }]}
               />
               <Pressable
                 onPress={checkUsername}
@@ -456,7 +445,7 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomLeftRadius: 25,
     borderTopRightRadius: 25,
     borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     paddingHorizontal: 16,
     color: theme.colors.text,
   },
@@ -489,7 +478,7 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomLeftRadius: 25,
     borderTopRightRadius: 25,
     borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     paddingHorizontal: 16,
     paddingVertical: 10,
     color: theme.colors.text,
@@ -504,7 +493,7 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomLeftRadius: 25,
     borderTopRightRadius: 25,
     borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     paddingRight: 16,
   },
   inputField: {
@@ -521,7 +510,7 @@ const styles = StyleSheet.create((theme, rt) => (({
   profileVisibleToContainer: {
     width: 350,
     height: 40,
-    borderColor: theme.colors.neutral4,
+    borderColor: theme.colors.neutral5,
     borderWidth: 1,
     borderTopLeftRadius: 25,
     borderBottomLeftRadius: 25,

@@ -1,8 +1,8 @@
 import { ApiError } from "@/lib/publicLib/api";
 import { profileApi } from "@/lib/publicLib/api/profileApi/api.profile";
+import { setUserInStorage } from "@/lib/storage/auth.storage";
 import { authState } from "@/state/auth/auth.state";
 import { createProfile$ } from "@/state/publicState/profile/createProfile.state";
-import { setUserInStorage } from "@/lib/storage/auth.storage";
 
 export async function getUser() {
   try {
