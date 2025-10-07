@@ -1,6 +1,6 @@
-import { useLegend$ } from '@/hooks/useLegend';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { appMode$ } from '@/state/appMode/state.appMode';
 import { Redirect } from 'expo-router';
-import { appMode$ } from '@/state/appMode/mode.state';
 
 export default function HomeScreen() {
   const mode = useLegend$(appMode$.mode);

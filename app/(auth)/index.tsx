@@ -1,12 +1,12 @@
 import ParallaxScrollView from "@/components/ui/common/ParallaxScrollView";
 import { ThemedText } from "@/components/ui/common/ThemedText";
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol";
-import { pressableAnimation } from "@/hooks/pressableAnimation";
+import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { useEffect, useState } from "react";
 
 export default function Index() {
   const uniS = useUnistyles()

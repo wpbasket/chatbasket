@@ -1,18 +1,16 @@
-import { ThemedText } from '@/components/ui/common/ThemedText'
-import { ThemedView } from '@/components/ui/common/ThemedView'
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { ThemedView } from '@/components/ui/common/ThemedView';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { ApiError } from '@/lib/constantLib';
+import { authApi } from '@/lib/constantLib/authApi/api.auth';
+import { authState } from '@/state/auth/state.auth';
+import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup';
+import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
-import { Pressable, TextInput } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
-import { loginOrSignup$ } from '@/state/auth/loginOrSignup.state';
-import { useLegend$ } from '@/hooks/useLegend';
-import { authState } from '@/state/auth/auth.state';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { authApi } from '@/lib/publicLib/api/authApi/api.auth';
-import { ApiError } from '@/lib/publicLib/api';
-import { showAlert, runWithLoading } from '@/utils/modal.util';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { useEffect } from 'react';
+import { Pressable, TextInput, View } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 
 export default function Auth() {
   const { method } = useLocalSearchParams();

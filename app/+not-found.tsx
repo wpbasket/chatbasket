@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { isUserAuthenticated } from '@/lib/storage/auth.storage';
+import { isUserAuthenticated } from '@/lib/storage/commonStorage/storage.auth';
 
 export default function NotFoundScreen() {
   const isLoggedIn = isUserAuthenticated();

@@ -1,27 +1,28 @@
-import { StyleSheet, useUnistyles } from "react-native-unistyles"
-import { ThemedView } from "@/components/ui/common/ThemedView"
-import { ThemedText } from "@/components/ui/common/ThemedText"
-import { createProfile$ } from "@/state/publicState/profile/createProfile.state"
-import { useLegend$ } from "@/hooks/useLegend"
-import { Platform, Pressable, TextInput } from "react-native"
-import { pressableAnimation } from "@/hooks/pressableAnimation";
-import { Dropdown } from "@/components/ui/common/DropDown"
-import { showAlert, runWithLoading } from "@/utils/modal.util"
-import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
-import { profileApi } from "@/lib/publicLib/api/profileApi/api.profile"
-import { useEffect } from "react"
-import { ApiError } from "@/lib/publicLib/api"
-import { router } from "expo-router"
-import { authState } from "@/state/auth/auth.state"
-import { getUser } from "@/utils/profile.util"
-import { ThemedViewWithSidebar } from "@/components/ui/common/ThemedViewWithSidebar"
-import Sidebar from "@/components/sidebar/Sidebar"
 import Header from "@/components/header/Header"
+import Sidebar from "@/components/sidebar/Sidebar"
+import { Dropdown } from "@/components/ui/common/DropDown"
+import { ThemedText } from "@/components/ui/common/ThemedText"
+import { ThemedView } from "@/components/ui/common/ThemedView"
+import { ThemedViewWithSidebar } from "@/components/ui/common/ThemedViewWithSidebar"
+import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
+import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
+import { useLegend$ } from "@/hooks/commonHooks/hooks.useLegend"
+import { ApiError } from "@/lib/constantLib"
+import { PersonalProfileApi } from "@/lib/personalLib/profileApi/personal.api.profile"
+import { authState } from "@/state/auth/state.auth"
+import { $personalStateCreateProfile } from "@/state/personalState/profile/personal.state.profile.createProfile"
+import { $personalStateUser } from "@/state/personalState/user/personal.state.user"
+import { runWithLoading, showAlert } from "@/utils/commonUtils/util.modal"
+import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile"
+import { router } from "expo-router"
+import { useEffect } from "react"
+import { Platform, Pressable, TextInput } from "react-native"
+import { StyleSheet, useUnistyles } from "react-native-unistyles"
 
-export default function CreateProfile() {
+export default function PersonalCreateProfile() {
   // Redirect to profile if user already has a profile
   useEffect(() => {
-    if (authState.user.get()) {
+    if ($personalStateUser.user.get()) {
       authState.isInTheProfileUpdateMode.set(false)
       router.replace('/personal/profile');
     }
@@ -32,71 +33,45 @@ export default function CreateProfile() {
   };
 
   // All hooks must be called at the top level
-  const userId= useLegend$(authState.userId)
-  const name = useLegend$(createProfile$.name)
-  const payloadUsername = useLegend$(createProfile$.username)
-  const profileVisibleTo = useLegend$(createProfile$.profileVisibleTo)
-  const bio = useLegend$(createProfile$.bio)
-  const isUsernameSubmitted = useLegend$(createProfile$.usernameSubmitted)
-  const isSubmitted = useLegend$(createProfile$.submitted)
-  const isUsernameChecked = useLegend$(createProfile$.usernameChecked)
-  const isNameValid = useLegend$(createProfile$.isNameValid)
-  const isUsernameValid = useLegend$(createProfile$.isUsernameValid)
-  const isProfileVisibleToValid = useLegend$(createProfile$.isProfileVisibleToValid)
-  const isBioValid = useLegend$(createProfile$.isBioValid)
-  const isValid = useLegend$(createProfile$.isValid)
+  const name = useLegend$($personalStateCreateProfile.name)
+  const profileType = useLegend$($personalStateCreateProfile.profile_type)
+  const bio = useLegend$($personalStateCreateProfile.bio)
+  const isSubmitted = useLegend$($personalStateCreateProfile.submitted)
+  const isNameValid = useLegend$($personalStateCreateProfile.isNameValid)
+  const isProfileTypeValid = useLegend$($personalStateCreateProfile.isProfileTypeValid)
+  const isBioValid = useLegend$($personalStateCreateProfile.isBioValid)
+  const isValid = useLegend$($personalStateCreateProfile.isValid)
   const { handlePressIn } = pressableAnimation();
-  const { theme } = useUnistyles();
 
   useEffect(() => {
     // Clean up when component unmounts
     return () => {
-      createProfile$.reset()
+      $personalStateCreateProfile.reset()
       authState.isInTheProfileUpdateMode.set(false)
     };
   }, []);
 
-  const checkUsername = async () => {
-    if (!isUsernameValid) {
-      createProfile$.usernameSubmit()
-      showAlert('Username is not valid\nOnly letters, numbers, . and _ are allowed\nMaximum length is 30 characters')
-      return;
-    }
-
-    try {
-      const response: any = await runWithLoading(
-        () => profileApi.checkUsername({ username: payloadUsername! }),
-        { message: 'Checking username' }
-      );
-      if (response.status) {
-        createProfile$.usernameChecked.set(true);
-      }
-    } catch (error) {
-      showAlert('Something went wrong try again')
-    }
-  }
 
   const handleProfileCreation = async () => {
     if (!isValid) {
-      createProfile$.submit();
+      $personalStateCreateProfile.submit();
       return;
     }
 
     try {
       const response: any = await runWithLoading(
-        () => profileApi.createProfile({
+        () => PersonalProfileApi.createProfile({
         name: name!,
-        username: payloadUsername!,
-        profileVisibleTo: profileVisibleTo!,
+        profile_type: profileType!,
         bio: bio!
       }),
       { message: 'Creating profile' }
       );
 
       if (response) {
-        // Update the global auth state
-        authState.user.set(response);
-        createProfile$.userNotFound.set(false);
+        // Update the global user state
+        $personalStateUser.user.set(response);
+        $personalStateCreateProfile.userNotFound.set(false);
         // Navigate back to profile screen
         router.back();
       }
@@ -105,26 +80,12 @@ export default function CreateProfile() {
         if (error.type === 'conflict') {
           // Profile already exists but user is still on create profile screen
           // Force refresh user data and navigate to profile
-          try {
-            // getUser returns void, so we'll just refresh the page to sync state
-            await getUser();
-          } catch (e) {
-            console.error('Failed to refresh user data:', e);
-            // Even if refresh fails, still navigate to profile to avoid being stuck
-          }
+          void PersonalUtilGetUser();
           router.back();
           return;
         }
-        if (error.type === 'conflict_username') {
-          // Username is already taken
-          showAlert('Username is already taken. Please choose another one.');
-          return;
-        }
-        // Handle other API errors
         showAlert(error.message || 'Something went wrong. Please try again.');
       } else {
-        // Handle non-API errors
-        console.error('Profile creation error:', error);
         showAlert('An unexpected error occurred. Please try again.');
       }
     }
@@ -152,9 +113,9 @@ export default function CreateProfile() {
           <TextInput
             placeholder="Name"
             inputMode='text'
-            maxLength={70}
+            maxLength={40}
             value={name ?? ""}
-            onChangeText={(text) => createProfile$.name.set(text)}
+            onChangeText={(text) => $personalStateCreateProfile.name.set(text)}
             textContentType='name'
             placeholderTextColor="gray"
             autoCapitalize="none"
@@ -162,42 +123,15 @@ export default function CreateProfile() {
             style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
           />
 
-
-          <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameChecked) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
-            <TextInput
-              placeholder="Username"
-              maxLength={30}
-              inputMode='text'
-              value={payloadUsername ?? ""}
-              onChangeText={(text) => { createProfile$.username.set(text); createProfile$.usernameChecked.set(false) }}
-              textContentType='username'
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.inputField, { outline:'none' }]}
-            />
-            <Pressable onPress={checkUsername} style={({ pressed }) => [
-              styles.inputButton,
-              { opacity: pressed ? 0.1 : 1 }
-            ]}>
-              {isUsernameChecked ? (
-                <IconSymbol name="check" size={25} />
-              ) : (
-                <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
-              )}
-            </Pressable>
-          </ThemedView>
-
-
           <TextInput
             placeholder="Bio"
             inputMode='text'
             value={bio ?? ""}
-            onChangeText={(text) => createProfile$.bio.set(text)}
+            onChangeText={(text) => $personalStateCreateProfile.bio.set(text)}
             placeholderTextColor="gray"
             autoCapitalize="none"
             autoCorrect={false}
-            maxLength={200}
+            maxLength={150}
             multiline={true}
             style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
           />
@@ -207,14 +141,14 @@ export default function CreateProfile() {
               options={[
                 { label: 'Public', value: 'public' },
                 { label: 'Private', value: 'private' },
-                { label: 'Follower', value: 'follower' },
+                { label: 'Personal', value: 'Personal' },
               ]}
-              value={profileVisibleTo}
+              value={profileType}
               placeholder="Select profile visibility"
-              error={!isProfileVisibleToValid && isSubmitted}
+              error={!isProfileTypeValid && isSubmitted}
               searchable={false}
               style={styles.reverseModalBackground}
-              onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+              onSelect={(value) => $personalStateCreateProfile.profile_type.set(value as 'public' | 'private' | 'personal')}
             />
 
           </ThemedView>

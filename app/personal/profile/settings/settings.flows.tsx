@@ -1,11 +1,11 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
-import { useLegend$ } from '@/hooks/useLegend';
-import { ApiError } from '@/lib/publicLib/api';
-import { setUserInStorage } from '@/lib/storage/auth.storage';
-import { authState } from '@/state/auth/auth.state';
-import { setting$ } from '@/state/settings/setting.state';
-import { showGenericError } from '@/utils/error.util';
-import { runWithLoading, showAlert } from '@/utils/modal.util';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { ApiError } from '@/lib/constantLib';
+import { setUserInStorage } from '@/lib/storage/commonStorage/storage.auth';
+import { authState } from '@/state/auth/state.auth';
+import { setting$ } from '@/state/settings/state.setting';
+import { showGenericError } from '@/utils/commonUtils/util.error';
+import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 

@@ -1,15 +1,13 @@
-import { ThemedText } from '@/components/ui/common/ThemedText';
-import { ThemedView } from '@/components/ui/common/ThemedView';
-import { useLegend$ } from '@/hooks/useLegend';
-import { router } from 'expo-router';
-import { useState, useCallback } from 'react';
-import { StyleSheet } from 'react-native-unistyles';
-import currentUserStore from '@/state/publicState/activeUser.state';
 import ProfileList from '@/components/publicComponents/profile/ProfileList';
-import NotFoundScreen from '../+not-found';
-import { Platform } from 'react-native';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import Sidebar from '@/components/sidebar/Sidebar';
+import { ThemedView } from '@/components/ui/common/ThemedView';
+import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import currentUserStore from '@/state/publicState/public.state.activeUser';
+import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { StyleSheet } from 'react-native-unistyles';
+import NotFoundScreen from '../+not-found';
 
 type TABS = 'Posts' | 'Followers' | 'Following'
 export default function Profile() {

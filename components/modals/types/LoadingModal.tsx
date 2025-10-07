@@ -1,10 +1,10 @@
 // components/modals/types/LoadingModal.tsx
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { modalActions } from '@/state/modals/state.modals';
 import React from 'react';
-import { View, ActivityIndicator, Text, Pressable } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import type { LoadingModalProps } from './modal.types';
-import { modalActions } from '@/state/modals/modals.state';
-import { ThemedText } from '@/components/ui/common/ThemedText';
 
 export function LoadingModal(props: LoadingModalProps) {
   const { message, cancellable, onCancel } = props;

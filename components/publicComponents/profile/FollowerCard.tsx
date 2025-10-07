@@ -1,13 +1,13 @@
-import { StyleSheet } from 'react-native-unistyles'
-import React from 'react'
-import { ThemedView } from '@/components/ui/common/ThemedView';  
-import { ThemedText } from '@/components/ui/common/ThemedText';  
-import { Pressable } from 'react-native';
-import { router } from 'expo-router';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import currentUserStore from '@/state/publicState/activeUser.state';
-import { User } from '@/model/User';
 import users from '@/assets/data/users';
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { ThemedView } from '@/components/ui/common/ThemedView';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { User } from '@/model/User';
+import currentUserStore from '@/state/publicState/public.state.activeUser';
+import { router } from 'expo-router';
+import React from 'react';
+import { Pressable } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 
 type Props = {
     follower: {

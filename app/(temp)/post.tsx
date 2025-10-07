@@ -1,16 +1,16 @@
+import Header from '@/components/header/Header';
+import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
+import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { useLegend$ } from '@/hooks/useLegend';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import currentPostStore from '@/state/publicState/public.state.activePost';
+import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
-import Header from '@/components/header/Header';
-import currentPostStore from '@/state/publicState/activePost.state';
-import currentUserStore from '@/state/publicState/activeUser.state';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import Sidebar from '@/components/sidebar/Sidebar';
 
 export default function PostDetailsPage() {
     const post = useLegend$(currentPostStore.post);

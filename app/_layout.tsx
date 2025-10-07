@@ -1,17 +1,17 @@
 // import '../unistyles'
 import { AppModal } from '@/components/modals/AppModal';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/auth.storage';
-import { appMode$ } from '@/state/appMode/mode.state';
-import { authState } from '@/state/auth/auth.state';
-import { initUserPosts } from '@/state/publicState/initUserPosts.state';
-import { initializeGlobalNetworkTracking } from '@/state/tools/network.state';
-import { getUser } from '@/utils/profile.util';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/commonStorage/storage.auth';
+import { appMode$ } from '@/state/appMode/state.appMode';
+import { authState } from '@/state/auth/state.auth';
+import { initUserPosts } from '@/state/publicState/public.state.initUserPosts';
+import { initializeGlobalNetworkTracking } from '@/state/tools/state.network';
+import { getUser } from '@/utils/publicUtils/public.util.profile';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useLegend$ } from '@/hooks/useLegend';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { SplashScreen, Stack } from 'expo-router';

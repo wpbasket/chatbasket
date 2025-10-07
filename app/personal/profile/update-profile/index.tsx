@@ -6,20 +6,20 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { useLegend$ } from '@/hooks/useLegend';
-import { ApiError } from '@/lib/publicLib/api';
-import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
-import { authState } from '@/state/auth/auth.state';
-import { modalActions } from '@/state/modals/modals.state';
-import { updateProfile$ } from '@/state/publicState/profile/updateProfile.state';
-import { runWithLoading, showAlert, showControllersModal } from '@/utils/modal.util';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { ApiError } from '@/lib/constantLib';
+import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
+import { authState } from '@/state/auth/state.auth';
+import { modalActions } from '@/state/modals/state.modals';
+import { updateProfile$ } from '@/state/publicState/profile/public.state.profile.updateProfile';
+import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Image, Platform, Pressable, TextInput } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
-import { buildFormDataFromAsset } from '@/utils/upload.util';
 
 
 export default function UpdateProfile() {
@@ -38,7 +38,7 @@ export default function UpdateProfile() {
   };
   
   const user = useLegend$(authState.user)
-  const avatarUri = useLegend$(authState.avatarUri)
+  const avatarUri = useLegend$(authState.user.avatarUri)
   const username = useLegend$(updateProfile$.username)
   const name = useLegend$(updateProfile$.name)
   const bio = useLegend$(updateProfile$.bio)
@@ -134,7 +134,7 @@ export default function UpdateProfile() {
           { message: 'Removing avatar' }
         );
         if (response.status) {
-          authState.avatarUri.set(null)
+          authState.user.avatarUri.set(null)
           updateProfile$.removeAvatarDone.set(true);
           modalActions.update({ confirmDisabled: false })
           showAlert('Profile picture removed')
@@ -161,7 +161,6 @@ export default function UpdateProfile() {
     const performUpload = async () => {
       const currentAvatarFile = updateProfile$.avatarFile.get();
       const currentIsAvatarValid = updateProfile$.isAvatarValid.get();
-      console.log("from performUpload" + isAvatarRemoved)
       if (isAvatarRemoved) {
         showAlert('Profile picture removed')
         return;
@@ -246,8 +245,6 @@ export default function UpdateProfile() {
 
 
   const handleUpdateProfile = async () => {
-    console.log("from handleUpdateProfile" + isAvatarRemoved)
-    console.log(isNull)
     if (isNull && isAvatarRemoved) {
       updateProfile$.reset()
       router.back();
@@ -311,7 +308,7 @@ export default function UpdateProfile() {
                 { opacity: pressed ? 0.1 : 1 },
                 styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
               ]} >
-                {(avatarFile || user?.avatar) && (
+                {(avatarFile || (user?.avatarUri && user?.avatarUri.length>0)) && (
                   <Image
                     source={{ uri: avatarFile?.uri || avatarUri! }}
                     style={styles.profilePictureImage}

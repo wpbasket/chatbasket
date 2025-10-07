@@ -1,7 +1,7 @@
-import { ThemedView } from "../ui/common/ThemedView";
-import { pressableAnimation } from "@/hooks/pressableAnimation";
+import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation";
 import { Pressable, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { ThemedView } from "../ui/common/ThemedView";
 
 type HeaderButton = {
   child: React.ReactNode;

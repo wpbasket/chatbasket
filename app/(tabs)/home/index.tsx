@@ -1,17 +1,14 @@
-import { HelloWave } from '@/components/ui/common/HelloWave';
+import Postcard from '@/components/publicComponents/post/Postcard';
+import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { LegendList } from "@legendapp/list";
-import { useLegend$ } from '@/hooks/useLegend';
-import { StyleSheet } from 'react-native-unistyles';
-import Postcard from '@/components/publicComponents/post/Postcard';
-import userPostsStore from '@/state/publicState/userPostsStore.state';
-import { Platform } from 'react-native';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import Sidebar from '@/components/sidebar/Sidebar';
-import { Pressable } from 'react-native';
-import { appMode$, setAppMode } from '@/state/appMode/mode.state';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
+import userPostsStore from '@/state/publicState/public.state.userPostsStore';
+import { LegendList } from "@legendapp/list";
+import { Platform, Pressable } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
 
 export default function Home() {
   const posts_for_user = useLegend$(userPostsStore.posts);

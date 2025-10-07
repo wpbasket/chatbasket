@@ -1,8 +1,8 @@
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import React, { useCallback } from 'react';
 import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
-import { ThemedText } from '@/components/ui/common/ThemedText';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
 
 type TABS = 'Posts' | 'Followers' | 'Following';
 

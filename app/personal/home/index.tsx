@@ -1,13 +1,12 @@
-import { HelloWave } from '@/components/ui/common/HelloWave';
+import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { StyleSheet } from 'react-native-unistyles';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import Sidebar from '@/components/sidebar/Sidebar';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { Pressable } from 'react-native';
-import { useLegend$ } from '@/hooks/useLegend';
-import { appMode$, setAppMode } from '@/state/appMode/mode.state';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
+import { StyleSheet } from 'react-native-unistyles';
 
 export default function Home() {
   const { handlePressIn } = pressableAnimation();

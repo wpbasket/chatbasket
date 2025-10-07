@@ -1,19 +1,19 @@
-import React, { useMemo, useCallback } from 'react';
-import { StyleSheet } from 'react-native-unistyles';
-import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedText } from '@/components/ui/common/ThemedText';
-import { LegendList } from '@legendapp/list';
-import { User } from '@/model/User';
-import { Post } from '@/model/Post';
-import { useLegend$ } from '@/hooks/useLegend';
-import UserInfoSection from './sections/UserInfoSection';
-import TabsSection from './sections/TabsSection';
 import Postcard from '@/components/publicComponents/post/Postcard';
 import FollowerCard from '@/components/publicComponents/profile/FollowerCard';
-import activeUserPosts from '@/state/publicState/activeUserPosts.state';
-import activeUserFollowers from '@/state/publicState/activeUserFollowers.state';  
-import activeUserFollowing from '@/state/publicState/activeUserFollowing.state'; 
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { ThemedView } from '@/components/ui/common/ThemedView';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { Post } from '@/model/Post';
+import { User } from '@/model/User';
+import activeUserFollowers from '@/state/publicState/public.state.activeUserFollowers';
+import activeUserFollowing from '@/state/publicState/public.state.activeUserFollowing';
+import activeUserPosts from '@/state/publicState/public.state.activeUserPosts';
+import { LegendList } from '@legendapp/list';
+import React, { useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
+import { StyleSheet } from 'react-native-unistyles';
+import TabsSection from './sections/TabsSection';
+import UserInfoSection from './sections/UserInfoSection';
 
 type TABS = 'Posts' | 'Followers' | 'Following';
 

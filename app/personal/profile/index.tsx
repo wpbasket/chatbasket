@@ -7,19 +7,32 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
-import { clearSession } from '@/lib/storage/auth.storage';
-import { authState } from '@/state/auth/auth.state';
-import { createProfile$ } from '@/state/publicState/profile/createProfile.state';
-import { showConfirmDialog } from '@/utils/modal.util';
-import { getUser } from '@/utils/profile.util';
-import { useLegend$ } from '@/hooks/useLegend';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
+import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
+import { authState } from '@/state/auth/state.auth';
+import { $personalStateCreateProfile } from '@/state/personalState/profile/personal.state.profile.createProfile';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
+import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
+import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
+
+// Helper function to format username with colored numbers
+const formatUsername = (username: string | undefined): { letters: string; numbers: string; lastLetter: string } | null => {
+  if (!username || username.length !== 11) return null;
+  
+  // Format is guaranteed: 6 letters + 4 numbers + 1 letter
+  return {
+    letters: username.slice(0, 6),
+    numbers: username.slice(6, 10),
+    lastLetter: username.slice(10)
+  };
+};
 
 // Empty State Component
 function ProfileEmptyState() {
@@ -63,17 +76,18 @@ function ProfileEmptyState() {
 }
 
 export default function ProfileScreen() {
-  const user = useLegend$(authState.user);
-  const userNotFound = useLegend$(createProfile$.userNotFound);
-  const avatarUrl = useLegend$(authState.avatarUri);
+  const user = useLegend$($personalStateUser.user);
+  const userNotFound = useLegend$($personalStateCreateProfile.userNotFound);
+  const avatarUrl = useLegend$($personalStateUser.avatarUri);
   const { handlePressIn } = pressableAnimation();
 
-
+  // Format username parts
+  const usernameParts = formatUsername(user?.username);
 
   // Refresh user in background every time profile screen gains focus
   useFocusEffect(
     useCallback(() => {
-      void getUser(); // fire-and-forget; state will update UI when ready
+      void PersonalUtilGetUser(); // fire-and-forget; state will update UI when ready
     }, [])
   );
 
@@ -86,7 +100,7 @@ export default function ProfileScreen() {
   };
 
   const bucketColor = styles.bucketColor.color.toString();
-  const profileVisibleTo = user?.profileVisibleTo;
+  const profileType = user?.profile_type;
 
   const editProfile = () => {
     authState.isInTheProfileUpdateMode.set(true)
@@ -97,7 +111,6 @@ export default function ProfileScreen() {
     authState.isInTheProfileUpdateMode.set(true)
     return router.push('/personal/profile/settings');
   };
-
 
   const logoutButton = (event: any) => {
     showConfirmDialog('Are you sure you want to logout?', {
@@ -118,7 +131,7 @@ export default function ProfileScreen() {
 
   const logout = async () => {
     try {
-      const response = await profileApi.logout({ allSessions: false });
+      const response = await PersonalProfileApi.logout({ all_sessions: false });
       if (response.status) {
         clearSession();
       }
@@ -129,7 +142,6 @@ export default function ProfileScreen() {
 
   return (
     <>
-
       <ThemedViewWithSidebar>
         <ThemedViewWithSidebar.Sidebar>
           <Sidebar />
@@ -153,7 +165,7 @@ export default function ProfileScreen() {
             {/* Edit Icon Section */}
             <ThemedView style={styles.outerEditIcon}>
               <Pressable
-                onPress={editProfile}
+                // onPress={editProfile}
                 onPressIn={handlePressIn}
                 style={({ pressed }) => [
                   { opacity: pressed ? 0.1 : 1 },
@@ -192,31 +204,17 @@ export default function ProfileScreen() {
                   {/* Profile Mode */}
                   <ThemedView style={styles.bucketContainer}>
                     <FontAwesome5Icon
-                      name={profileVisibleTo === 'private' ? 'account.lock' : 'account.unlock'}
+                      name={profileType === 'private' ? 'account.lock' : 'account.unlock'}
                       size={20}
                       color={bucketColor}
                     />
                     <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {profileVisibleTo}
+                      {profileType}
                     </ThemedText>
                   </ThemedView>
                   {/* Profile Mode End */}
 
-                  {/* Followers */}
-                  <Pressable
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer, { marginLeft: -4 }
-                    ]}>
-                    <EntypoIcon name="bucket" size={20} color={bucketColor} />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {user?.followers}
-                    </ThemedText>
-                  </Pressable>
-                  {/* Followers End */}
-
-                  {/* Following */}
+                  {/* Contacts */}
                   <Pressable
                     onPressIn={handlePressIn}
                     style={({ pressed }) => [
@@ -225,28 +223,14 @@ export default function ProfileScreen() {
                     ]}>
                     <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
                     <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {user?.following}
+                      {user?.contacts}
                     </ThemedText>
                   </Pressable>
-                  {/* Following End */}
-
-                  {/* Posts  */}
-                  <Pressable
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer
-                    ]}>
-                    <FontAwesome5Icon name="list" size={22} color={bucketColor} />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      Posts
-                    </ThemedText>
-                  </Pressable>
-                  {/* Posts End */}
+                  {/* Contacts End */}
 
                   {/* Settings  */}
                   <Pressable
-                    onPress={settings}
+                    // onPress={settings}
                     onPressIn={handlePressIn}
                     style={({ pressed }) => [
                       { opacity: pressed ? 0.1 : 1 },
@@ -258,7 +242,6 @@ export default function ProfileScreen() {
                     </ThemedText>
                   </Pressable>
                   {/* Settings End */}
-
 
                   {/* Logout */}
                   <Pressable
@@ -275,7 +258,6 @@ export default function ProfileScreen() {
                   </Pressable>
                   {/* Logout End */}
 
-
                 </ThemedView>
                 {/* Outer Bucket Section End */}
 
@@ -284,8 +266,16 @@ export default function ProfileScreen() {
 
               {/* User Info Section */}
               <ThemedView style={styles.userInfoContainer}>
-                <ThemedText type='semibold'>@{user?.username}</ThemedText>
-                <ThemedText style={styles.bio}>{user?.bio}</ThemedText>
+                <ThemedView style={styles.usernameContainer}>
+                  <ThemedText type='gantariWithoutColorAndSize' style={styles.usernameStrings}>
+                    Username:   {usernameParts?.letters}
+                    <ThemedText type='gantariWithoutColorAndSize' style={styles.usernameNumbers}>
+                      {usernameParts?.numbers}
+                    </ThemedText>
+                    {usernameParts?.lastLetter}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedText style={styles.bio}>Bio:   {user?.bio}</ThemedText>
               </ThemedView>
               {/* User Info Section End */}
 
@@ -296,7 +286,6 @@ export default function ProfileScreen() {
           {/* Main Container End */}
         </ThemedViewWithSidebar.Main>
       </ThemedViewWithSidebar>
-
     </>
   );
 }
@@ -335,7 +324,6 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   outerBucketContainer: {
     gap: 10
-
   },
   bucketContainer: {
     flexDirection: 'row',
@@ -355,6 +343,17 @@ const styles = StyleSheet.create((theme, rt) => ({
     gap: 3,
     paddingBottom: 20,
     paddingRight: 15,
+  },
+  usernameContainer: {
+    flexDirection: 'row',
+  },
+  usernameStrings:{
+    color:theme.colors.title,
+  },
+  usernameNumbers: {
+    color: theme.colors.primary,
+    fontWeight:'bold',
+    letterSpacing:0.5
   },
   bio: {
     fontSize: 13,

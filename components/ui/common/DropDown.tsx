@@ -1,8 +1,8 @@
 // components/ui/Dropdown.tsx
 import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
-import { modal$, modalActions } from '@/state/modals/modals.state';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { modal$, modalActions } from '@/state/modals/state.modals';
 import { useObservable, useObserve } from '@legendapp/state/react';
-import { useLegend$ } from '@/hooks/useLegend';
 import React from 'react';
 import { Pressable, TextStyle, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';

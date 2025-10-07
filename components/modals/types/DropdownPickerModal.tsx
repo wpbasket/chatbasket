@@ -1,16 +1,15 @@
 // components/modals/types/DropdownPickerModal.tsx
+import type { DropdownPickerItem, DropdownPickerModalProps } from '@/components/modals/types/modal.types';
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import React, { useState } from 'react';
 import {
   Pressable,
-  View,
   ScrollView,
   TextInput,
-  Platform,
+  View
 } from 'react-native';
-import { ThemedText } from '@/components/ui/common/ThemedText';
 import { StyleSheet } from 'react-native-unistyles';
-import type { DropdownPickerModalProps, DropdownPickerItem } from '@/components/modals/types/modal.types';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
 
 export function DropdownPickerModal<T = any>({
   title,

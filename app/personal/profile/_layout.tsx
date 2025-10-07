@@ -1,14 +1,18 @@
-import { Stack } from "expo-router";
-import { ThemeProvider } from "@react-navigation/native";
 import { ThemedView } from "@/components/ui/common/ThemedView";
-import { UnistylesRuntime } from "react-native-unistyles";
-import { DarkTheme, DefaultTheme } from "@react-navigation/native";
-import { StyleSheet } from "react-native-unistyles";
-import { useLegend$ } from "@/hooks/useLegend";
-import { authState } from "@/state/auth/auth.state";
+import { useLegend$ } from "@/hooks/commonHooks/hooks.useLegend";
+import { authState } from "@/state/auth/state.auth";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { useEffect } from "react";
+import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
+import { PersonalStorageGetUser } from "@/lib/storage/personalStorage/personal.storage.user";
 
 export default function PersonalProfileScreenLayout() {
   const isInTheProfileUpdateMode = useLegend$(authState.isInTheProfileUpdateMode);
+  
+  useEffect(() => {
+    PersonalStorageGetUser();
+  }, []);
 
   return (
     <>

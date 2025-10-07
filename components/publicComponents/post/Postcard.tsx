@@ -1,15 +1,15 @@
 import users from '@/assets/data/users';
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { ThemedView } from '@/components/ui/common/ThemedView';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { Post } from '@/model/Post';
 import { User } from '@/model/User';
+import currentPostStore from '@/state/publicState/public.state.activePost';
+import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { router } from 'expo-router';
 import React from 'react';
 import { Pressable } from 'react-native';
-import { ThemedText } from '@/components/ui/common/ThemedText';
-import { ThemedView } from '@/components/ui/common/ThemedView';
-import currentPostStore from '@/state/publicState/activePost.state';
-import currentUserStore from '@/state/publicState/activeUser.state';
 import { StyleSheet } from 'react-native-unistyles';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
 type Props = {
   post: Post;
   interactive: boolean;

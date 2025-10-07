@@ -7,14 +7,14 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
-import { profileApi } from '@/lib/publicLib/api/profileApi/api.profile';
-import { clearSession } from '@/lib/storage/auth.storage';
-import { authState } from '@/state/auth/auth.state';
-import { createProfile$ } from '@/state/publicState/profile/createProfile.state';
-import { showConfirmDialog } from '@/utils/modal.util';
-import { getUser } from '@/utils/profile.util';
-import { useLegend$ } from '@/hooks/useLegend';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
+import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
+import { authState } from '@/state/auth/state.auth';
+import { createProfile$ } from '@/state/publicState/profile/public.state.profile.createProfile';
+import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
+import { getUser } from '@/utils/publicUtils/public.util.profile';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
@@ -65,7 +65,7 @@ function ProfileEmptyState() {
 export default function ProfileScreen() {
   const user = useLegend$(authState.user);
   const userNotFound = useLegend$(createProfile$.userNotFound);
-  const avatarUrl = useLegend$(authState.avatarUri);
+  const avatarUrl = useLegend$(authState.user.avatarUri);
   const { handlePressIn } = pressableAnimation();
 
 

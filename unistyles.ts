@@ -1,5 +1,5 @@
+import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
-import { PreferencesStorage } from '@/lib/storage/preferences.storage';
 import { Colors } from './constants/Colors';
 import { Fonts } from './constants/fonts';
 
@@ -55,7 +55,6 @@ StyleSheet.configure({
     initialTheme: () => {
       // Prefer user's saved preference if available
       const saved = PreferencesStorage.getTheme()
-      console.log(saved)
       if (saved === 'light' || saved === 'dark') return saved
       // Fallback to system color scheme
       return UnistylesRuntime.colorScheme === 'dark' ? 'dark' : 'light'

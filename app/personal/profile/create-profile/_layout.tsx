@@ -5,7 +5,7 @@ import { UnistylesRuntime } from "react-native-unistyles";
 import { DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { StyleSheet } from "react-native-unistyles";
 
-export default function CreateProfileLayout() {
+export default function PersonalCreateProfileLayout() {
 
   return (
     <>

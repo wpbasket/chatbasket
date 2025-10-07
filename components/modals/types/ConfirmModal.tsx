@@ -1,11 +1,11 @@
 // components/modals/types/ConfirmModal.tsx
-import React from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import type { ConfirmModalProps } from '@/components/modals/types/modal.types';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import React from 'react';
+import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
-import type { ConfirmModalProps } from '@/components/modals/types/modal.types';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
 
 export function ConfirmModal({
   message,

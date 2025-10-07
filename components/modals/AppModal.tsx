@@ -1,6 +1,6 @@
 // components/modals/AppModal.tsx
-import { modalActions, modals$ } from '@/state/modals/modals.state';
-import { useLegend$ } from '@/hooks/useLegend';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { modalActions, modals$ } from '@/state/modals/state.modals';
 import React, { useState } from 'react';
 import { LayoutChangeEvent, Modal, Platform, Pressable, useWindowDimensions, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';

@@ -1,12 +1,12 @@
-import { StyleSheet } from 'react-native-unistyles'
-import { ThemedView } from '../ui/common/ThemedView';
-import { ThemedText } from '../ui/common/ThemedText';
-import VerticalTabBar from './VerticalTabBar';
+import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { Pressable, View } from 'react-native';
-import { useLegend$ } from '@/hooks/useLegend';
+import { StyleSheet } from 'react-native-unistyles';
+import { ThemedText } from '../ui/common/ThemedText';
+import { ThemedView } from '../ui/common/ThemedView';
+import VerticalTabBar from './VerticalTabBar';
 
-import { appMode$, setAppMode } from '@/state/appMode/mode.state';
-import { pressableAnimation } from '@/hooks/pressableAnimation';
+import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 
 export default function Sidebar() {
   const currentMode = useLegend$(appMode$.mode);
