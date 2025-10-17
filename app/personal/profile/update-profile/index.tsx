@@ -9,10 +9,12 @@ import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIc
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { ApiError } from '@/lib/constantLib';
+import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
 import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
-import { updateProfile$ } from '@/state/publicState/profile/public.state.profile.updateProfile';
+import { $personalStateUpdateProfile } from '@/state/personalState/profile/personal.state.profile.updateProfile';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,12 +24,12 @@ import { Image, Platform, Pressable, TextInput } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 
-export default function UpdateProfile() {
+export default function PersonalUpdateProfile() {
 
   useEffect(() => {
     // Clean up when component unmounts
     return () => {
-      updateProfile$.reset()
+      $personalStateUpdateProfile.reset()
       authState.isInTheProfileUpdateMode.set(false)
     };
   }, []);
@@ -37,31 +39,24 @@ export default function UpdateProfile() {
     router.back();
   };
   
-  const user = useLegend$(authState.user)
-  const avatarUri = useLegend$(authState.user.avatarUri)
-  const username = useLegend$(updateProfile$.username)
-  const name = useLegend$(updateProfile$.name)
-  const bio = useLegend$(updateProfile$.bio)
-  const profileVisibleTo = useLegend$(updateProfile$.profileVisibleTo)
-  const avatar = useLegend$(updateProfile$.avatar)
-  const avatarFile = useLegend$(updateProfile$.avatarFile)
-  const avatarTokens = useLegend$(updateProfile$.avatarTokens)
-  const isAvatarSubmitted = useLegend$(updateProfile$.avatarSubmitted)
-  const isAvatarChecked = useLegend$(updateProfile$.isAvatarChecked)
-  const isAvatarValid = useLegend$(updateProfile$.isAvatarValid)
-  const isSubmitted = useLegend$(updateProfile$.submitted)
-  const isUsernameSubmitted = useLegend$(updateProfile$.usernameSubmitted)
-  const isUsernameChecked = useLegend$(updateProfile$.usernameChecked)
-  const isUsernameCheckedWhileNull = useLegend$(updateProfile$.isUsernameChecked)
-  const isNameValid = useLegend$(updateProfile$.isNameValid)
-  const isUsernameValid = useLegend$(updateProfile$.isUsernameValid)
-  const isProfileVisibleToValid = useLegend$(updateProfile$.isProfileVisibleToValid)
-  const isBioValid = useLegend$(updateProfile$.isBioValid)
-  const isValid = useLegend$(updateProfile$.isValid)
-  const isNull = useLegend$(updateProfile$.isNull)
-  const isAvatarRemoved = useLegend$(updateProfile$.removeAvatarDone)
+  const user = useLegend$($personalStateUser.user)
+  const avatarUri = useLegend$($personalStateUser.user.avatar_url)
+  const name = useLegend$($personalStateUpdateProfile.name)
+  const bio = useLegend$($personalStateUpdateProfile.bio)
+  const profileVisibleTo = useLegend$($personalStateUpdateProfile.profileVisibleTo)
+  const avatarFile = useLegend$($personalStateUpdateProfile.avatarFile)
+  const isAvatarSubmitted = useLegend$($personalStateUpdateProfile.avatarSubmitted)
+  const isAvatarChecked = useLegend$($personalStateUpdateProfile.isAvatarChecked)
+  const isAvatarValid = useLegend$($personalStateUpdateProfile.isAvatarValid)
+  const isSubmitted = useLegend$($personalStateUpdateProfile.submitted)
+  const isNameValid = useLegend$($personalStateUpdateProfile.isNameValid)
+  const isProfileVisibleToValid = useLegend$($personalStateUpdateProfile.isProfileVisibleToValid)
+  const isBioValid = useLegend$($personalStateUpdateProfile.isBioValid)
+  const isValid = useLegend$($personalStateUpdateProfile.isValid)
+  const isNull = useLegend$($personalStateUpdateProfile.isNull)
+  const isAvatarRemoved = useLegend$($personalStateUpdateProfile.removeAvatarDone)
   
-  const { theme } = useUnistyles();
+
   const { handlePressIn } = pressableAnimation();
 
 
@@ -87,8 +82,8 @@ export default function UpdateProfile() {
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        updateProfile$.avatarFile.set(result.assets[0]);
-        updateProfile$.avatarChecked.set(false);
+        $personalStateUpdateProfile.avatarFile.set(result.assets[0]);
+        $personalStateUpdateProfile.avatarChecked.set(false);
         // Enable Apply dynamically once an avatar is chosen
         modalActions.update({ confirmDisabled: false });
       }
@@ -111,8 +106,8 @@ export default function UpdateProfile() {
         });
 
         if (!result.canceled && result.assets && result.assets[0]) {
-          updateProfile$.avatarFile.set(result.assets[0]);
-          updateProfile$.avatarChecked.set(false);
+          $personalStateUpdateProfile.avatarFile.set(result.assets[0]);
+          $personalStateUpdateProfile.avatarChecked.set(false);
           // Enable Apply dynamically once a photo is taken
           modalActions.update({ confirmDisabled: false });
         }
@@ -129,13 +124,13 @@ export default function UpdateProfile() {
         return;
       }
       try {
-        const response: any = await runWithLoading(
-          () => profileApi.removeAvatar(),
+        const response = await runWithLoading(
+          () => PersonalProfileApi.removeAvatar(),
           { message: 'Removing avatar' }
         );
         if (response.status) {
-          authState.user.avatarUri.set(null)
-          updateProfile$.removeAvatarDone.set(true);
+          $personalStateUser.user.avatar_url.set(null)
+          $personalStateUpdateProfile.removeAvatarDone.set(true);
           modalActions.update({ confirmDisabled: false })
           showAlert('Profile picture removed')
           // After a successful removal, disable Apply; nothing left to apply here
@@ -159,15 +154,15 @@ export default function UpdateProfile() {
     }
 
     const performUpload = async () => {
-      const currentAvatarFile = updateProfile$.avatarFile.get();
-      const currentIsAvatarValid = updateProfile$.isAvatarValid.get();
+      const currentAvatarFile = $personalStateUpdateProfile.avatarFile.get();
+      const currentIsAvatarValid = $personalStateUpdateProfile.isAvatarValid.get();
       if (isAvatarRemoved) {
         showAlert('Profile picture removed')
         return;
       }
 
       if (!currentIsAvatarValid || !currentAvatarFile) {
-        updateProfile$.avatarSubmit()
+        $personalStateUpdateProfile.avatarSubmit()
         showAlert('No avatar selected')
         return
       }
@@ -175,15 +170,13 @@ export default function UpdateProfile() {
       try {
         const formData = await buildFormDataFromAsset(currentAvatarFile, { fieldName: 'avatar' });
 
-        const response: any = await runWithLoading(
-          () => profileApi.uploadAvatar(formData),
+        const response = await runWithLoading(
+          () => PersonalProfileApi.uploadAvatar(formData),
           { message: 'Uploading avatar' }
         );
 
-        if (response.fileId.length > 0) {
-          updateProfile$.avatar.set(response.fileId)
-          updateProfile$.avatarTokens.set(response.avatarTokens)
-          updateProfile$.avatarChecked.set(true)
+        if (response) {
+          $personalStateUpdateProfile.avatarChecked.set(true)
         }
       } catch (error) {
         if (error instanceof ApiError) {
@@ -192,8 +185,8 @@ export default function UpdateProfile() {
           showAlert('An unexpected error occurred. Please try again.');
         }
 
-        updateProfile$.avatarSubmit()
-        updateProfile$.avatarFile.set(null)
+        $personalStateUpdateProfile.avatarSubmit()
+        $personalStateUpdateProfile.avatarFile.set(null)
       }
     }
 
@@ -215,38 +208,17 @@ export default function UpdateProfile() {
     ).then((result) => {
       // Only perform upload if result is true AND we're not in a removed state
       // AND we actually have a file to upload
-      if (result && !updateProfile$.removeAvatarDone.get()) {
+      if (result && !$personalStateUpdateProfile.removeAvatarDone.get()) {
         performUpload()
       }
     });
   };
 
-  const checkUsername = async () => {
-    if (!isUsernameValid) {
-      updateProfile$.usernameSubmit()
-      showAlert('Username is not valid\nOnly letters, numbers, . and _ are allowed\nMaximum length is 30 characters')
-      return;
-    }
-
-    try {
-      const response: any = await runWithLoading(
-        () => profileApi.checkUsername({ username: username! }),
-        { message: 'Checking username' }
-      );
-      if (response.status) {
-        updateProfile$.usernameChecked.set(true);
-      }
-    } catch (error) {
-      showAlert('Something went wrong try again')
-      updateProfile$.usernameSubmit()
-    }
-  }
-
 
 
   const handleUpdateProfile = async () => {
     if (isNull && isAvatarRemoved) {
-      updateProfile$.reset()
+      $personalStateUpdateProfile.reset()
       router.back();
       return;
     }
@@ -256,25 +228,22 @@ export default function UpdateProfile() {
     }
 
     if (!isValid) {
-      updateProfile$.submit();
+      $personalStateUpdateProfile.submit();
       showAlert('Please fill all the fields')
       return;
     }
     try {
-      const response: any = await runWithLoading(
-        () => profileApi.updateProfile({
-        name: name,
-        username: username,
-        bio: bio,
-        profileVisibleTo: profileVisibleTo,
-        avatar: avatar,
-        avatarTokens: avatarTokens
+      const response = await runWithLoading(
+        () => PersonalProfileApi.updateProfile({
+        name: name ?? undefined,
+        bio: bio ?? undefined,
+        profile_type: profileVisibleTo ?? undefined,
       }),
       { message: 'Updating profile' }
       )
       if (response) {
         // authState.user.set(response)
-        updateProfile$.reset()
+        $personalStateUpdateProfile.reset()
         router.back()
       }
     } catch (error) {
@@ -308,7 +277,7 @@ export default function UpdateProfile() {
                 { opacity: pressed ? 0.1 : 1 },
                 styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
               ]} >
-                {(avatarFile || (user?.avatarUri && user?.avatarUri.length>0)) && (
+                {(avatarFile || (user?.avatar_url && user?.avatar_url.length>0)) && (
                   <Image
                     source={{ uri: avatarFile?.uri || avatarUri! }}
                     style={styles.profilePictureImage}
@@ -332,9 +301,9 @@ export default function UpdateProfile() {
             <TextInput
               placeholder="Name"
               inputMode='text'
-              maxLength={70}
+              maxLength={40}
               value={name ?? user?.name}
-              onChangeText={(text) => updateProfile$.name.set(text)}
+              onChangeText={(text) => $personalStateUpdateProfile.name.set(text)}
               textContentType='name'
               placeholderTextColor="gray"
               autoCapitalize="none"
@@ -343,44 +312,18 @@ export default function UpdateProfile() {
             />
 
 
-            <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameCheckedWhileNull) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
-              <TextInput
-                placeholder="Username"
-                maxLength={30}
-                inputMode='text'
-                value={username ?? user?.username}
-                onChangeText={(text) => { updateProfile$.username.set(text); updateProfile$.usernameChecked.set(false) }}
-                textContentType='username'
-                placeholderTextColor="gray"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.inputField, { outline:'none' }]}
-              />
-              <Pressable
-                onPress={checkUsername}
-                onPressIn={handlePressIn}
-                style={({ pressed }) => [
-                  styles.inputButton,
-                  { opacity: pressed ? 0.1 : 1 }
-                ]}>
-                {isUsernameChecked ? (
-                  <IconSymbol name="check" size={25} />
-                ) : username && username !== user?.username && (
-                  <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
-                )}
-              </Pressable>
-            </ThemedView>
+
 
 
             <TextInput
               placeholder="Bio"
               inputMode='text'
-              value={bio ?? user?.bio}
-              onChangeText={(text) => updateProfile$.bio.set(text)}
+              value={bio ?? user?.bio ?? ''}
+              onChangeText={(text) => $personalStateUpdateProfile.bio.set(text)}
               placeholderTextColor="gray"
               autoCapitalize="none"
               autoCorrect={false}
-              maxLength={200}
+              maxLength={150}
               multiline={true}
               style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
             />
@@ -390,14 +333,14 @@ export default function UpdateProfile() {
                 options={[
                   { label: 'Public', value: 'public' },
                   { label: 'Private', value: 'private' },
-                  { label: 'Follower', value: 'follower' },
+                  { label: 'Personal', value: 'personal' },
                 ]}
-                value={profileVisibleTo ?? user?.profileVisibleTo}
+                value={profileVisibleTo ?? user?.profile_type}
                 placeholder="Select profile visibility"
                 style={styles.dropdownBorder}
                 error={!isProfileVisibleToValid && isSubmitted}
                 searchable={false}
-                onSelect={(value) => updateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+                onSelect={(value) => $personalStateUpdateProfile.profileVisibleTo.set(value as 'public' | 'private' | 'personal')}
               />
 
             </ThemedView>

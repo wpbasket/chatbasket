@@ -14,6 +14,9 @@ export async function getUser() {
   } catch (error) {
     if (error instanceof ApiError) {
       if (['not_found'].includes(error.type)) {
+        authState.user.set(null);
+        setUserInStorage();
+        authState.user.set(null);
         console.log('User not found');
         createProfile$.userNotFound.set(true);
       }

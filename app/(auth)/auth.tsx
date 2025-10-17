@@ -118,6 +118,7 @@ export default function Auth() {
           }
           showAlert('Something went wrong try again');
         }
+        showAlert('Unexpected error occurred try again');
       }
     }, { message: 'Creating account' });
 

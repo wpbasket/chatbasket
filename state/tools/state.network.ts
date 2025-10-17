@@ -18,13 +18,13 @@ export const testConnectivity = async (): Promise<boolean> => {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
-    const response = await fetch(CONNECTIVITY_URL, {
+    await fetch(CONNECTIVITY_URL, {
       method: 'HEAD',
       cache: 'no-cache',
       mode: 'no-cors', // Avoid CORS issues
       signal: controller.signal,
     });
-    console.log("Connectivity test response:", response.ok);
+    // console.log("Connectivity test response:", response.ok);
     clearTimeout(timeoutId);
     return true; // If no error thrown, we have connectivity
   } catch (error) {

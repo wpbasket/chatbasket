@@ -15,6 +15,7 @@ import { authState } from '@/state/auth/state.auth';
 import { $personalStateCreateProfile } from '@/state/personalState/profile/personal.state.profile.createProfile';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
+import { formatDateTime } from '@/utils/commonUtils/util.date';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -77,8 +78,9 @@ function ProfileEmptyState() {
 
 export default function ProfileScreen() {
   const user = useLegend$($personalStateUser.user);
+  const avatarUrl = useLegend$($personalStateUser.user.avatar_url);
+  console.log(avatarUrl)
   const userNotFound = useLegend$($personalStateCreateProfile.userNotFound);
-  const avatarUrl = useLegend$($personalStateUser.avatarUri);
   const { handlePressIn } = pressableAnimation();
 
   // Format username parts
@@ -165,7 +167,7 @@ export default function ProfileScreen() {
             {/* Edit Icon Section */}
             <ThemedView style={styles.outerEditIcon}>
               <Pressable
-                // onPress={editProfile}
+                onPress={editProfile}
                 onPressIn={handlePressIn}
                 style={({ pressed }) => [
                   { opacity: pressed ? 0.1 : 1 },
@@ -216,6 +218,7 @@ export default function ProfileScreen() {
 
                   {/* Contacts */}
                   <Pressable
+                    onPress={() => router.push('/personal/profile/contacts')}
                     onPressIn={handlePressIn}
                     style={({ pressed }) => [
                       { opacity: pressed ? 0.1 : 1 },
@@ -230,11 +233,11 @@ export default function ProfileScreen() {
 
                   {/* Settings  */}
                   <Pressable
-                    // onPress={settings}
+                    onPress={settings}
                     onPressIn={handlePressIn}
                     style={({ pressed }) => [
                       { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer, { marginLeft: -4.1 }
+                      styles.bucketContainer, { marginLeft: -4.1 ,marginTop:-3}
                     ]}>
                     <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
                     <ThemedText type='small' style={styles.bucketText} selectable={false}>
@@ -267,15 +270,16 @@ export default function ProfileScreen() {
               {/* User Info Section */}
               <ThemedView style={styles.userInfoContainer}>
                 <ThemedView style={styles.usernameContainer}>
-                  <ThemedText type='gantariWithoutColorAndSize' style={styles.usernameStrings}>
+                  <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameStrings}>
                     Username:   {usernameParts?.letters}
-                    <ThemedText type='gantariWithoutColorAndSize' style={styles.usernameNumbers}>
+                    <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameNumbers}>
                       {usernameParts?.numbers}
                     </ThemedText>
                     {usernameParts?.lastLetter}
                   </ThemedText>
                 </ThemedView>
                 <ThemedText style={styles.bio}>Bio:   {user?.bio}</ThemedText>
+                {/* <ThemedText style={styles.bio}>Created At:   {formatDateTime(user?.createdAt)}</ThemedText> */}
               </ThemedView>
               {/* User Info Section End */}
 

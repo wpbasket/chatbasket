@@ -1,13 +1,10 @@
 import { observable } from "@legendapp/state";
 import * as ImagePicker from 'expo-image-picker';
 
-export const PersonalUpdateProfile$ = observable({
+export const $personalStateUpdateProfile = observable({
     submitted: false,
-    usernameSubmitted: false,
-    usernameChecked: false,
-    username: null as string | null,
     name: null as string | null,
-    profileVisibleTo: null as 'public' | 'private' | 'follower' | null,
+    profileVisibleTo: null as 'public' | 'private' | 'personal' | null,
     bio: null as string | null,
     avatarSubmitted: false,
     avatarChecked: false,
@@ -17,25 +14,16 @@ export const PersonalUpdateProfile$ = observable({
     removeAvatarDone: false,
 
     isNameValid: () => {
-        const name = PersonalUpdateProfile$.name.get();
+        const name = $personalStateUpdateProfile.name.get();
         if (name === null) {
             return true;
         }
         else {
-            return name.length !== 0 && name.length <= 70 && /^[a-zA-Z0-9]+(?: [a-zA-Z0-9]+)*$/.test(name);
-        }
-    },
-    isUsernameValid: () => {
-        const username = PersonalUpdateProfile$.username.get();
-        if (username === null) {
-            return true;
-        }
-        else {
-            return username !== null && username.length !== 0 && username.length <= 30 && /^[a-z0-9][a-z0-9._]*$/.test(username);
+            return name.length !== 0 && name.length <= 40;
         }
     },
     isProfileVisibleToValid: () => {
-        const profileVisibleTo = PersonalUpdateProfile$.profileVisibleTo.get();
+        const profileVisibleTo = $personalStateUpdateProfile.profileVisibleTo.get();
         if (profileVisibleTo === null) {
             return true;
         }
@@ -44,16 +32,16 @@ export const PersonalUpdateProfile$ = observable({
         }
     },
     isBioValid: () => {
-        const bio = PersonalUpdateProfile$.bio.get();
+        const bio = $personalStateUpdateProfile.bio.get();
         if (bio === null) {
             return true;
         }
         else {
-            return bio !== null && bio.length !== 0 && bio.length <= 200;
+            return bio !== null && bio.length !== 0 && bio.length <= 150;
         }
     },
     isAvatarValid: () => {
-        const avatar = PersonalUpdateProfile$.avatarFile.get();
+        const avatar = $personalStateUpdateProfile.avatarFile.get();
         if (avatar === null) {
             return true;
         }
@@ -62,56 +50,39 @@ export const PersonalUpdateProfile$ = observable({
         }
     },
     isValid: () => {
-        return PersonalUpdateProfile$.isNameValid() && PersonalUpdateProfile$.isUsernameChecked() && PersonalUpdateProfile$.isProfileVisibleToValid() && PersonalUpdateProfile$.isBioValid() && PersonalUpdateProfile$.isAvatarChecked();
+        return $personalStateUpdateProfile.isNameValid() && $personalStateUpdateProfile.isProfileVisibleToValid() && $personalStateUpdateProfile.isBioValid() && $personalStateUpdateProfile.isAvatarChecked();
     },
     submit: () => {
-        PersonalUpdateProfile$.submitted.set(true);
-    },
-    usernameSubmit: () => {
-        PersonalUpdateProfile$.usernameSubmitted.set(true);
+        $personalStateUpdateProfile.submitted.set(true);
     },
     avatarSubmit: () => {
-        PersonalUpdateProfile$.avatarSubmitted.set(true);
+        $personalStateUpdateProfile.avatarSubmitted.set(true);
     },
     avatarCheck: () => {
-        PersonalUpdateProfile$.avatarChecked.set(true);
-    },
-    usernameCheck: () => {
-        PersonalUpdateProfile$.usernameChecked.set(true);
-    },
-    isUsernameChecked: () => {
-        if (PersonalUpdateProfile$.username.get() === null) {
-            return true;
-        }
-        else {
-            return PersonalUpdateProfile$.usernameChecked.get();
-        }
+        $personalStateUpdateProfile.avatarChecked.set(true);
     },
     isAvatarChecked: () => {
-        if (PersonalUpdateProfile$.avatarFile.get() === null) {
+        if ($personalStateUpdateProfile.avatarFile.get() === null) {
             return true;
         }
         else {
-            return PersonalUpdateProfile$.avatarChecked.get();
+            return $personalStateUpdateProfile.avatarChecked.get();
         }
     },
 
     isNull: () => {
-        return PersonalUpdateProfile$.name.get() === null && PersonalUpdateProfile$.usernameChecked.get() === false && PersonalUpdateProfile$.profileVisibleTo.get() === null && PersonalUpdateProfile$.bio.get() === null && PersonalUpdateProfile$.avatarChecked.get() === false;
+        return $personalStateUpdateProfile.name.get() === null && $personalStateUpdateProfile.profileVisibleTo.get() === null && $personalStateUpdateProfile.bio.get() === null && $personalStateUpdateProfile.avatarChecked.get() === false;
     },
 
     reset: () => {
-        PersonalUpdateProfile$.submitted.set(false);
-        PersonalUpdateProfile$.usernameSubmitted.set(false);
-        PersonalUpdateProfile$.usernameChecked.set(false);
-        PersonalUpdateProfile$.name.set(null);
-        PersonalUpdateProfile$.username.set(null);
-        PersonalUpdateProfile$.profileVisibleTo.set(null);
-        PersonalUpdateProfile$.bio.set(null);
-        PersonalUpdateProfile$.avatarSubmitted.set(false);
-        PersonalUpdateProfile$.avatarChecked.set(false);
-        PersonalUpdateProfile$.avatar.set(null);
-        PersonalUpdateProfile$.avatarFile.set(null);
-        PersonalUpdateProfile$.removeAvatarDone.set(false);
+        $personalStateUpdateProfile.submitted.set(false);
+        $personalStateUpdateProfile.name.set(null);
+        $personalStateUpdateProfile.profileVisibleTo.set(null);
+        $personalStateUpdateProfile.bio.set(null);
+        $personalStateUpdateProfile.avatarSubmitted.set(false);
+        $personalStateUpdateProfile.avatarChecked.set(false);
+        $personalStateUpdateProfile.avatar.set(null);
+        $personalStateUpdateProfile.avatarFile.set(null);
+        $personalStateUpdateProfile.removeAvatarDone.set(false);
     }
 })

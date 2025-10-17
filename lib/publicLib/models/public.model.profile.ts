@@ -26,8 +26,8 @@ export interface UpdateUserProfilePayload {
     username: string | null;
     profileVisibleTo: string | null;
     bio: string | null;
-    avatar: string | null;
-    avatarTokens: string[] | null;
+    avatarFileId: string | null;
+    avatarFileTokens: string[] | null;
 }
 
 export interface CheckUsernamePayload {
@@ -36,9 +36,9 @@ export interface CheckUsernamePayload {
 
 
 export interface UploadAvatarResponse {
-    fileId: string;
+    avatarFileId: string;
     name: string;
-    avatarTokens: string[] | null;
+    avatarFileTokens: string[] | null;
 }
 
 export interface LogoutPayload {

@@ -1,5 +1,5 @@
-import { PersonalCreateProfilePayload, PersonalLogoutPayload, PersonalProfileResponse } from "@/lib/personalLib";
-import { apiClient } from "@/lib/constantLib";
+import { PersonalCreateProfilePayload, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateUserProfilePayload } from "@/lib/personalLib";
+import { apiClient, fileUploadClient } from "@/lib/constantLib";
 import { BooleanResponse } from "@/lib/constantLib";
 
 
@@ -31,8 +31,27 @@ async function createProfile(payload: PersonalCreateProfilePayload): Promise<Per
     return apiClient.post<PersonalProfileResponse>('/personal/profile/create-profile', payload);
 }
 
+
+async function updateProfile(payload: PersonalUpdateUserProfilePayload): Promise<PersonalProfileResponse> {
+    return apiClient.post<PersonalProfileResponse>('/personal/profile/update-profile', payload);
+}
+
+
+async function uploadAvatar(formData: FormData): Promise<BooleanResponse> {
+    return fileUploadClient.uploadFile<BooleanResponse>('/personal/profile/upload-avatar', formData);
+}
+
+
+async function removeAvatar(): Promise<BooleanResponse> {
+    return apiClient.delete<BooleanResponse>('/personal/profile/remove-avatar');
+}
+
+
 export const PersonalProfileApi = {
     logout,
     getProfile,
-    createProfile
+    createProfile,
+    updateProfile,
+    uploadAvatar,
+    removeAvatar
 }

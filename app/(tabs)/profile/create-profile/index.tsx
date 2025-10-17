@@ -64,11 +64,12 @@ export default function CreateProfile() {
     }
 
     try {
-      const response: any = await runWithLoading(
+      const response = await runWithLoading(
         () => profileApi.checkUsername({ username: payloadUsername! }),
         { message: 'Checking username' }
       );
       if (response.status) {
+        console.log('Username is available');
         createProfile$.usernameChecked.set(true);
       }
     } catch (error) {

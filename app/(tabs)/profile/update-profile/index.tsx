@@ -129,7 +129,7 @@ export default function UpdateProfile() {
         return;
       }
       try {
-        const response: any = await runWithLoading(
+        const response = await runWithLoading(
           () => profileApi.removeAvatar(),
           { message: 'Removing avatar' }
         );
@@ -175,14 +175,14 @@ export default function UpdateProfile() {
       try {
         const formData = await buildFormDataFromAsset(currentAvatarFile, { fieldName: 'avatar' });
 
-        const response: any = await runWithLoading(
+        const response = await runWithLoading(
           () => profileApi.uploadAvatar(formData),
           { message: 'Uploading avatar' }
         );
 
-        if (response.fileId.length > 0) {
-          updateProfile$.avatar.set(response.fileId)
-          updateProfile$.avatarTokens.set(response.avatarTokens)
+        if (response) {
+          updateProfile$.avatar.set(response.avatarFileId)
+          updateProfile$.avatarTokens.set(response.avatarFileTokens)
           updateProfile$.avatarChecked.set(true)
         }
       } catch (error) {
@@ -261,14 +261,14 @@ export default function UpdateProfile() {
       return;
     }
     try {
-      const response: any = await runWithLoading(
+      const response = await runWithLoading(
         () => profileApi.updateProfile({
         name: name,
         username: username,
         bio: bio,
         profileVisibleTo: profileVisibleTo,
-        avatar: avatar,
-        avatarTokens: avatarTokens
+        avatarFileId: avatar,
+        avatarFileTokens: avatarTokens
       }),
       { message: 'Updating profile' }
       )

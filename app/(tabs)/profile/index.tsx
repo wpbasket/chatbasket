@@ -66,6 +66,7 @@ export default function ProfileScreen() {
   const user = useLegend$(authState.user);
   const userNotFound = useLegend$(createProfile$.userNotFound);
   const avatarUrl = useLegend$(authState.user.avatarUri);
+  console.log(avatarUrl);
   const { handlePressIn } = pressableAnimation();
 
 

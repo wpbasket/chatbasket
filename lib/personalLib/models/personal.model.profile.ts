@@ -1,15 +1,14 @@
 export interface PersonalProfileResponse {
-    id:             string; 
-    name:           string;     
-    username:       string;
-    email:          string;     
-    bio:            string;  
-    avatar:         string | null;
-    avatar_tokens:  string[] | null;
-    contacts:       number;
-    profile_type:   string;     // public | private | personal 
-    createdAt:      string;
-    updatedAt:      string;
+    id: string; // string
+    username: string; // string, format: 6 uppercase letters + 4 digits + 1 uppercase letter
+    name: string; // string, min=1, max=40
+    email: string; // string
+    bio: string | null; // *string, max=150
+    avatar_url: string | null; // *string
+    contacts: number; // int32, >=0, <=500
+    profile_type: string; // string, oneof=public private personal
+    createdAt: string; // string (JSON serialized time.Time)
+    updatedAt: string; // string (JSON serialized time.Time)
 }
 
 export interface PersonalLogoutPayload {
@@ -17,7 +16,13 @@ export interface PersonalLogoutPayload {
 }
 
 export interface PersonalCreateProfilePayload {
-    name: string;
-    bio: string;
-    profile_type: string;
+    name: string; // string, required, min=1, max=40
+    profile_type: string; // string, required, oneof=public private personal
 }
+
+export interface PersonalUpdateUserProfilePayload {
+    name?: string;        // Optional; omit to not update
+    bio?: string;         // Optional; omit to not update
+    profile_type?: string;  // Optional; omit to not update
+}
+

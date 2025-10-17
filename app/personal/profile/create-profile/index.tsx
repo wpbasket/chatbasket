@@ -35,11 +35,9 @@ export default function PersonalCreateProfile() {
   // All hooks must be called at the top level
   const name = useLegend$($personalStateCreateProfile.name)
   const profileType = useLegend$($personalStateCreateProfile.profile_type)
-  const bio = useLegend$($personalStateCreateProfile.bio)
   const isSubmitted = useLegend$($personalStateCreateProfile.submitted)
   const isNameValid = useLegend$($personalStateCreateProfile.isNameValid)
   const isProfileTypeValid = useLegend$($personalStateCreateProfile.isProfileTypeValid)
-  const isBioValid = useLegend$($personalStateCreateProfile.isBioValid)
   const isValid = useLegend$($personalStateCreateProfile.isValid)
   const { handlePressIn } = pressableAnimation();
 
@@ -63,7 +61,6 @@ export default function PersonalCreateProfile() {
         () => PersonalProfileApi.createProfile({
         name: name!,
         profile_type: profileType!,
-        bio: bio!
       }),
       { message: 'Creating profile' }
       );
@@ -123,25 +120,13 @@ export default function PersonalCreateProfile() {
             style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
           />
 
-          <TextInput
-            placeholder="Bio"
-            inputMode='text'
-            value={bio ?? ""}
-            onChangeText={(text) => $personalStateCreateProfile.bio.set(text)}
-            placeholderTextColor="gray"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={150}
-            multiline={true}
-            style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
-          />
 
           <ThemedView style={[styles.profileVisibleToContainer]} >
             <Dropdown
               options={[
                 { label: 'Public', value: 'public' },
                 { label: 'Private', value: 'private' },
-                { label: 'Personal', value: 'Personal' },
+                { label: 'Personal', value: 'personal' },
               ]}
               value={profileType}
               placeholder="Select profile visibility"
