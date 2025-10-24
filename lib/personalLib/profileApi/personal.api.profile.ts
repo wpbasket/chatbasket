@@ -15,7 +15,7 @@ async function logout(payload: PersonalLogoutPayload): Promise<BooleanResponse> 
 
 /** 
  * Handles user profile retrieval. 
- * @returns id:string; name:string; username:string; email:string; bio:string; avatar:string; avatar_tokens:string[]; contacts:number; profile_type:string; createdAt:string; updatedAt:string;
+ * @returns id:string; name:string; username:string; email:string; bio:string; avatar:string; avatar_tokens:string[]; profile_type:string; createdAt:string; updatedAt:string;
  */
 async function getProfile(): Promise<PersonalProfileResponse> {
     return apiClient.get<PersonalProfileResponse>('/personal/profile/get-profile');
@@ -25,15 +25,15 @@ async function getProfile(): Promise<PersonalProfileResponse> {
 /**
  * Handles user profile creation.
  * @param payload name: string; bio: string; profile_type: string;
- * @returns id:string; name:string; username:string; email:string; bio:string; avatar:string; avatar_tokens:string[]; contacts:number; profile_type:string; createdAt:string; updatedAt:string;
+ * @returns id:string; name:string; username:string; email:string; bio:string; avatar:string; avatar_tokens:string[]; profile_type:string; createdAt:string; updatedAt:string;
  */
 async function createProfile(payload: PersonalCreateProfilePayload): Promise<PersonalProfileResponse> {
     return apiClient.post<PersonalProfileResponse>('/personal/profile/create-profile', payload);
 }
 
 
-async function updateProfile(payload: PersonalUpdateUserProfilePayload): Promise<PersonalProfileResponse> {
-    return apiClient.post<PersonalProfileResponse>('/personal/profile/update-profile', payload);
+async function updateProfile(payload: PersonalUpdateUserProfilePayload): Promise<BooleanResponse> {
+    return apiClient.post<BooleanResponse>('/personal/profile/update-profile', payload);
 }
 
 

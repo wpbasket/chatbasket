@@ -22,6 +22,7 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
+import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 
 // Helper function to format username with colored numbers
 const formatUsername = (username: string | undefined): { letters: string; numbers: string; lastLetter: string } | null => {
@@ -133,7 +134,7 @@ export default function ProfileScreen() {
 
   const logout = async () => {
     try {
-      const response = await PersonalProfileApi.logout({ all_sessions: false });
+      const response = await profileApi.logout({ allSessions: false });
       if (response.status) {
         clearSession();
       }
@@ -211,7 +212,7 @@ export default function ProfileScreen() {
                       color={bucketColor}
                     />
                     <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {profileType}
+                      {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : profileType}
                     </ThemedText>
                   </ThemedView>
                   {/* Profile Mode End */}
@@ -226,7 +227,7 @@ export default function ProfileScreen() {
                     ]}>
                     <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
                     <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {user?.contacts}
+                      Contacts
                     </ThemedText>
                   </Pressable>
                   {/* Contacts End */}

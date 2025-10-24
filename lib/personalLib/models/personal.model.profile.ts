@@ -5,7 +5,6 @@ export interface PersonalProfileResponse {
     email: string; // string
     bio: string | null; // *string, max=150
     avatar_url: string | null; // *string
-    contacts: number; // int32, >=0, <=500
     profile_type: string; // string, oneof=public private personal
     createdAt: string; // string (JSON serialized time.Time)
     updatedAt: string; // string (JSON serialized time.Time)
