@@ -17,7 +17,7 @@ async function signup(payload: SignupPayload): Promise<AuthResponse> {
 }
 
 /**
- * Handles user login. This step should trigger an OTP to be sent. A confirmation message from the API. Does NOT establish a session.
+ * Handles user login. This step should trigger an OTP to be sent. A confirmation message from the API. Does NOT establish a session
  * @param payload email: string; password: string;
  * @returns status:boolean; message:string; 
  */
