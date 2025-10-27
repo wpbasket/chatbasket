@@ -22,6 +22,7 @@ import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import CreateSettingsFlows from './settings.flows';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 
 export default function Settings() {
   const MAX_RESENDS = 3;
@@ -35,7 +36,7 @@ export default function Settings() {
   }, []);
 
   const { handlePressIn } = pressableAnimation();
-  const email = useLegend$(authState.user.email);
+  const email = useLegend$($personalStateUser.user.email);
 
   const { editEmail, editPassword } = CreateSettingsFlows({
     settingApi,
@@ -45,7 +46,7 @@ export default function Settings() {
     styles,
     MAX_RESENDS,
     COOLDOWN_MS,
-    currentEmail$: authState.user.email,
+    currentEmail$: $personalStateUser.user.email,
   });
 
   const goBack = () => {

@@ -9,30 +9,27 @@ import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
-import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
+import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
 import { authState } from '@/state/auth/state.auth';
 import { $personalStateCreateProfile } from '@/state/personalState/profile/personal.state.profile.createProfile';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
-import { formatDateTime } from '@/utils/commonUtils/util.date';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
-import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 
 // Helper function to format username with colored numbers
-const formatUsername = (username: string | undefined): { letters: string; numbers: string; lastLetter: string } | null => {
-  if (!username || username.length !== 11) return null;
-  
-  // Format is guaranteed: 6 letters + 4 numbers + 1 letter
+const formatUsername = (username: string | undefined): { letters: string; numbers: string } | null => {
+  if (!username || username.length !== 10) return null;
+
+  // New format: 4 letters + 6 numbers
   return {
-    letters: username.slice(0, 6),
-    numbers: username.slice(6, 10),
-    lastLetter: username.slice(10)
+    letters: username.slice(0, 4),
+    numbers: username.slice(4, 10),
   };
 };
 
@@ -276,7 +273,6 @@ export default function ProfileScreen() {
                     <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameNumbers}>
                       {usernameParts?.numbers}
                     </ThemedText>
-                    {usernameParts?.lastLetter}
                   </ThemedText>
                 </ThemedView>
                 <ThemedText style={styles.bio}>Bio:   {user?.bio}</ThemedText>

@@ -2,7 +2,8 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { ApiError } from '@/lib/constantLib';
 import { setUserInStorage } from '@/lib/storage/commonStorage/storage.auth';
-import { authState } from '@/state/auth/state.auth';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
+// import { authState } from '@/state/auth/state.auth';
 import { setting$ } from '@/state/settings/state.setting';
 import { showGenericError } from '@/utils/commonUtils/util.error';
 import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
@@ -327,7 +328,7 @@ export default function CreateSettingsFlows({
                   );
                   if (r?.status) {
                     hideModal();
-                    authState.user.email.set(r?.message)
+                    $personalStateUser.user.email.set(r?.message)
                     setUserInStorage()
                     setting$.resendAttempts.set(0);
                     setting$.resendExpiryAt.set(null);
