@@ -25,11 +25,13 @@ export default function Contacts() {
                     Icon={<ThemedText type='subtitle'>Contacts</ThemedText>}
                 />
 
-                <ThemedView style={styles.container}> // Outer container
-                    
-                    
+                <ThemedView style={styles.container}> 
+                    <ThemedView style={{ flexDirection: 'row',justifyContent:'space-evenly' }}>
+                        <ThemedText>Contacts</ThemedText>
+                        <ThemedText>People who added you</ThemedText>
+                    </ThemedView>
 
-                </ThemedView> // End outer container
+                </ThemedView> 
 
 
 

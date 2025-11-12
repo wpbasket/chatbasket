@@ -269,13 +269,25 @@ export default function ProfileScreen() {
               <ThemedView style={styles.userInfoContainer}>
                 <ThemedView style={styles.usernameContainer}>
                   <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameStrings}>
-                    Username:   {usernameParts?.letters}
-                    <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameNumbers}>
+                    <ThemedText
+                      type='astaSansWithoutColorAndSize'
+                      style={styles.usernameStrings}
+                      selectable={false}
+                    >
+                      Username:{'   '}
+                    </ThemedText>
+                    <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameStrings} selectable>
+                      {usernameParts?.letters}
+                    </ThemedText>
+                    <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameNumbers} selectable>
                       {usernameParts?.numbers}
                     </ThemedText>
                   </ThemedText>
                 </ThemedView>
-                <ThemedText style={styles.bio}>Bio:   {user?.bio}</ThemedText>
+                <ThemedText style={styles.bio}>
+                  <ThemedText style={styles.bio} selectable={false}>Bio:{'   '}</ThemedText>
+                  <ThemedText style={styles.bio} selectable>{user?.bio}</ThemedText>
+                </ThemedText>
                 {/* <ThemedText style={styles.bio}>Created At:   {formatDateTime(user?.createdAt)}</ThemedText> */}
               </ThemedView>
               {/* User Info Section End */}
