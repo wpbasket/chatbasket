@@ -3,14 +3,13 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
-import { modalActions } from '@/state/modals/state.modals';
 import {
   $contactRequestsState,
   $contactsState,
   type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { showContactAlert } from '@/utils/commonUtils/util.contactMessages';
-import { runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { hideModal, runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { observable } from '@legendapp/state';
 import { useRef } from 'react';
 import type { GestureResponderEvent } from 'react-native';
@@ -27,9 +26,19 @@ const addContact$ = observable({
   isChecking: false,
   recipientId: null as string | null,
   profileType: null as string | null,
+  nickname: '',
   error: null as string | null,
   reset() {
-    addContact$.assign({ username: '', isChecking: false, recipientId: null, profileType: null, error: null });
+    addContact$.assign({ username: '', isChecking: false, recipientId: null, profileType: null, nickname: '', error: null });
+  },
+});
+
+const editNickname$ = observable({
+  value: '',
+  isSaving: false,
+  reset() {
+    editNickname$.value.set('');
+    editNickname$.isSaving.set(false);
   },
 });
 
@@ -203,6 +212,57 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
   );
 };
 
+type AddContactNicknameInputProps = {
+	styles: any;
+};
+
+const AddContactNicknameInput = ({ styles: contactStyles }: AddContactNicknameInputProps) => {
+	const profileType = useLegend$(addContact$.profileType);
+	const recipientId = useLegend$(addContact$.recipientId);
+	const nicknameValue = useLegend$(addContact$.nickname);
+	if (!recipientId || (profileType !== 'public' && profileType !== 'personal')) return null;
+	const maxLength = 40;
+	return (
+		<ThemedView style={{ gap: 4 }}>
+			<ThemedText type='default' selectable={false} style={contactStyles.profileHint}>
+				Optional nickname (max 40 characters)
+			</ThemedText>
+			<TextInput
+				value={nicknameValue}
+				onChangeText={(text) => {
+					const next = text.slice(0, maxLength);
+					addContact$.nickname.set(next);
+				}}
+				style={[contactStyles.addInput, { outline: 'none' }]}
+			/>
+		</ThemedView>
+	);
+};
+
+type EditNicknameInputProps = {
+  styles: any;
+};
+
+const EditNicknameInput = ({ styles: contactStyles }: EditNicknameInputProps) => {
+  const value = useLegend$(editNickname$.value);
+  const maxLength = 40;
+  return (
+    <ThemedView style={{ gap: 4 }}>
+      <ThemedText type='default' selectable={false} style={contactStyles.profileHint}>
+        Nickname (max 40 characters)
+      </ThemedText>
+      <TextInput
+        value={value}
+        onChangeText={(text) => {
+          const next = (text ?? '').slice(0, maxLength);
+          editNickname$.value.set(next);
+        }}
+        style={[contactStyles.addInput, { outline: 'none' }]}
+      />
+    </ThemedView>
+  );
+};
+
 type AddContactErrorLabelProps = {
   styles: any;
 };
@@ -274,6 +334,39 @@ const AddContactActionButtons = ({ styles: contactStyles, handlePressIn, onCreat
   );
 };
 
+type EditNicknameActionButtonsProps = {
+  styles: any;
+  handlePressIn: () => void;
+  onSaveNickname: () => Promise<void>;
+};
+
+const EditNicknameActionButtons = ({ styles: contactStyles, handlePressIn, onSaveNickname }: EditNicknameActionButtonsProps) => {
+  const saving = useLegend$(editNickname$.isSaving);
+  return (
+    <ThemedView style={contactStyles.actionRow}>
+      <Pressable
+        onPress={() => {
+          void onSaveNickname();
+        }}
+        onPressIn={handlePressIn}
+        disabled={saving}
+        style={({ pressed }) => [
+          contactStyles.actionButton,
+          pressed ? contactStyles.actionButtonPressed : null,
+          saving ? contactStyles.actionButtonDisabled : null,
+        ]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ThemedText style={contactStyles.actionButtonText} selectable={false}>
+            Save nickname
+          </ThemedText>
+          <IconSymbol name='arrow.right' color={contactStyles.actionButtonText?.color} size={18} />
+        </View>
+      </Pressable>
+    </ThemedView>
+  );
+};
+
 export default function CreateContactsFlows({ fetchContacts, styles: contactStyles, handlePressIn }: ContactsFlowsDeps) {
   const openAddContact = async (event?: GestureResponderEvent) => {
     const position = event
@@ -293,9 +386,13 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
       }
 
       try {
+        const rawNickname = addContact$.nickname.get();
+        const trimmed = (rawNickname ?? '').trim();
+        const nickname = trimmed.length > 0 ? trimmed.slice(0, 40) : null;
         const response = await runWithLoading(() =>
-          PersonalContactApi.createContact({ contact_user_id: recipientId })
+          PersonalContactApi.createContact({ contact_user_id: recipientId, nickname })
         );
+        hideModal();
         showContactAlert(response.message, 'Request sent.');
         if (response.message === 'public_contact_added' || response.message === 'already_in_contacts') {
           await fetchContacts();
@@ -303,7 +400,6 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
           $contactRequestsState.markFetched();
         }
         addContact$.reset();
-        modalActions.close();
       } catch (err: any) {
         addContact$.error.set(err?.response?.data?.message ?? 'Could not send request.');
       }
@@ -318,6 +414,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
             <ThemedView style={{ gap: 4 }}>
               <AddContactUsernameInput styles={contactStyles} handlePressIn={handlePressIn} />
               <AddContactProfileNote styles={contactStyles} />
+              <AddContactNicknameInput styles={contactStyles} />
               <AddContactErrorLabel styles={contactStyles} />
             </ThemedView>
           ),
@@ -338,11 +435,34 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         position,
         showConfirmButton: false,
         showCancelButton: true,
+        closeOnBackgroundTap: false,
         onCancel: () => {
           addContact$.reset();
         },
       }
     );
+  };
+
+  const handleRemoveNickname = async (contact: ContactEntry) => {
+    try {
+      const response = await runWithLoading(() =>
+        PersonalContactApi.removeNickname({ contact_user_id: contact.id })
+      );
+
+      showContactAlert(response.message, 'Contact updated.');
+
+      const nextContacts = $contactsState.contacts
+        .get()
+        .map((entry) => (entry.id === contact.id ? { ...entry, nickname: null } : entry));
+      $contactsState.setContacts(nextContacts);
+
+      const nextAddedYou = $contactsState.addedYou
+        .get()
+        .map((entry) => (entry.id === contact.id ? { ...entry, nickname: null } : entry));
+      $contactsState.setAddedYou(nextAddedYou);
+    } catch (error: any) {
+      showContactAlert(error?.response?.data?.message, 'Could not remove nickname.');
+    }
   };
 
   const handleRemoveContact = async (contact: ContactEntry) => {
@@ -376,7 +496,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
   const handleAddContactQuick = async (contact: ContactEntry) => {
     try {
       const response = await runWithLoading(() =>
-        PersonalContactApi.createContact({ contact_user_id: contact.id })
+        PersonalContactApi.createContact({ contact_user_id: contact.id, nickname: null })
       );
       showContactAlert(response.message, 'Contact updated.');
 
@@ -400,12 +520,90 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
     }
   };
 
+  const handleEditNickname = async (contact: ContactEntry, position?: { x: number; y: number }) => {
+    editNickname$.value.set(contact.nickname ?? '');
+
+    const saveNickname = async () => {
+      try {
+        editNickname$.isSaving.set(true);
+        const raw = editNickname$.value.get();
+        const trimmed = (raw ?? '').trim();
+        const nickname = trimmed.length > 0 ? trimmed.slice(0, 40) : null;
+
+        const response = await runWithLoading(() =>
+          PersonalContactApi.updateContactNickname({
+            contact_user_id: contact.id,
+            nickname,
+          })
+        );
+
+        hideModal();
+        showContactAlert(response.message, 'Contact updated.');
+
+        const nextContacts = $contactsState.contacts
+          .get()
+          .map((entry) => (entry.id === contact.id ? { ...entry, nickname } : entry));
+        $contactsState.setContacts(nextContacts);
+
+        const nextAddedYou = $contactsState.addedYou
+          .get()
+          .map((entry) => (entry.id === contact.id ? { ...entry, nickname } : entry));
+        $contactsState.setAddedYou(nextAddedYou);
+      } catch (error: any) {
+        showContactAlert(error?.response?.data?.message, 'Could not update nickname.');
+      } finally {
+        editNickname$.reset();
+      }
+    };
+
+    await showControllersModal(
+      [
+        {
+          id: 'nickname_input',
+          content: <EditNicknameInput styles={contactStyles} />,
+        },
+        {
+          id: 'actions',
+          content: (
+            <EditNicknameActionButtons
+              styles={contactStyles}
+              handlePressIn={handlePressIn}
+              onSaveNickname={saveNickname}
+            />
+          ),
+        },
+      ],
+      {
+        title: 'Update or set nickname',
+        position,
+        showConfirmButton: false,
+        showCancelButton: true,
+        closeOnBackgroundTap: false,
+        onCancel: () => editNickname$.reset(),
+      }
+    );
+  };
+
   const openActionsFromContacts = async (contact: ContactEntry, event?: GestureResponderEvent) => {
     const position = event
       ? { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY }
       : undefined;
 
     const controllers = [
+      ...(contact.nickname
+        ? [
+            {
+              id: 'remove_nickname' as const,
+              label: 'Remove nickname',
+              onPress: () => handleRemoveNickname(contact),
+            },
+          ]
+        : []),
+      {
+        id: 'edit_nickname',
+        label: 'Edit nickname',
+        onPress: () => handleEditNickname(contact, position),
+      },
       {
         id: 'remove',
         label: 'Remove contact',
@@ -414,9 +612,10 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
     ];
 
     await showControllersModal(controllers, {
+      title: 'Contact actions',
       position,
       showConfirmButton: false,
-      showCancelButton: false,
+      showCancelButton: true,
       closeOnControllerPress: true,
     });
   };

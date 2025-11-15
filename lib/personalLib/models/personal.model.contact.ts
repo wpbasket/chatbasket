@@ -12,6 +12,7 @@ export interface Contact {
     id: string;
     name: string;
     username: string;
+    nickname: string | null;
     bio: string | null;
     created_at: string;
     updated_at: string;
@@ -46,6 +47,7 @@ export interface PendingContactRequest {
     id: string;
     name: string;
     username: string;
+    nickname: string | null;
     bio: string | null;
     status: string; // "pending" | "accepted" | "declined"
     requested_at: string;
@@ -61,6 +63,7 @@ export interface SentContactRequest {
     id: string;
     name: string;
     username: string;
+    nickname: string | null;
     bio: string | null;
     status: string; // "pending" | "accepted" | "declined"
     requested_at: string;
@@ -87,6 +90,7 @@ export interface GetContactRequestsResponse {
  */
 export interface CreateContactPayload {
     contact_user_id: string;
+    nickname: string | null;
 }
 
 /**
@@ -127,4 +131,22 @@ export interface UndoContactRequestPayload {
  */
 export interface DeleteContactPayload {
     contact_user_id: string[]; // array of user ids to delete
+}
+
+
+/**
+ * UpdateContactNicknamePayload is the request payload for updating a contact's nickname
+ * Endpoint: POST /contacts/update-nickname
+ */
+export interface UpdateContactNicknamePayload {
+    contact_user_id: string;
+    nickname: string | null;
+}
+
+/**
+ * RemoveNicknamePayload is the request payload for removing a contact's nickname
+ * Endpoint: POST /contacts/remove-nickname
+ */
+export interface RemoveNicknamePayload {
+    contact_user_id: string;
 }

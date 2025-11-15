@@ -4,6 +4,7 @@ export type ContactEntry = {
   id: string;
   name: string;
   username: string;
+  nickname: string | null;
   bio: string | null;
   createdAt: string;
   updatedAt: string;
@@ -15,6 +16,7 @@ export type PendingRequestEntry = {
   id: string;
   name: string;
   username: string;
+  nickname: string | null;
   bio: string | null;
   requestedAt: string;
   updatedAt: string;
@@ -41,22 +43,46 @@ export const $contactsState = observable({
     $contactsState.error.set(value);
   },
   setContacts(entries: ContactEntry[]) {
-    $contactsState.contacts.set(entries);
+    const sorted = [...entries].sort((a, b) => {
+      const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
+      const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
+      if (aName < bName) return -1;
+      if (aName > bName) return 1;
+      const aUsername = (a.username ?? '').toLowerCase();
+      const bUsername = (b.username ?? '').toLowerCase();
+      if (aUsername < bUsername) return -1;
+      if (aUsername > bUsername) return 1;
+      return a.id.localeCompare(b.id);
+    });
+
+    $contactsState.contacts.set(sorted);
     const byId: Record<string, ContactEntry> = {};
-    for (const entry of entries) {
+    for (const entry of sorted) {
       byId[entry.id] = entry;
     }
     $contactsState.contactsById.set(byId);
-    $contactsState.contactsIds.set(entries.map((entry) => entry.id));
+    $contactsState.contactsIds.set(sorted.map((entry) => entry.id));
   },
   setAddedYou(entries: ContactEntry[]) {
-    $contactsState.addedYou.set(entries);
+    const sorted = [...entries].sort((a, b) => {
+      const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
+      const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
+      if (aName < bName) return -1;
+      if (aName > bName) return 1;
+      const aUsername = (a.username ?? '').toLowerCase();
+      const bUsername = (b.username ?? '').toLowerCase();
+      if (aUsername < bUsername) return -1;
+      if (aUsername > bUsername) return 1;
+      return a.id.localeCompare(b.id);
+    });
+
+    $contactsState.addedYou.set(sorted);
     const byId: Record<string, ContactEntry> = {};
-    for (const entry of entries) {
+    for (const entry of sorted) {
       byId[entry.id] = entry;
     }
     $contactsState.addedYouById.set(byId);
-    $contactsState.addedYouIds.set(entries.map((entry) => entry.id));
+    $contactsState.addedYouIds.set(sorted.map((entry) => entry.id));
   },
   markFetched() {
     $contactsState.lastFetchedAt.set(Date.now());
@@ -98,22 +124,46 @@ export const $contactRequestsState = observable({
     $contactRequestsState.error.set(value);
   },
   setPending(entries: PendingRequestEntry[]) {
-    $contactRequestsState.pending.set(entries);
+    const sorted = [...entries].sort((a, b) => {
+      const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
+      const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
+      if (aName < bName) return -1;
+      if (aName > bName) return 1;
+      const aUsername = (a.username ?? '').toLowerCase();
+      const bUsername = (b.username ?? '').toLowerCase();
+      if (aUsername < bUsername) return -1;
+      if (aUsername > bUsername) return 1;
+      return a.id.localeCompare(b.id);
+    });
+
+    $contactRequestsState.pending.set(sorted);
     const byId: Record<string, PendingRequestEntry> = {};
-    for (const entry of entries) {
+    for (const entry of sorted) {
       byId[entry.id] = entry;
     }
     $contactRequestsState.pendingById.set(byId);
-    $contactRequestsState.pendingIds.set(entries.map((entry) => entry.id));
+    $contactRequestsState.pendingIds.set(sorted.map((entry) => entry.id));
   },
   setSent(entries: SentRequestEntry[]) {
-    $contactRequestsState.sent.set(entries);
+    const sorted = [...entries].sort((a, b) => {
+      const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
+      const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
+      if (aName < bName) return -1;
+      if (aName > bName) return 1;
+      const aUsername = (a.username ?? '').toLowerCase();
+      const bUsername = (b.username ?? '').toLowerCase();
+      if (aUsername < bUsername) return -1;
+      if (aUsername > bUsername) return 1;
+      return a.id.localeCompare(b.id);
+    });
+
+    $contactRequestsState.sent.set(sorted);
     const byId: Record<string, SentRequestEntry> = {};
-    for (const entry of entries) {
+    for (const entry of sorted) {
       byId[entry.id] = entry;
     }
     $contactRequestsState.sentById.set(byId);
-    $contactRequestsState.sentIds.set(entries.map((entry) => entry.id));
+    $contactRequestsState.sentIds.set(sorted.map((entry) => entry.id));
   },
   setSelectedTab(tab: 'pending' | 'sent') {
     $contactRequestsState.selectedTab.set(tab);

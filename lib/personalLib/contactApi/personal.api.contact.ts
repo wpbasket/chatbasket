@@ -7,7 +7,9 @@ import { GetContactsResponse,
      UndoContactRequestPayload,
      DeleteContactPayload,
      CreateContactPayload,
-     GetContactRequestsResponse } from "@/lib/personalLib";
+     GetContactRequestsResponse, 
+     UpdateContactNicknamePayload,
+     RemoveNicknamePayload} from "@/lib/personalLib";
 
 
 /**
@@ -88,6 +90,24 @@ async function undoContactRequest(payload: UndoContactRequestPayload): Promise<B
 }
 
 
+/**
+ * Handles updating a contact's nickname.
+ * @param payload contact_user_id: string; nickname: string | null;
+ * @returns status: boolean; message: string;
+ */
+async function updateContactNickname(payload: UpdateContactNicknamePayload): Promise<BooleanResponse> {
+    return apiClient.post<BooleanResponse>('/personal/contacts/update-nickname', payload);
+}
+
+
+/**
+ * Handles removing a contact's nickname.
+ * @param payload contact_user_id: string;
+ * @returns status: boolean; message: string;
+ */
+async function removeNickname(payload: RemoveNicknamePayload): Promise<BooleanResponse> {
+    return apiClient.post<BooleanResponse>('/personal/contacts/remove-nickname', payload);
+}
 
 
 export const PersonalContactApi = {
@@ -98,5 +118,7 @@ export const PersonalContactApi = {
     rejectContactRequest,
     undoContactRequest,
     deleteContact,
-    getContactRequests
+    getContactRequests,
+    updateContactNickname,
+    removeNickname
 }

@@ -15,8 +15,8 @@ import type { Contact } from '@/lib/personalLib/models/personal.model.contact';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
-  $contactsState,
-  type ContactEntry,
+    $contactsState,
+    type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
 import { LegendList } from '@legendapp/list';
@@ -61,16 +61,18 @@ function ContactRow({ id, kind, onOpenActions }: ContactRowProps) {
     return null;
   }
 
+  const displayName = item.nickname ?? item.name;
+
   return (
     <Pressable
       style={({ pressed }) => [styles.row, { opacity: pressed ? 0.1 : 1 }]}
       onPressIn={handlePressIn}
       onPress={(event) => onOpenActions(item, event)}
     >
-      <PrivacyAvatar uri={item.avatarUrl} name={item.name} size={48} />
+      <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
       <ThemedView style={styles.rowContent}>
         <ThemedText type='semibold' style={styles.rowName} selectable>
-          {item.name}
+          {displayName}
         </ThemedText>
         <ThemedText type='small' style={styles.rowUsername} selectable>
           <UsernameDisplay
@@ -116,6 +118,7 @@ export default function Contacts() {
         id: contact.id,
         name: contact.name,
         username: contact.username,
+        nickname: contact.nickname,
         bio: contact.bio,
         createdAt: contact.created_at,
         updatedAt: contact.updated_at,

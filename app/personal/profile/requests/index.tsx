@@ -46,16 +46,18 @@ function PendingRequestRow({ id, onOpenActions }: PendingRowProps) {
   if (!item) {
     return null;
   }
+
+  const displayName = item.nickname ?? item.name;
   return (
     <Pressable
       style={({ pressed }) => [styles.row, { opacity: pressed ? 0.1 : 1 }]}
       onPressIn={handlePressIn}
       onPress={(event) => onOpenActions(item, event)}
     >
-      <PrivacyAvatar uri={item.avatarUrl} name={item.name} size={48} />
+      <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
       <ThemedView style={styles.rowContent}>
         <ThemedText type='semibold' style={styles.rowName} selectable>
-          {item.name}
+          {displayName}
         </ThemedText>
         <ThemedText type='small' style={styles.rowUsername} selectable>
           <UsernameDisplay
@@ -83,6 +85,8 @@ function SentRequestRow({ id, onOpenActions }: SentRowProps) {
 
   const status = item.status?.toLowerCase();
   const disabled = status === 'declined';
+
+  const displayName = item.nickname ?? item.name;
   return (
     <Pressable
       disabled={disabled}
@@ -94,10 +98,10 @@ function SentRequestRow({ id, onOpenActions }: SentRowProps) {
       onPressIn={handlePressIn}
       onPress={(event) => onOpenActions(item, event)}
     >
-      <PrivacyAvatar uri={item.avatarUrl} name={item.name} size={48} />
+      <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
       <ThemedView style={styles.rowContent}>
         <ThemedText type='semibold' style={styles.rowName} selectable>
-          {item.name}
+          {displayName}
         </ThemedText>
         <ThemedText type='small' style={styles.rowUsername} selectable>
           <UsernameDisplay
@@ -151,6 +155,7 @@ export default function ContactRequests() {
         id: entry.id,
         name: entry.name,
         username: entry.username,
+        nickname: entry.nickname,
         bio: entry.bio,
         requestedAt: entry.requested_at,
         updatedAt: entry.updated_at,
@@ -162,6 +167,7 @@ export default function ContactRequests() {
         id: entry.id,
         name: entry.name,
         username: entry.username,
+        nickname: entry.nickname,
         bio: entry.bio,
         requestedAt: entry.requested_at,
         updatedAt: entry.updated_at,
