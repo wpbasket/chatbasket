@@ -3,6 +3,7 @@ import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
+import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
@@ -21,17 +22,6 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
-
-// Helper function to format username with colored numbers
-const formatUsername = (username: string | undefined): { letters: string; numbers: string } | null => {
-  if (!username || username.length !== 10) return null;
-
-  // New format: 4 letters + 6 numbers
-  return {
-    letters: username.slice(0, 4),
-    numbers: username.slice(4, 10),
-  };
-};
 
 // Empty State Component
 function ProfileEmptyState() {
@@ -81,9 +71,6 @@ export default function ProfileScreen() {
   const userNotFound = useLegend$($personalStateCreateProfile.userNotFound);
   const { handlePressIn } = pressableAnimation();
 
-  // Format username parts
-  const usernameParts = formatUsername(user?.username);
-
   // Refresh user in background every time profile screen gains focus
   useFocusEffect(
     useCallback(() => {
@@ -110,6 +97,16 @@ export default function ProfileScreen() {
   const settings = () => {
     authState.isInTheProfileUpdateMode.set(true)
     return router.push('/personal/profile/settings');
+  };
+
+  const openContacts = () => {
+    authState.isInTheProfileUpdateMode.set(true);
+    return router.push('/personal/profile/contacts');
+  };
+
+  const openRequests = () => {
+    authState.isInTheProfileUpdateMode.set(true);
+    return router.push('/personal/profile/requests');
   };
 
   const logoutButton = (event: any) => {
@@ -216,7 +213,7 @@ export default function ProfileScreen() {
 
                   {/* Contacts */}
                   <Pressable
-                    onPress={() => router.push('/personal/profile/contacts')}
+                    onPress={openContacts}
                     onPressIn={handlePressIn}
                     style={({ pressed }) => [
                       { opacity: pressed ? 0.1 : 1 },
@@ -228,6 +225,21 @@ export default function ProfileScreen() {
                     </ThemedText>
                   </Pressable>
                   {/* Contacts End */}
+
+                  {/* Requests */}
+                  <Pressable
+                    onPress={openRequests}
+                    onPressIn={handlePressIn}
+                    style={({ pressed }) => [
+                      { opacity: pressed ? 0.1 : 1 },
+                      styles.bucketContainer
+                    ]}>
+                    <FontAwesome5Icon name="list" size={20} color={bucketColor} />
+                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                      Requests
+                    </ThemedText>
+                  </Pressable>
+                  {/* Requests End */}
 
                   {/* Settings  */}
                   <Pressable
@@ -268,20 +280,17 @@ export default function ProfileScreen() {
               {/* User Info Section */}
               <ThemedView style={styles.userInfoContainer}>
                 <ThemedView style={styles.usernameContainer}>
-                  <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameStrings}>
-                    <ThemedText
-                      type='astaSansWithoutColorAndSize'
-                      style={styles.usernameStrings}
-                      selectable={false}
-                    >
-                      Username:{'   '}
-                    </ThemedText>
-                    <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameStrings} selectable>
-                      {usernameParts?.letters}
-                    </ThemedText>
-                    <ThemedText type='astaSansWithoutColorAndSize' style={styles.usernameNumbers} selectable>
-                      {usernameParts?.numbers}
-                    </ThemedText>
+                  <ThemedText
+                    type='astaSansWithoutColorAndSize'
+                    style={styles.usernameStrings}
+                    selectable={false}
+                  >
+                    Username:{'   '}
+                    <UsernameDisplay
+                      username={user?.username}
+                      lettersStyle={styles.usernameStrings}
+                      numbersStyle={styles.usernameNumbers}
+                    />
                   </ThemedText>
                 </ThemedView>
                 <ThemedText style={styles.bio}>

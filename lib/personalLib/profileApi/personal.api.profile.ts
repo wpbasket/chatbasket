@@ -1,6 +1,5 @@
 import { PersonalCreateProfilePayload, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateUserProfilePayload } from "@/lib/personalLib";
-import { apiClient, fileUploadClient } from "@/lib/constantLib";
-import { BooleanResponse } from "@/lib/constantLib";
+import { apiClient, fileUploadClient, BooleanResponse } from "@/lib/constantLib";
 
 
 

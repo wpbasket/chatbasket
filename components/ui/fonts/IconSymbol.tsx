@@ -11,6 +11,7 @@ const MAPPING = {
   'chevron.left.forwardslash.chevron.right': 'code-slash',
   'chevron.right': 'chevron-forward',
   'arrow.left': 'arrow-back',
+  'arrow.right':'arrow-forward',
   'person.fill': 'person',
   'person.line': 'person-outline',
   'account.add': 'person-add',
