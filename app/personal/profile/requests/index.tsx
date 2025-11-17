@@ -10,8 +10,6 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
-import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
-import type { PendingContactRequest, SentContactRequest } from '@/lib/personalLib/models/personal.model.contact';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
@@ -22,9 +20,10 @@ import {
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { formatRelativeTimeShort } from '@/utils/commonUtils/util.date';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
+import { PersonalUtilFetchContactRequests } from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import { GestureResponderEvent, Platform, Pressable, RefreshControl } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import CreateRequestsFlows from './requests.flows';
@@ -138,6 +137,7 @@ export default function ContactRequests() {
   const loading = useLegend$($contactRequestsState.loading);
   const error = useLegend$($contactRequestsState.error);
   const selectedTab = useLegend$($contactRequestsState.selectedTab);
+  const lastFetchedAt = useLegend$($contactRequestsState.lastFetchedAt);
 
   useEffect(() => {
     return () => {
@@ -146,48 +146,7 @@ export default function ContactRequests() {
   }, []);
 
   const fetchRequests = useCallback(async () => {
-    try {
-      $contactRequestsState.setLoading(true);
-      $contactRequestsState.setError(null);
-      const response = await PersonalContactApi.getContactRequests();
-
-      const toPendingEntry = (entry: PendingContactRequest): PendingRequestEntry => ({
-        id: entry.id,
-        name: entry.name,
-        username: entry.username,
-        nickname: entry.nickname,
-        bio: entry.bio,
-        requestedAt: entry.requested_at,
-        updatedAt: entry.updated_at,
-        avatarUrl: entry.avatar_url ?? null,
-        status: entry.status,
-      });
-
-      const toSentEntry = (entry: SentContactRequest): SentRequestEntry => ({
-        id: entry.id,
-        name: entry.name,
-        username: entry.username,
-        nickname: entry.nickname,
-        bio: entry.bio,
-        requestedAt: entry.requested_at,
-        updatedAt: entry.updated_at,
-        avatarUrl: entry.avatar_url ?? null,
-        status: entry.status,
-      });
-
-      $contactRequestsState.setPending(response.pending_requests.map(toPendingEntry));
-
-      const existingContactIds = new Set($contactsState.contacts.get().map((c) => c.id));
-      const sentFiltered = response.sent_requests
-        .map(toSentEntry)
-        .filter((s) => !existingContactIds.has(s.id));
-      $contactRequestsState.setSent(sentFiltered);
-      $contactRequestsState.markFetched();
-    } catch (err: any) {
-      $contactRequestsState.setError(err?.message ?? 'Failed to load requests.');
-    } finally {
-      $contactRequestsState.setLoading(false);
-    }
+    await PersonalUtilFetchContactRequests();
   }, []);
 
   useFocusEffect(
@@ -202,14 +161,6 @@ export default function ContactRequests() {
     contactRequestsState: $contactRequestsState,
     contactsState: $contactsState,
   });
-
-  const tabCounts = useMemo(
-    () => ({
-      pending: pendingIds.length,
-      sent: sentIds.length,
-    }),
-    [pendingIds.length, sentIds.length]
-  );
 
   const listData = selectedTab === 'pending' ? pendingIds : sentIds;
 
@@ -237,43 +188,9 @@ export default function ContactRequests() {
     [openPendingActions, openSentActions, selectedTab]
   );
 
-  const ListHeader = useCallback(
-    () => (
-      <>
-        {error ? (
-          <ThemedText type='small' style={styles.errorText} selectable={false}>
-            {error}
-          </ThemedText>
-        ) : null}
-
-        <ThemedView style={styles.segmentContainer}>
-          {(['pending', 'sent'] as const).map((tab) => {
-            const isActive = selectedTab === tab;
-            return (
-              <Pressable
-                key={tab}
-                style={({ pressed }) => [
-                  { opacity: pressed ? 0.1 : 1 },
-                  styles.segmentItem,
-                  isActive ? styles.segmentItemActive : undefined,
-                ]}
-                onPress={() => $contactRequestsState.setSelectedTab(tab)}
-              >
-                <ThemedText type='smallBold' selectable={false}>
-                  {tab === 'pending' ? 'Pending' : 'Sent'} ({tabCounts[tab]})
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </ThemedView>
-      </>
-    ),
-    [error, selectedTab, tabCounts]
-  );
-
   const ListEmptyComponent = useCallback(
     () =>
-      !loading ? (
+      !loading && !error && lastFetchedAt != null ? (
         <ThemedView style={styles.listRow}>
           {selectedTab === 'pending' ? (
             <EmptyState description='When someone adds you, the request will appear here.' />
@@ -282,7 +199,7 @@ export default function ContactRequests() {
           )}
         </ThemedView>
       ) : null,
-    [loading, selectedTab]
+    [error, lastFetchedAt, loading, selectedTab]
   );
 
   return (
@@ -302,11 +219,68 @@ export default function ContactRequests() {
           />
 
           <ThemedView style={styles.container}>
+            <ThemedView style={styles.headerSummary}>
+              {lastFetchedAt != null && !error ? (
+                pendingIds.length === 0 && sentIds.length === 0 ? (
+                  <ThemedText
+                    type='small'
+                    style={styles.headerSummaryText}
+                    selectable={false}
+                  >
+                    {"You don't have any contact requests yet."}
+                  </ThemedText>
+                ) : (
+                  <>
+                    <ThemedText
+                      type='small'
+                      style={styles.headerSummaryText}
+                      selectable={false}
+                    >
+                      {`Pending: ${pendingIds.length}`}
+                    </ThemedText>
+                    <ThemedText
+                      type='small'
+                      style={styles.headerSummaryText}
+                      selectable={false}
+                    >
+                      {`Sent: ${sentIds.length}`}
+                    </ThemedText>
+                  </>
+                )
+              ) : null}
+            </ThemedView>
+
+            <ThemedView style={styles.segmentContainer}>
+              {(['pending', 'sent'] as const).map((tab) => {
+                const isActive = selectedTab === tab;
+                return (
+                  <Pressable
+                    key={tab}
+                    style={({ pressed }) => [
+                      { opacity: pressed ? 0.1 : 1 },
+                      styles.segmentItem,
+                      isActive ? styles.segmentItemActive : undefined,
+                    ]}
+                    onPress={() => $contactRequestsState.setSelectedTab(tab)}
+                  >
+                    <ThemedText type='smallBold' selectable={false}>
+                      {tab === 'pending' ? 'Pending' : 'Sent'}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ThemedView>
+
+            {error ? (
+              <ThemedText type='small' style={styles.errorText} selectable={false}>
+                {error}
+              </ThemedText>
+            ) : null}
+
             <LegendList
               data={listData}
               keyExtractor={keyExtractor}
               renderItem={renderItem}
-              ListHeaderComponent={ListHeader}
               ListEmptyComponent={ListEmptyComponent}
               contentContainerStyle={styles.listContent}
               recycleItems={true}
@@ -331,29 +305,39 @@ const styles = StyleSheet.create((theme, rt) => ({
   container: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingBottom: 32,
   },
   listContent: {
-    paddingVertical: 24,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   errorText: {
     color: theme.colors.orange,
     marginBottom: 12,
   },
+  headerSummary: {
+    marginBottom: 16,
+    minHeight: 18,
+  },
+  headerSummaryText: {
+    color: theme.colors.whiteOrBlack,
+    fontSize: 14,
+  },
   segmentContainer: {
     flexDirection: 'row',
     backgroundColor: theme.colors.BackgroundSelect,
-    borderRadius: 12,
+    borderRadius: 999,
     padding: 4,
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   segmentItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 999,
   },
   segmentItemActive: {
     backgroundColor: theme.colors.neutral0,

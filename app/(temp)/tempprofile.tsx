@@ -10,6 +10,7 @@ import { StyleSheet } from 'react-native-unistyles';
 import NotFoundScreen from '../+not-found';
 
 type TABS = 'Posts' | 'Followers' | 'Following'
+
 export default function Profile() {
     const user = useLegend$(currentUserStore.user);
 
@@ -36,7 +37,7 @@ export default function Profile() {
             </ThemedViewWithSidebar.Sidebar>
             <ThemedViewWithSidebar.Main>
                 <ThemedView style={styles.container}>
-                    
+
                     <ProfileList
                         user={user}
                         activeTab={activeTab}
@@ -53,7 +54,7 @@ export default function Profile() {
 const styles = StyleSheet.create((theme, rt) => ({
     container: {
         flex: 1,
-        paddingTop:rt.insets.top
-        
+        paddingTop: rt.insets.top
+
     },
 }));

@@ -15,12 +15,15 @@ import type { Contact } from '@/lib/personalLib/models/personal.model.contact';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
-    $contactsState,
-    type ContactEntry,
+  $contactRequestsState,
+  $contactsState,
+  type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
+import { PersonalUtilFetchContactRequests } from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, RefreshControl } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
@@ -37,17 +40,17 @@ type ContactsListItem =
   | { kind: 'emptyContacts'; id: string }
   | { kind: 'emptyAddedYou'; id: string }
   | {
-      kind: 'contact';
-      id: string;
-      contactId: string;
-      isLastInSection: boolean;
-    }
+    kind: 'contact';
+    id: string;
+    contactId: string;
+    isLastInSection: boolean;
+  }
   | {
-      kind: 'addedYou';
-      id: string;
-      contactId: string;
-      isLastInSection: boolean;
-    };
+    kind: 'addedYou';
+    id: string;
+    contactId: string;
+    isLastInSection: boolean;
+  };
 
 function ContactRow({ id, kind, onOpenActions }: ContactRowProps) {
   const { handlePressIn } = pressableAnimation();
@@ -98,6 +101,8 @@ export default function Contacts() {
   const addedYouIds = useLegend$($contactsState.addedYouIds);
   const loading = useLegend$($contactsState.loading);
   const error = useLegend$($contactsState.error);
+  const lastFetchedAt = useLegend$($contactsState.lastFetchedAt);
+  const pendingIds = useLegend$($contactRequestsState.pendingIds);
 
   const [selectedTab, setSelectedTab] = useState<'contacts' | 'addedYou'>('contacts');
 
@@ -136,19 +141,29 @@ export default function Contacts() {
     }
   }, []);
 
+  const fetchRequests = useCallback(async () => {
+    await PersonalUtilFetchContactRequests();
+  }, []);
+
   const { openAddContact, openActionsFromContacts, openActionsFromAddedYou } = CreateContactsFlows({
     fetchContacts,
     styles,
     handlePressIn: handlePressInModal,
   });
 
+  const openRequestsFromContacts = () => {
+    authState.isInTheProfileUpdateMode.set(true);
+    return router.push('/personal/profile/requests');
+  };
+
   useFocusEffect(
     useCallback(() => {
       void fetchContacts();
+      void fetchRequests();
       return () => {
         modalActions.close();
       };
-    }, [fetchContacts])
+    }, [fetchContacts, fetchRequests])
   );
 
   const listData = useMemo<ContactsListItem[]>(() => {
@@ -158,7 +173,7 @@ export default function Contacts() {
     }
 
     if (selectedTab === 'contacts') {
-      if (!loading && contactsIds.length === 0) {
+      if (!loading && !error && contactsIds.length === 0 && lastFetchedAt != null) {
         items.push({ kind: 'emptyContacts', id: 'empty-contacts' });
       } else {
         contactsIds.forEach((contactId, index) => {
@@ -171,7 +186,7 @@ export default function Contacts() {
         });
       }
     } else {
-      if (!loading && addedYouIds.length === 0) {
+      if (!loading && !error && addedYouIds.length === 0 && lastFetchedAt != null) {
         items.push({ kind: 'emptyAddedYou', id: 'empty-addedYou' });
       } else {
         addedYouIds.forEach((contactId, index) => {
@@ -185,7 +200,7 @@ export default function Contacts() {
       }
     }
     return items;
-  }, [addedYouIds, contactsIds, error, loading, selectedTab]);
+  }, [addedYouIds, contactsIds, error, lastFetchedAt, loading, selectedTab]);
 
   const keyExtractor = useCallback((item: ContactsListItem) => item.id, []);
 
@@ -243,17 +258,80 @@ export default function Contacts() {
         <Sidebar />
       </ThemedViewWithSidebar.Sidebar>
       <ThemedViewWithSidebar.Main>
-        <Header
-          leftButton={{
-            child: <IconSymbol name='arrow.left' />,
-            onPress: utilGoBack,
-          }}
-          centerIcon
-          Icon={<ThemedText type='subtitle'>Contacts</ThemedText>}
-        />
 
         <ThemedView style={styles.mainContainer}>
+          <Header
+            leftButton={{
+              child: <IconSymbol name='arrow.left' />,
+              onPress: utilGoBack,
+            }}
+            centerIcon
+            Icon={<ThemedText type='subtitle'>Contacts</ThemedText>}
+          />
           <ThemedView style={styles.container}>
+            <ThemedView style={styles.headerSection}>
+              <ThemedView style={styles.headerText}>
+                <Pressable
+                  onPress={openRequestsFromContacts}
+                  style={({ pressed }) => [
+                    styles.pendingPill,
+                    { opacity: pressed ? 0.6 : 1 },
+                  ]}
+                >
+                  <ThemedText
+                    type='small'
+                    style={styles.pendingPillText}
+                    selectable={false}
+                  >
+                    {'Pending requests: '}
+                    <ThemedText
+                      type='small'
+                      style={
+                        pendingIds.length === 0
+                          ? styles.pendingPillTextPrimary
+                          : styles.pendingPillTextWarning
+                      }
+                      selectable={false}
+                    >
+                      {pendingIds.length}{'  '}
+                    </ThemedText>
+                  </ThemedText>
+                </Pressable>
+
+                <ThemedText type='small' style={styles.headerSubtitle} selectable={false}>
+                  {lastFetchedAt != null && !error
+                    ? selectedTab === 'contacts'
+                      ? contactsIds.length === 0
+                        ? "You haven't added anyone yet."
+                        : `${contactsIds.length} saved contact${contactsIds.length === 1 ? '' : 's'}.`
+                      : addedYouIds.length === 0
+                        ? 'No one has added you yet.'
+                        : `${addedYouIds.length} person${addedYouIds.length === 1 ? '' : 's'} added you.`
+                    : ''}
+                </ThemedText>
+              </ThemedView>
+              <ThemedView style={styles.addButtonRow}>
+                {selectedTab === 'contacts' ? (
+                  <Pressable
+                    onPress={openAddContact}
+                    style={({ pressed }) => [
+                      styles.addButton,
+                      { opacity: pressed ? 0.6 : 1 },
+                    ]}
+                  >
+                    <IconSymbol name='account.add' size={20} />
+                    <ThemedText
+                      type='small'
+                      style={styles.addButtonLabel}
+                      selectable={false}
+                    >
+                      Add contact
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </ThemedView>
+            </ThemedView>
+
             <ThemedView style={styles.segmentContainer}>
               {(['contacts', 'addedYou'] as const).map((tab) => {
                 const isActive = selectedTab === tab;
@@ -261,37 +339,26 @@ export default function Contacts() {
                   <Pressable
                     key={tab}
                     style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
+                      { opacity: pressed ? 0.6 : 1 },
                       styles.segmentItem,
                       isActive ? styles.segmentItemActive : undefined,
                     ]}
                     onPress={() => setSelectedTab(tab)}
                   >
-                    <ThemedText type='smallBold' selectable={false}>
-                      {tab === 'contacts'
-                        ? `Your contacts (${contactsIds.length})`
-                        : `People who added you (${addedYouIds.length})`}
+                    <ThemedText
+                      type='smallBold'
+                      style={[
+                        styles.segmentLabel,
+                        isActive ? styles.segmentLabelActive : undefined,
+                      ]}
+                      selectable={false}
+                    >
+                      {tab === 'contacts' ? 'Contacts' : 'People who added you'}
                     </ThemedText>
                   </Pressable>
                 );
               })}
             </ThemedView>
-            {selectedTab === 'contacts' ? (
-              <ThemedView style={styles.addButtonRow}>
-                <Pressable
-                  onPress={openAddContact}
-                  style={({ pressed }) => [
-                    styles.addButton,
-                    { opacity: pressed ? 0.1 : 1 },
-                  ]}
-                >
-                  <IconSymbol name='account.add' size={24} />
-                  <ThemedText type='small' style={styles.addButtonLabel} selectable={false}>
-                    Add contact
-                  </ThemedText>
-                </Pressable>
-              </ThemedView>
-            ) : null}
             <LegendList
               data={listData}
               keyExtractor={keyExtractor}
@@ -319,36 +386,100 @@ const styles = StyleSheet.create((theme, rt) => ({
   container: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingBottom: 32,
   },
   listContent: {
-    paddingVertical: 24,
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  headerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  headerText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  headerTitle: {
+    color: theme.colors.title,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    paddingLeft:1,
+    opacity: 0.8,
+  },
+  pendingPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.neutral2,
+    borderTopRightRadius: 30,
+    borderTopLeftRadius: 20,
+    borderBottomRightRadius: 10,
+    borderBottomLeftRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    marginBottom: 4,
+  },
+  pendingPillText: {
+    color: theme.colors.whiteOrBlack,
+  },
+  pendingPillTextPrimary: {
+    color: theme.colors.primary,
+  },
+  pendingPillTextWarning: {
+    color: theme.colors.yellow,
   },
   addButtonRow: {
-    alignItems: 'flex-start',
-    marginTop:10,
-    marginBottom: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minHeight: 36,
   },
   segmentContainer: {
     flexDirection: 'row',
     backgroundColor: theme.colors.BackgroundSelect,
-    borderRadius: 12,
+    borderRadius: 999,
     padding: 4,
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   segmentItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 999,
   },
   segmentItemActive: {
     backgroundColor: theme.colors.neutral0,
   },
   segmentItemPressed: {
     opacity: 0.7,
+  },
+  segmentLabel: {
+    color: theme.colors.text,
+    opacity: 0.8,
+  },
+  segmentLabelActive: {
+    color: theme.colors.title,
+    opacity: 1,
+  },
+  segmentCount: {
+    color: theme.colors.text,
+    opacity: 0.7,
+  },
+  segmentCountActive: {
+    color: theme.colors.primary,
+    opacity: 1,
   },
   listRow: {
     gap: 12,
@@ -364,15 +495,15 @@ const styles = StyleSheet.create((theme, rt) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    borderWidth:1,
+    borderWidth: 1,
     borderColor: theme.colors.neutral2,
-    borderTopRightRadius:30,
-    borderTopLeftRadius:20,
-    borderBottomRightRadius:10,
-    borderBottomLeftRadius:20,
-    padding: 8, 
-    paddingLeft:12,
-    paddingVertical:6,
+    borderTopRightRadius: 30,
+    borderTopLeftRadius: 20,
+    borderBottomRightRadius: 10,
+    borderBottomLeftRadius: 20,
+    padding: 8,
+    paddingLeft: 10,
+    paddingVertical: 2,
     paddingRight: 25,
   },
   addButtonPressed: {
@@ -440,10 +571,10 @@ const styles = StyleSheet.create((theme, rt) => ({
   usernameLettersInput: {
     width: 60, // ~4 chars
     paddingHorizontal: 0,
-    marginRight: 3, 
+    marginRight: 3,
     letterSpacing: 1,
     height: 32,
-    textAlign:'right',
+    textAlign: 'right',
     color: theme.colors.text,
   },
   // Numbers part: 6 digits
