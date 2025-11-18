@@ -36,6 +36,7 @@ export interface GetContactsResponse {
 export interface CheckContactExistanceResponse {
     exists: boolean;
     profile_type: string;
+    name: string;
     recipient_user_id?: string | null;
 }
 

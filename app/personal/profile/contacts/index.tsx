@@ -409,7 +409,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   headerSubtitle: {
     color: theme.colors.text,
     fontSize: 14,
-    paddingLeft:1,
+    paddingLeft: 1,
     opacity: 0.8,
   },
   pendingPill: {
@@ -562,18 +562,20 @@ const styles = StyleSheet.create((theme, rt) => ({
     width: 'auto',
     borderWidth: 1,
     borderColor: theme.colors.neutral,
-    borderRadius: 12,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 6,
     gap: 0,
   },
   // Letters part: 4 characters
   usernameLettersInput: {
-    width: 60, // ~4 chars
+    width: 70, // ~4 chars
     paddingHorizontal: 0,
     marginRight: 3,
     letterSpacing: 1,
-    height: 32,
+    height: 40,
     textAlign: 'right',
     color: theme.colors.text,
   },
@@ -582,16 +584,20 @@ const styles = StyleSheet.create((theme, rt) => ({
     width: 300,
     paddingHorizontal: 0,
     letterSpacing: 1,
-    height: 32,
-    color: theme.colors.text,
+    height: 40,
+    color: theme.colors.primary,
   },
   // Legacy single input (kept for safety but not used by the new flow)
   addInput: {
     borderWidth: 1,
     borderColor: theme.colors.neutral,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    // paddingVertical: 10,
+    height:40,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderBottomRightRadius: 8,
     color: theme.colors.text,
   },
   inputError: {

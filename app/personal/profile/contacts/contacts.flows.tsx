@@ -26,10 +26,19 @@ const addContact$ = observable({
   isChecking: false,
   recipientId: null as string | null,
   profileType: null as string | null,
+  name: null as string | null,
   nickname: '',
   error: null as string | null,
   reset() {
-    addContact$.assign({ username: '', isChecking: false, recipientId: null, profileType: null, nickname: '', error: null });
+    addContact$.assign({
+      username: '',
+      isChecking: false,
+      recipientId: null,
+      profileType: null,
+      name: null,
+      nickname: '',
+      error: null,
+    });
   },
 });
 
@@ -68,6 +77,7 @@ const checkUsername = async () => {
       const existsRaw = r?.exists ?? r?.Exists;
       const pTypeRaw = r?.profile_type ?? r?.profileType ?? r?.ProfileType;
       const recipRaw = r?.recipient_user_id ?? r?.recipientUserId ?? r?.RecipientUserId;
+      const nameRaw = r?.name ?? r?.Name;
       const existsParsed = typeof existsRaw === 'boolean'
         ? existsRaw
         : typeof existsRaw === 'string'
@@ -75,11 +85,13 @@ const checkUsername = async () => {
         : !!existsRaw;
       const pType = (pTypeRaw ?? null) as string | null;
       const recip = recipRaw ? String(recipRaw) : null;
-      return { existsParsed, pType, recip };
+      const name = typeof nameRaw === 'string' ? nameRaw : null;
+      return { existsParsed, pType, recip, name };
     };
 
-    let { existsParsed, pType, recip } = parse(anyResp);
+    let { existsParsed, pType, recip, name } = parse(anyResp);
     addContact$.profileType.set(pType);
+    addContact$.name.set(name);
 
     if (!existsParsed || pType === null) {
       // Try fallback with lowercase if first (uppercase) attempt failed
@@ -90,7 +102,9 @@ const checkUsername = async () => {
       existsParsed = parsed2.existsParsed;
       pType = parsed2.pType;
       recip = parsed2.recip;
+      name = parsed2.name;
       addContact$.profileType.set(pType);
+      addContact$.name.set(name);
     }
 
     const found = !!existsParsed || !!pType || !!recip;
@@ -98,6 +112,7 @@ const checkUsername = async () => {
     if (!found) {
       addContact$.error.set('User not found.');
       addContact$.recipientId.set(null);
+      addContact$.name.set(null);
       return;
     }
 
@@ -112,6 +127,7 @@ const checkUsername = async () => {
     addContact$.error.set(err?.response?.data?.message ?? err?.message ?? 'Could not verify username.');
     addContact$.recipientId.set(null);
     addContact$.profileType.set(null);
+    addContact$.name.set(null);
   } finally {
     addContact$.isChecking.set(false);
   }
@@ -135,6 +151,7 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
     addContact$.username.set(combined);
     addContact$.recipientId.set(null);
     addContact$.profileType.set(null);
+    addContact$.name.set(null);
     if (addContact$.error.get()) {
       addContact$.error.set(null);
     }
@@ -176,6 +193,7 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
         autoCapitalize='characters'
         autoCorrect={false}
         keyboardType='default'
+        maxLength={10}
         style={[contactStyles.usernameLettersInput, { outline: 'none' }]}
         onFocus={handlePressIn}
       />
@@ -184,6 +202,7 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
         value={numbersValue}
         onChangeText={handleNumbersChange}
         keyboardType='numeric'
+        maxLength={6}
         inputMode='numeric'
         style={[contactStyles.usernameNumbersInput, { outline: 'none' }]}
         onKeyPress={(e: any) => {
@@ -223,8 +242,8 @@ const AddContactNicknameInput = ({ styles: contactStyles }: AddContactNicknameIn
 	if (!recipientId || (profileType !== 'public' && profileType !== 'personal')) return null;
 	const maxLength = 40;
 	return (
-		<ThemedView style={{ gap: 4 }}>
-			<ThemedText type='default' selectable={false} style={contactStyles.profileHint}>
+		<ThemedView style={{ gap: 5 }}>
+			<ThemedText type='default' selectable={false}>
 				Optional nickname (max 40 characters)
 			</ThemedText>
 			<TextInput
@@ -283,11 +302,35 @@ type AddContactProfileNoteProps = {
 
 const AddContactProfileNote = ({ styles: contactStyles }: AddContactProfileNoteProps) => {
   const profileType = useLegend$(addContact$.profileType);
-  if (!profileType) return null;
+  const name = useLegend$(addContact$.name);
+  if (!profileType && !name) return null;
   return (
-    <ThemedText type='default' selectable={false} style={contactStyles.profileHint}>
-      Profile type: {profileType}
-    </ThemedText>
+    <ThemedView style={{ gap: 4 }}>
+      {profileType && (
+        <ThemedText type='default' selectable={false} style={contactStyles.profileHint}>
+          Profile type: {' '}
+          <ThemedText
+            type='default'
+            selectable={false}
+            style={contactStyles.pendingPillTextPrimary}
+          >
+            {profileType}
+          </ThemedText>
+        </ThemedText>
+      )}
+      {name && (
+        <ThemedText type='default' selectable={false} style={contactStyles.profileHint}>
+          Name: {' '}
+          <ThemedText
+            type='default'
+            selectable={false}
+            style={contactStyles.pendingPillTextPrimary}
+          >
+            {name}
+          </ThemedText>
+        </ThemedText>
+      )}
+    </ThemedView>
   );
 };
 
@@ -411,7 +454,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         {
           id: 'usernameBlock',
           content: (
-            <ThemedView style={{ gap: 4 }}>
+            <ThemedView style={{ gap: 10 }}>
               <AddContactUsernameInput styles={contactStyles} handlePressIn={handlePressIn} />
               <AddContactProfileNote styles={contactStyles} />
               <AddContactNicknameInput styles={contactStyles} />
@@ -521,6 +564,9 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
   };
 
   const handleEditNickname = async (contact: ContactEntry, position?: { x: number; y: number }) => {
+    const hasNickname = !!(contact.nickname && contact.nickname.trim().length > 0);
+    const modalTitle = hasNickname ? 'Update nickname' : 'Add nickname';
+
     editNickname$.value.set(contact.nickname ?? '');
 
     const saveNickname = async () => {
@@ -574,7 +620,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         },
       ],
       {
-        title: 'Update or set nickname',
+        title: modalTitle,
         position,
         showConfirmButton: false,
         showCancelButton: true,
@@ -601,7 +647,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         : []),
       {
         id: 'edit_nickname',
-        label: 'Edit nickname',
+        label: contact.nickname ? 'Edit nickname' : 'Add nickname',
         onPress: () => handleEditNickname(contact, position),
       },
       {

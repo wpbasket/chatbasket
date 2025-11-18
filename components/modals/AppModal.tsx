@@ -2,7 +2,7 @@
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { modalActions, modals$ } from '@/state/modals/state.modals';
 import React, { useState } from 'react';
-import { LayoutChangeEvent, Modal, Platform, Pressable, useWindowDimensions, ViewStyle } from 'react-native';
+import { LayoutChangeEvent, Modal, Platform, Pressable, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { AlertModal } from './types/AlertModal';
 import { ConfirmModal } from './types/ConfirmModal';
@@ -204,18 +204,18 @@ export function AppModal() {
             statusBarTranslucent
             hardwareAccelerated
           >
-            <Pressable
-              style={[styles.overlay, overlayStyle.overlay]}
-              onPress={props?.closeOnBackgroundTap === false ? undefined : closeThis}
-            >
+            <View style={[styles.overlay, overlayStyle.overlay]}>
               <Pressable
+                style={styles.backdrop}
+                onPress={props?.closeOnBackgroundTap === false ? undefined : closeThis}
+              />
+              <View
                 style={[styles.content, overlayStyle.content]}
-                onPress={(e) => e.stopPropagation()}
                 onLayout={onContentLayout(key)}
               >
                 {renderModalContent({ type: entry.type, props }, closeThis)}
-              </Pressable>
-            </Pressable>
+              </View>
+            </View>
           </Modal>
         );
       })}
@@ -227,6 +227,13 @@ const styles = StyleSheet.create((theme, rt) => ({
   overlay: {
     flex: 1,
     // backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent backgroundz
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   },
   content: {
     // Let modal types decide their own sizing

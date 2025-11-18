@@ -59,7 +59,11 @@ export function ControllersModal({
         </View>
       )}
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {controllers.map((ctrl) => {
           // If custom content is provided, render it directly in a container
           if (ctrl.content) {

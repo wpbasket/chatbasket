@@ -25,7 +25,7 @@ async function getContacts(): Promise<GetContactsResponse> {
 /**
  * Handles checking contact existence.
  * @param payload contact_username: string;
- * @returns exists: boolean; profile_type?: string("private" | "public" | "personal"); recipient_user_id?: string | null;
+ * @returns exists: boolean; profile_type?: string("private" | "public" | "personal"); name: string; recipient_user_id?: string | null;
  */
 async function checkContactExistance(payload: CheckContactExistancePayload): Promise<CheckContactExistanceResponse> {
     return apiClient.post<CheckContactExistanceResponse>('/personal/contacts/check-existence', payload);
