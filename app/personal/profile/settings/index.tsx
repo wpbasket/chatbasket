@@ -1,28 +1,29 @@
-import { ThemedText } from '@/components/ui/common/ThemedText';
-import { ThemedView } from '@/components/ui/common/ThemedView';
-import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { router } from 'expo-router';
-import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
-// import { authState } from '@/state/auth/auth';
 import Header from '@/components/header/Header';
 import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { Dropdown } from '@/components/ui/common/DropDown';
+import { ThemedText } from '@/components/ui/common/ThemedText';
+import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { settingApi } from '@/lib/publicLib/settingApi/public.api.setting';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { setting$ } from '@/state/settings/state.setting';
 import { hideModal, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
+import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
+import { UnistylesRuntime } from 'react-native-unistyles';
+import { SettingsEmailRow } from './components/SettingsEmailRow';
+import { SettingsPasswordRow } from './components/SettingsPasswordRow';
 import CreateSettingsFlows from './settings.flows';
-import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
+import { styles } from './settings.styles';
 
 export default function Settings() {
   const MAX_RESENDS = 3;
@@ -132,54 +133,15 @@ export default function Settings() {
           <View style={styles.container}>
             <View style={[styles.flex1, { marginTop: -20 }]}>
               <ThemedText style={styles.sectionHeader}>Security</ThemedText>
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Email :</ThemedText>
-                </View>
-                <View style={styles.itemContainer}>
-                  <ThemedText style={styles.item}>{email}</ThemedText>
-                </View>
-                <Pressable
-                  onPress={editEmail}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.changeContainer
-                  ]}
-
-                >
-                  <MaterialCommunityIcon size={25} name={'account.emailEdit'} />
-                  {/* <ThemedText type='small' style={styles.changeText} color='red' >Change</ThemedText> */}
-
-                </Pressable>
-
-
-
-              </View>
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Password :</ThemedText>
-                </View>
-                <View style={styles.itemContainer}>
-                  <ThemedText style={styles.item}>******</ThemedText>
-                </View>
-                <Pressable
-                  onPress={editPassword}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.changeContainer
-                  ]}
-
-                >
-                  <MaterialCommunityIcon size={25} name={'edit'} />
-                  {/* <ThemedText type='small' style={styles.changeText} color='red' >Change</ThemedText> */}
-
-                </Pressable>
-
-
-
-              </View>
+              <SettingsEmailRow
+                email={email}
+                onPress={editEmail}
+                onPressIn={handlePressIn}
+              />
+              <SettingsPasswordRow
+                onPress={editPassword}
+                onPressIn={handlePressIn}
+              />
 
               <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
 
@@ -228,128 +190,3 @@ export default function Settings() {
     </ThemedViewWithSidebar>
   )
 }
-
-const styles = StyleSheet.create((theme, rt) => (({
-  mainContainer: {
-    flex: 1,
-    paddingTop: rt.insets.top,
-    gap: 20,
-
-  },
-  container: {
-    flex: 1,
-    gap: 20,
-    paddingHorizontal: 20,
-    // backgroundColor: theme.colors.yellow,
-  },
-  flex1: {
-    flex: 1,
-    gap: 15,
-  },
-  section: {
-    flexDirection: 'row',
-    // backgroundColor:'red',
-    width: 367
-  },
-  sectionHeader: {
-    fontSize: 18,
-    marginBottom: -5,
-    color: theme.colors.primary
-  },
-  itemTitleContainer: {
-    // flex: 1,
-    width: 100,
-    // backgroundColor: 'yellow'
-  },
-  itemTitle: {
-    fontSize: 15,
-    color: theme.colors.whiteOrBlack,
-    // fontWeight: 'bold',
-  },
-  itemContainer: {
-    width: 241,
-    paddingRight: 10,
-    // backgroundColor: 'pink',
-  },
-  item: {
-    fontSize: 15,
-  },
-  changeContainer: {
-    width: 30,
-    height: 25,
-    gap: 2,
-    alignItems: 'center',
-    // flexDirection: 'row',
-    // backgroundColor: 'blue'
-  },
-  themePickerContainer: {
-    width: 267,
-    height: 30,
-    borderColor: theme.colors.neutral5,
-    borderWidth: 1,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 25,
-    borderBottomRightRadius: 8,
-    justifyContent: 'center',
-  },
-  dropdownBorder: {
-    height: 27,
-    width: 265,
-    borderWidth: 0,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 8,
-    borderTopRightRadius: 25,
-    paddingHorizontal: 16,
-  },
-  primaryText: {
-    color: theme.colors.primary,
-  },
-  modalInput: {
-    height: 40,
-    fontSize: 18,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.neutral4,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 8,
-    borderTopRightRadius: 25,
-    color: theme.colors.whiteOrBlack,
-  },
-  inputError: {
-    borderColor: 'red',
-  },
-  resendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  modalActionButton: {
-    backgroundColor: theme.colors.icon,
-    height: 60,
-    width: 60,
-    borderRadius: 9999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalActionText: {
-    color: theme.colors.blackOrWhite,
-    fontWeight: 'bold',
-  },
-  actionRightRow: {
-    width: '100%',
-    alignItems: 'flex-end',
-  },
-  modalPillButton: {
-    backgroundColor: theme.colors.icon,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-})));

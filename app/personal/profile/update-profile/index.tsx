@@ -1,27 +1,28 @@
 import Header from '@/components/header/Header';
 import Sidebar from '@/components/sidebar/Sidebar';
-import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { ApiError } from '@/lib/constantLib';
 import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
-import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import { $personalStateUpdateProfile } from '@/state/personalState/profile/personal.state.profile.updateProfile';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
+import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { Image, Platform, Pressable, TextInput } from 'react-native';
-import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { Platform } from 'react-native';
+import { UpdateProfileAvatarSection } from './components/UpdateProfileAvatarSection';
+import { UpdateProfileForm } from './components/UpdateProfileForm';
+import { styles } from './update-profile.styles';
+import { utilGoBack } from '@/utils/commonUtils/util.router';
 
 
 export default function PersonalUpdateProfile() {
@@ -31,13 +32,9 @@ export default function PersonalUpdateProfile() {
     return () => {
       $personalStateUpdateProfile.reset()
       authState.isInTheProfileUpdateMode.set(false)
+      void PersonalUtilGetUser();
     };
   }, []);
-
-
-  const goBack = () => {
-    router.back();
-  };
   
   const user = useLegend$($personalStateUser.user)
   const avatarUri = useLegend$($personalStateUser.user.avatar_url)
@@ -267,243 +264,35 @@ export default function PersonalUpdateProfile() {
           <Header
             leftButton={{
               child: <IconSymbol name='arrow.left' />,
-              onPress: goBack,
+              onPress: utilGoBack,
             }}
             Icon={<ThemedText type='subtitle'>Update Profile</ThemedText>}
           />
           <ThemedView style={styles.container}>
-            <ThemedView style={styles.profilePictureContainer}>
-              <Pressable style={({ pressed }) => [
-                { opacity: pressed ? 0.1 : 1 },
-                styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
-              ]} >
-                {(avatarFile || (user?.avatar_url && user?.avatar_url.length>0)) && (
-                  <Image
-                    source={{ uri: avatarFile?.uri || avatarUri! }}
-                    style={styles.profilePictureImage}
-                  />
-                )}
-              </Pressable>
-              <ThemedView style={styles.outerEditIcon}>
-                <Pressable
-                  onPress={handleAvatarChange}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.editIcon
-                  ]}
-                >
-                  <MaterialCommunityIcon name='image.edit' size={25} />
-                  <ThemedText style={[styles.bucketText,]} selectable={false}>Change avatar</ThemedText>
-                </Pressable>
-              </ThemedView>
-            </ThemedView>
-            <TextInput
-              placeholder="Name"
-              inputMode='text'
-              maxLength={40}
-              value={name ?? user?.name}
-              onChangeText={(text) => $personalStateUpdateProfile.name.set(text)}
-              textContentType='name'
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
+            <UpdateProfileAvatarSection
+              avatarUri={avatarFile?.uri || avatarUri || null}
+              hasAvatar={!!(avatarFile || (user?.avatar_url && user?.avatar_url.length > 0))}
+              showAvatarError={(isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid)}
+              onChangeAvatar={handleAvatarChange}
+              onPressInChangeAvatar={handlePressIn}
             />
 
-
-
-
-
-            <TextInput
-              placeholder="Bio"
-              inputMode='text'
-              value={bio ?? user?.bio ?? ''}
-              onChangeText={(text) => $personalStateUpdateProfile.bio.set(text)}
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={150}
-              multiline={true}
-              style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
+            <UpdateProfileForm
+              nameValue={name ?? user?.name ?? ''}
+              bioValue={bio ?? user?.bio ?? ''}
+              profileVisibleToValue={profileVisibleTo ?? (user?.profile_type as 'public' | 'private' | 'personal' | null)}
+              showNameError={!isNameValid && isSubmitted}
+              showBioError={!isBioValid && isSubmitted}
+              showProfileVisibleToError={!isProfileVisibleToValid && isSubmitted}
+              onChangeName={(text) => $personalStateUpdateProfile.name.set(text)}
+              onChangeBio={(text) => $personalStateUpdateProfile.bio.set(text)}
+              onSelectProfileVisibleTo={(value) => $personalStateUpdateProfile.profileVisibleTo.set(value)}
+              onSubmit={handleUpdateProfile}
+              onPressInSubmit={handlePressIn}
             />
-
-            <ThemedView style={[styles.profileVisibleToContainer]} >
-              <Dropdown
-                options={[
-                  { label: 'Public', value: 'public' },
-                  { label: 'Private', value: 'private' },
-                  { label: 'Personal', value: 'personal' },
-                ]}
-                value={profileVisibleTo ?? user?.profile_type}
-                placeholder="Select profile visibility"
-                style={styles.dropdownBorder}
-                error={!isProfileVisibleToValid && isSubmitted}
-                searchable={false}
-                onSelect={(value) => $personalStateUpdateProfile.profileVisibleTo.set(value as 'public' | 'private' | 'personal')}
-              />
-
-            </ThemedView>
-
-            <Pressable
-              onPress={handleUpdateProfile}
-              style={({ pressed }) => [
-                styles.submit,
-                { opacity: pressed ? 0.1 : 1 }
-              ]}
-
-              onPressIn={handlePressIn}
-            >
-              <ThemedText style={styles.submitText} selectable={false}>Save</ThemedText>
-            </Pressable>
           </ThemedView>
         </ThemedView>
       </ThemedViewWithSidebar.Main>
     </ThemedViewWithSidebar>
   )
 }
-
-const styles = StyleSheet.create((theme, rt) => (({
-  mainContainer: {
-    flex: 1,
-    paddingTop: rt.insets.top,
-  },
-  container: {
-    paddingTop: 20,
-    width: '100%',
-    paddingHorizontal: 20,
-    gap: 20,
-    // justifyContent: 'center',
-    // alignItems: 'center',
-    height: '100%',
-  },
-  input: {
-    height: 40,
-    width: 350,
-    borderWidth: 1,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 25,
-    borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral5,
-    paddingHorizontal: 16,
-    color: theme.colors.text,
-  },
-  inputError: {
-    borderColor: theme.colors.red,
-  },
-  profileInputError: {
-    borderWidth: 1,
-    borderColor: theme.colors.red,
-  },
-
-  submit: {
-    height: 60,
-    width: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 9999,
-    backgroundColor: theme.colors.icon,
-  },
-  submitText: {
-    color: theme.colors.background,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  bio: {
-    height: 100,
-    width: 350,
-    borderWidth: 1,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 25,
-    borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral5,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: theme.colors.text,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 350,
-    height: 40,
-    borderWidth: 1,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 25,
-    borderBottomRightRadius: 8,
-    borderColor: theme.colors.neutral5,
-    paddingRight: 16,
-  },
-  inputField: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    color: theme.colors.text,
-    paddingHorizontal: 16
-  },
-  inputButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileVisibleToContainer: {
-    width: 350,
-    height: 40,
-    borderColor: theme.colors.neutral5,
-    borderWidth: 1,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 25,
-    borderBottomRightRadius: 8,
-  },
-  profilePictureContainer: {
-    // height: 240,
-    // width: Platform.OS === 'web' ? '20%' : 80,
-    // backgroundColor: theme.colors.yellow,
-    // gap: 5
-
-    paddingBottom: 20
-  },
-  profilePicture: {
-    height: 80,
-    width: 80,
-    backgroundColor: theme.colors.icon,
-    borderRadius: 9999,
-  },
-  profilePictureImage: {
-    width: '100%',
-    height: '100%',
-    pointerEvents: 'none',
-    borderRadius: 9999,
-  },
-  outerEditIcon: {
-    // marginTop: 10,
-    // backgroundColor: theme.colors.yellow,
-    // marginBottom: 20,
-    // paddingLeft: 25,
-  },
-  editIcon: {
-
-    // width: 125,
-    // backgroundColor: theme.colors.background,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-  },
-  bucketText: {
-    color: theme.colors.text,
-    fontSize: 13
-    // fontWeight: 'bold',
-  },
-  dropdownBorder: {
-    height: 38,
-    width: 340,
-    borderWidth: 0,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 8,
-    borderTopRightRadius: 25,
-    paddingHorizontal: 16,
-  }
-})));

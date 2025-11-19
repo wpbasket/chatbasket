@@ -4,9 +4,9 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import {
-  $contactRequestsState,
-  $contactsState,
-  type ContactEntry,
+    $contactRequestsState,
+    $contactsState,
+    type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { showContactAlert } from '@/utils/commonUtils/util.contactMessages';
 import { hideModal, runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
@@ -14,10 +14,11 @@ import { observable } from '@legendapp/state';
 import { useRef } from 'react';
 import type { GestureResponderEvent } from 'react-native';
 import { Pressable, TextInput, View } from 'react-native';
+import type { ContactsStyles } from './contacts.styles';
 
 export type ContactsFlowsDeps = {
   fetchContacts: () => Promise<void>;
-  styles: any;
+  styles: ContactsStyles;
   handlePressIn: () => void;
 };
 
@@ -134,7 +135,7 @@ const checkUsername = async () => {
 };
 
 type AddContactUsernameInputProps = {
-  styles: any;
+  styles: ContactsStyles;
   handlePressIn: () => void;
 };
 
@@ -232,7 +233,7 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
 };
 
 type AddContactNicknameInputProps = {
-	styles: any;
+	styles: ContactsStyles;
 };
 
 const AddContactNicknameInput = ({ styles: contactStyles }: AddContactNicknameInputProps) => {
@@ -259,7 +260,7 @@ const AddContactNicknameInput = ({ styles: contactStyles }: AddContactNicknameIn
 };
 
 type EditNicknameInputProps = {
-  styles: any;
+  styles: ContactsStyles;
 };
 
 const EditNicknameInput = ({ styles: contactStyles }: EditNicknameInputProps) => {
@@ -283,7 +284,7 @@ const EditNicknameInput = ({ styles: contactStyles }: EditNicknameInputProps) =>
 };
 
 type AddContactErrorLabelProps = {
-  styles: any;
+  styles: ContactsStyles;
 };
 
 const AddContactErrorLabel = ({ styles: contactStyles }: AddContactErrorLabelProps) => {
@@ -297,7 +298,7 @@ const AddContactErrorLabel = ({ styles: contactStyles }: AddContactErrorLabelPro
 };
 
 type AddContactProfileNoteProps = {
-  styles: any;
+  styles: ContactsStyles;
 };
 
 const AddContactProfileNote = ({ styles: contactStyles }: AddContactProfileNoteProps) => {
@@ -335,7 +336,7 @@ const AddContactProfileNote = ({ styles: contactStyles }: AddContactProfileNoteP
 };
 
 type AddContactActionButtonsProps = {
-  styles: any;
+  styles: ContactsStyles;
   handlePressIn: () => void;
   onCreateContact: () => Promise<void>;
 };
@@ -378,7 +379,7 @@ const AddContactActionButtons = ({ styles: contactStyles, handlePressIn, onCreat
 };
 
 type EditNicknameActionButtonsProps = {
-  styles: any;
+  styles: ContactsStyles;
   handlePressIn: () => void;
   onSaveNickname: () => Promise<void>;
 };

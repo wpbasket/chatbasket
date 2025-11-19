@@ -9,7 +9,7 @@ import { showGenericError } from '@/utils/commonUtils/util.error';
 import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-
+import type { SettingsStyles } from './settings.styles';
 
 
 export type SettingsFlowsDeps = {
@@ -17,7 +17,7 @@ export type SettingsFlowsDeps = {
   showControllersModal: (controllers: { id: string; content: React.ReactNode }[], options: any) => Promise<any>;
   hideModal: () => void;
   handlePressIn: () => void;
-  styles: any;
+  styles: SettingsStyles;
   MAX_RESENDS: number;
   COOLDOWN_MS: number;
   currentEmail$: any;
