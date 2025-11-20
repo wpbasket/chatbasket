@@ -3,16 +3,16 @@ import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import userPostsStore from '@/state/publicState/public.state.userPostsStore';
 import { LegendList } from "@legendapp/list";
+import { useValue } from '@legendapp/state/react';
 import { Platform, Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 export default function Home() {
-  const posts_for_user = useLegend$(userPostsStore.posts);
-  const currentMode = useLegend$(appMode$.mode);
+  const posts_for_user = useValue(userPostsStore.posts);
+  const currentMode = useValue(appMode$.mode);
 
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';

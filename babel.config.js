@@ -3,8 +3,9 @@ module.exports = function (api) {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-        // other plugins
-        ['react-native-unistyles/plugin',{root: 'app',}]
+      '@legendapp/state/babel',
+      // other plugins
+      ['react-native-unistyles/plugin',{root: 'app',}]
 
     ]
   };

@@ -9,7 +9,6 @@ import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
 import { authState } from '@/state/auth/state.auth';
@@ -17,8 +16,9 @@ import { $personalStateCreateProfile } from '@/state/personalState/profile/perso
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
+import { Memo, Show, useValue } from '@legendapp/state/react';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView } from 'react-native';
 import { styles } from './profile.styles';
 
@@ -64,37 +64,22 @@ function ProfileEmptyState() {
 }
 
 export default function ProfileScreen() {
-  const user = useLegend$($personalStateUser.user);
-  const avatarUrl = useLegend$($personalStateUser.user.avatar_url);
-  console.log(avatarUrl)
-  const userNotFound = useLegend$($personalStateCreateProfile.userNotFound);
   const { handlePressIn } = pressableAnimation();
-  const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+    $personalStateUser.refreshing.set(true);
     try {
       await PersonalUtilGetUser();
     } finally {
-      setRefreshing(false);
+      $personalStateUser.refreshing.set(false);
     }
   }, []);
-
-  // Refresh user in background every time profile screen gains focus
-  useEffect(() => {
-    void onRefresh(); // fire-and-forget; state will update UI when ready
-  }, [onRefresh]);
-
-  if (userNotFound) {
-    return <ProfileEmptyState />;
-  }
 
   const goBack = () => {
     router.push('/personal/home');
   };
 
   const bucketColor = styles.bucketColor.color.toString();
-  const profileType = user?.profile_type;
 
   const editProfile = () => {
     authState.isInTheProfileUpdateMode.set(true)
@@ -145,182 +130,215 @@ export default function ProfileScreen() {
   };
 
   return (
-    <>
-      <ThemedViewWithSidebar>
-        <ThemedViewWithSidebar.Sidebar>
-          <Sidebar />
-        </ThemedViewWithSidebar.Sidebar>
-        <ThemedViewWithSidebar.Main>
-          <ThemedView style={styles.mainContainer}>
-            <ScrollView
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-            >
+    <Show
+      if={$personalStateCreateProfile.userNotFound}
+      else={() => {
+        return (
+          <>
+            <ThemedViewWithSidebar>
+              <ThemedViewWithSidebar.Sidebar>
+                <Sidebar />
+              </ThemedViewWithSidebar.Sidebar>
+              <ThemedViewWithSidebar.Main>
+                <ThemedView style={styles.mainContainer}>
+                  <ScrollView
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={useValue($personalStateUser.refreshing)}
+                        onRefresh={onRefresh}
+                      />
+                    }
+                  >
 
-              {/* Header Section */}
-              <Header
-                Icon={
-                  <ThemedText type='subtitle'>{user?.name}</ThemedText>
-                }
-                leftButton={{
-                  child: <IconSymbol name='arrow.left' />,
-                  onPress: goBack,
-                }}
-                centerIcon={true}
-              />
-              {/* Header Section End */}
-
-              {/* Edit Icon Section */}
-              <ThemedView style={styles.outerEditIcon}>
-                <Pressable
-                  onPress={editProfile}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.editIcon
-                  ]}
-                >
-                  <MaterialCommunityIcon name='account.edit' size={32} />
-                  <ThemedText style={[styles.bucketText, styles.bio]} selectable={false}>
-                    Update Profile
-                  </ThemedText>
-                </Pressable>
-              </ThemedView>
-              {/* Edit Icon Section End */}
-
-              {/* Profile Section: flex:row */}
-              <ThemedView style={styles.container}>
-
-                {/* Profile Picture Section */}
-                <ThemedView style={styles.profilePictureContainer}>
-
-                  {/* Profile Picture */}
-                  <Pressable style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.profilePicture
-                  ]}>
-                    <Image
-                      source={{ uri: avatarUrl || '' }}
-                      style={styles.profilePictureImage}
+                    {/* Header Section */}
+                    <Header
+                      Icon={
+                        <ThemedText type='subtitle'>
+                          <Memo>
+                            {$personalStateUser.user.name}
+                          </Memo>
+                        </ThemedText>
+                      }
+                      leftButton={{
+                        child: <IconSymbol name='arrow.left' />,
+                        onPress: goBack,
+                      }}
+                      centerIcon={true}
                     />
-                  </Pressable>
-                  {/* Profile Picture End */}
+                    {/* Header Section End */}
 
-                  {/* Outer Bucket Section */}
-                  <ThemedView style={styles.outerBucketContainer}>
-
-                    {/* Profile Mode */}
-                    <ThemedView style={styles.bucketContainer}>
-                      <FontAwesome5Icon
-                        name={profileType === 'private' ? 'account.lock' : 'account.unlock'}
-                        size={20}
-                        color={bucketColor}
-                      />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : profileType}
-                      </ThemedText>
+                    {/* Edit Icon Section */}
+                    <ThemedView style={styles.outerEditIcon}>
+                      <Pressable
+                        onPress={editProfile}
+                        onPressIn={handlePressIn}
+                        style={({ pressed }) => [
+                          { opacity: pressed ? 0.1 : 1 },
+                          styles.editIcon
+                        ]}
+                      >
+                        <MaterialCommunityIcon name='account.edit' size={32} />
+                        <ThemedText style={[styles.bucketText, styles.bio]} selectable={false}>
+                          Update Profile
+                        </ThemedText>
+                      </Pressable>
                     </ThemedView>
-                    {/* Profile Mode End */}
+                    {/* Edit Icon Section End */}
 
-                    {/* Contacts */}
-                    <Pressable
-                      onPress={openContacts}
-                      onPressIn={handlePressIn}
-                      style={({ pressed }) => [
-                        { opacity: pressed ? 0.1 : 1 },
-                        styles.bucketContainer
-                      ]}>
-                      <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        Contacts
-                      </ThemedText>
-                    </Pressable>
-                    {/* Contacts End */}
+                    {/* Profile Section: flex:row */}
+                    <ThemedView style={styles.container}>
 
-                    {/* Requests */}
-                    <Pressable
-                      onPress={openRequests}
-                      onPressIn={handlePressIn}
-                      style={({ pressed }) => [
-                        { opacity: pressed ? 0.1 : 1 },
-                        styles.bucketContainer
-                      ]}>
-                      <FontAwesome5Icon name="list" size={20} color={bucketColor} />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        Requests
-                      </ThemedText>
-                    </Pressable>
-                    {/* Requests End */}
+                      {/* Profile Picture Section */}
+                      <ThemedView style={styles.profilePictureContainer}>
 
-                    {/* Settings  */}
-                    <Pressable
-                      onPress={settings}
-                      onPressIn={handlePressIn}
-                      style={({ pressed }) => [
-                        { opacity: pressed ? 0.1 : 1 },
-                        styles.bucketContainer, { marginLeft: -4.1 ,marginTop:-3}
-                      ]}>
-                      <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        Settings
-                      </ThemedText>
-                    </Pressable>
-                    {/* Settings End */}
+                        {/* Profile Picture */}
+                        <Pressable style={({ pressed }) => [
+                          { opacity: pressed ? 0.1 : 1 },
+                          styles.profilePicture
+                        ]}>
+                          <Memo>
+                            <Image
+                              source={{ uri: $personalStateUser.user.avatar_url.get() || '' }}
+                              style={styles.profilePictureImage}
+                            />
+                          </Memo>
+                        </Pressable>
+                        {/* Profile Picture End */}
 
-                    {/* Logout */}
-                    <Pressable
-                      onPress={logoutButton}
-                      onPressIn={handlePressIn}
-                      style={({ pressed }) => [
-                        { opacity: pressed ? 0.1 : 1 },
-                        styles.bucketContainer
-                      ]}>
-                      <EntypoIcon name="account.logout" size={20} color='red' />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        Logout
-                      </ThemedText>
-                    </Pressable>
-                    {/* Logout End */}
+                        {/* Outer Bucket Section */}
+                        <ThemedView style={styles.outerBucketContainer}>
 
-                  </ThemedView>
-                  {/* Outer Bucket Section End */}
+                          {/* Profile Mode */}
+                          <ThemedView style={styles.bucketContainer}>
+                            <Memo>
+                              {() => {
+                                const profileType = $personalStateUser.user.profile_type.get();
+                                return (
+                                  <>
+                                    <FontAwesome5Icon
+                                      name={profileType === 'private' ? 'account.lock' : 'account.unlock'}
+                                      size={20}
+                                      color={bucketColor}
+                                    />
+                                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                                      {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : profileType}
+                                    </ThemedText>
+                                  </>
+                                );
+                              }}
+                            </Memo>
+                          </ThemedView>
+                          {/* Profile Mode End */}
 
+                          {/* Contacts */}
+                          <Pressable
+                            onPress={openContacts}
+                            onPressIn={handlePressIn}
+                            style={({ pressed }) => [
+                              { opacity: pressed ? 0.1 : 1 },
+                              styles.bucketContainer
+                            ]}>
+                            <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
+                            <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                              Contacts
+                            </ThemedText>
+                          </Pressable>
+                          {/* Contacts End */}
+
+                          {/* Requests */}
+                          <Pressable
+                            onPress={openRequests}
+                            onPressIn={handlePressIn}
+                            style={({ pressed }) => [
+                              { opacity: pressed ? 0.1 : 1 },
+                              styles.bucketContainer
+                            ]}>
+                            <FontAwesome5Icon name="list" size={20} color={bucketColor} />
+                            <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                              Requests
+                            </ThemedText>
+                          </Pressable>
+                          {/* Requests End */}
+
+                          {/* Settings  */}
+                          <Pressable
+                            onPress={settings}
+                            onPressIn={handlePressIn}
+                            style={({ pressed }) => [
+                              { opacity: pressed ? 0.1 : 1 },
+                              styles.bucketContainer, { marginLeft: -4.1, marginTop: -3 }
+                            ]}>
+                            <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
+                            <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                              Settings
+                            </ThemedText>
+                          </Pressable>
+                          {/* Settings End */}
+
+                          {/* Logout */}
+                          <Pressable
+                            onPress={logoutButton}
+                            onPressIn={handlePressIn}
+                            style={({ pressed }) => [
+                              { opacity: pressed ? 0.1 : 1 },
+                              styles.bucketContainer
+                            ]}>
+                            <EntypoIcon name="account.logout" size={20} color='red' />
+                            <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                              Logout
+                            </ThemedText>
+                          </Pressable>
+                          {/* Logout End */}
+
+                        </ThemedView>
+                        {/* Outer Bucket Section End */}
+
+                      </ThemedView>
+                      {/* Profile Picture Section End */}
+
+                      {/* User Info Section */}
+                      <ThemedView style={styles.userInfoContainer}>
+                        <ThemedView style={styles.usernameContainer}>
+                          <ThemedText
+                            type='astaSansWithoutColorAndSize'
+                            style={styles.usernameStrings}
+                            selectable={false}
+                          >
+                            Username:{'   '}
+                            <UsernameDisplay
+                              username={$personalStateUser.user.username.get()}
+                              lettersStyle={styles.usernameStrings}
+                              numbersStyle={styles.usernameNumbers}
+                            />
+                          </ThemedText>
+                        </ThemedView>
+                        <ThemedText style={styles.bio}>
+                          <ThemedText style={styles.bio} selectable={false}>Bio:{'   '}</ThemedText>
+
+                          <ThemedText style={styles.bio} selectable>
+                            <Memo>
+                              {$personalStateUser.user.bio}
+                            </Memo>
+                          </ThemedText>
+
+                        </ThemedText>
+                        {/* <ThemedText style={styles.bio}>Created At:   {formatDateTime(user?.createdAt)}</ThemedText> */}
+                      </ThemedView>
+                      {/* User Info Section End */}
+
+                    </ThemedView>
+                    {/* Profile Section flex:row End */}
+
+                  </ScrollView>
                 </ThemedView>
-                {/* Profile Picture Section End */}
-
-                {/* User Info Section */}
-                <ThemedView style={styles.userInfoContainer}>
-                  <ThemedView style={styles.usernameContainer}>
-                    <ThemedText
-                      type='astaSansWithoutColorAndSize'
-                      style={styles.usernameStrings}
-                      selectable={false}
-                    >
-                      Username:{'   '}
-                      <UsernameDisplay
-                        username={user?.username}
-                        lettersStyle={styles.usernameStrings}
-                        numbersStyle={styles.usernameNumbers}
-                      />
-                    </ThemedText>
-                  </ThemedView>
-                  <ThemedText style={styles.bio}>
-                    <ThemedText style={styles.bio} selectable={false}>Bio:{'   '}</ThemedText>
-                    <ThemedText style={styles.bio} selectable>{user?.bio}</ThemedText>
-                  </ThemedText>
-                  {/* <ThemedText style={styles.bio}>Created At:   {formatDateTime(user?.createdAt)}</ThemedText> */}
-                </ThemedView>
-                {/* User Info Section End */}
-
-              </ThemedView>
-              {/* Profile Section flex:row End */}
-
-            </ScrollView>
-          </ThemedView>
-          {/* Main Container End */}
-        </ThemedViewWithSidebar.Main>
-      </ThemedViewWithSidebar>
-    </>
+                {/* Main Container End */}
+              </ThemedViewWithSidebar.Main>
+            </ThemedViewWithSidebar>
+          </>
+        );
+      }}
+    >
+      {() => <ProfileEmptyState />}
+    </Show>
   );
 }

@@ -2,8 +2,8 @@ import ProfileList from '@/components/publicComponents/profile/ProfileList';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
+import { useValue } from '@legendapp/state/react';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet } from 'react-native-unistyles';
@@ -12,7 +12,7 @@ import NotFoundScreen from '../+not-found';
 type TABS = 'Posts' | 'Followers' | 'Following'
 
 export default function Profile() {
-    const user = useLegend$(currentUserStore.user);
+    const user = useValue(currentUserStore.user);
 
     const [activeTab, setActiveTab] = useState<TABS>('Posts');
 

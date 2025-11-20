@@ -6,7 +6,6 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import type { Contact } from '@/lib/personalLib/models/personal.model.contact';
 import { authState } from '@/state/auth/state.auth';
@@ -19,6 +18,7 @@ import {
 import { utilGoBack } from '@/utils/commonUtils/util.router';
 import { PersonalUtilFetchContactRequests } from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
+import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -47,12 +47,13 @@ type ContactsListItem =
   };
 
 export default function Contacts() {
-  const contactsIds = useLegend$($contactsState.contactsIds);
-  const addedYouIds = useLegend$($contactsState.addedYouIds);
-  const loading = useLegend$($contactsState.loading);
-  const error = useLegend$($contactsState.error);
-  const lastFetchedAt = useLegend$($contactsState.lastFetchedAt);
-  const pendingIds = useLegend$($contactRequestsState.pendingIds);
+  const contactsIds = useValue($contactsState.contactsIds);
+  const addedYouIds = useValue($contactsState.addedYouIds);
+  console.log('in contact screen')
+  const loading = useValue($contactsState.loading);
+  const error = useValue($contactsState.error);
+  const lastFetchedAt = useValue($contactsState.lastFetchedAt);
+  const pendingIds = useValue($contactRequestsState.pendingIds);
 
   const [selectedTab, setSelectedTab] = useState<'contacts' | 'addedYou'>('contacts');
 

@@ -5,7 +5,6 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { ApiError } from '@/lib/constantLib';
 import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
 import { authState } from '@/state/auth/state.auth';
@@ -13,8 +12,10 @@ import { modalActions } from '@/state/modals/state.modals';
 import { $personalStateUpdateProfile } from '@/state/personalState/profile/personal.state.profile.updateProfile';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { utilGoBack } from '@/utils/commonUtils/util.router';
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
+import { useValue } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
@@ -22,7 +23,6 @@ import { Platform } from 'react-native';
 import { UpdateProfileAvatarSection } from './components/UpdateProfileAvatarSection';
 import { UpdateProfileForm } from './components/UpdateProfileForm';
 import { styles } from './update-profile.styles';
-import { utilGoBack } from '@/utils/commonUtils/util.router';
 
 
 export default function PersonalUpdateProfile() {
@@ -36,22 +36,22 @@ export default function PersonalUpdateProfile() {
     };
   }, []);
   
-  const user = useLegend$($personalStateUser.user)
-  const avatarUri = useLegend$($personalStateUser.user.avatar_url)
-  const name = useLegend$($personalStateUpdateProfile.name)
-  const bio = useLegend$($personalStateUpdateProfile.bio)
-  const profileVisibleTo = useLegend$($personalStateUpdateProfile.profileVisibleTo)
-  const avatarFile = useLegend$($personalStateUpdateProfile.avatarFile)
-  const isAvatarSubmitted = useLegend$($personalStateUpdateProfile.avatarSubmitted)
-  const isAvatarChecked = useLegend$($personalStateUpdateProfile.isAvatarChecked)
-  const isAvatarValid = useLegend$($personalStateUpdateProfile.isAvatarValid)
-  const isSubmitted = useLegend$($personalStateUpdateProfile.submitted)
-  const isNameValid = useLegend$($personalStateUpdateProfile.isNameValid)
-  const isProfileVisibleToValid = useLegend$($personalStateUpdateProfile.isProfileVisibleToValid)
-  const isBioValid = useLegend$($personalStateUpdateProfile.isBioValid)
-  const isValid = useLegend$($personalStateUpdateProfile.isValid)
-  const isNull = useLegend$($personalStateUpdateProfile.isNull)
-  const isAvatarRemoved = useLegend$($personalStateUpdateProfile.removeAvatarDone)
+  const user = useValue($personalStateUser.user)
+  const avatarUri = useValue($personalStateUser.user.avatar_url)
+  const name = useValue($personalStateUpdateProfile.name)
+  const bio = useValue($personalStateUpdateProfile.bio)
+  const profileVisibleTo = useValue($personalStateUpdateProfile.profileVisibleTo)
+  const avatarFile = useValue($personalStateUpdateProfile.avatarFile)
+  const isAvatarSubmitted = useValue($personalStateUpdateProfile.avatarSubmitted)
+  const isAvatarChecked = useValue($personalStateUpdateProfile.isAvatarChecked)
+  const isAvatarValid = useValue($personalStateUpdateProfile.isAvatarValid)
+  const isSubmitted = useValue($personalStateUpdateProfile.submitted)
+  const isNameValid = useValue($personalStateUpdateProfile.isNameValid)
+  const isProfileVisibleToValid = useValue($personalStateUpdateProfile.isProfileVisibleToValid)
+  const isBioValid = useValue($personalStateUpdateProfile.isBioValid)
+  const isValid = useValue($personalStateUpdateProfile.isValid)
+  const isNull = useValue($personalStateUpdateProfile.isNull)
+  const isAvatarRemoved = useValue($personalStateUpdateProfile.removeAvatarDone)
   
 
   const { handlePressIn } = pressableAnimation();

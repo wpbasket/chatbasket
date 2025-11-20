@@ -5,7 +5,6 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
@@ -15,6 +14,7 @@ import {
 import { utilGoBack } from '@/utils/commonUtils/util.router';
 import { PersonalUtilFetchContactRequests } from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
+import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect } from 'react';
 import { Platform, RefreshControl } from 'react-native';
@@ -26,12 +26,12 @@ import CreateRequestsFlows from './requests.flows';
 import { styles } from './requests.styles';
 
 export default function ContactRequests() {
-  const pendingIds = useLegend$($contactRequestsState.pendingIds);
-  const sentIds = useLegend$($contactRequestsState.sentIds);
-  const loading = useLegend$($contactRequestsState.loading);
-  const error = useLegend$($contactRequestsState.error);
-  const selectedTab = useLegend$($contactRequestsState.selectedTab);
-  const lastFetchedAt = useLegend$($contactRequestsState.lastFetchedAt);
+  const pendingIds = useValue($contactRequestsState.pendingIds);
+  const sentIds = useValue($contactRequestsState.sentIds);
+  const loading = useValue($contactRequestsState.loading);
+  const error = useValue($contactRequestsState.error);
+  const selectedTab = useValue($contactRequestsState.selectedTab);
+  const lastFetchedAt = useValue($contactRequestsState.lastFetchedAt);
 
   useEffect(() => {
     return () => {

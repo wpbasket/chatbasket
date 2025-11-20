@@ -1,11 +1,11 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { ApiError } from '@/lib/constantLib';
 import { authApi } from '@/lib/constantLib/authApi/api.auth';
 import { authState } from '@/state/auth/state.auth';
 import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup';
 import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
+import { useValue } from '@legendapp/state/react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -14,16 +14,16 @@ import { StyleSheet } from 'react-native-unistyles';
 
 export default function Auth() {
   const { method } = useLocalSearchParams();
-  const email = useLegend$(loginOrSignup$.email)
-  const password = useLegend$(loginOrSignup$.password)
-  const name = useLegend$(loginOrSignup$.name)
-  const isLoginValid = useLegend$(loginOrSignup$.isLoginValid)
-  const isSignupValid = useLegend$(loginOrSignup$.isSignupValid)
-  const isEmailValid = useLegend$(loginOrSignup$.isEmailValid)
-  const isSubmited = useLegend$(loginOrSignup$.submitted)
-  const isNameValid = useLegend$(loginOrSignup$.isNameValid)
-  const isPasswordValid = useLegend$(loginOrSignup$.isPasswordValid)
-  const isLoginPasswordValid = useLegend$(loginOrSignup$.isLoginPasswordValid)
+  const email = useValue(loginOrSignup$.email)
+  const password = useValue(loginOrSignup$.password)
+  const name = useValue(loginOrSignup$.name)
+  const isLoginValid = useValue(loginOrSignup$.isLoginValid)
+  const isSignupValid = useValue(loginOrSignup$.isSignupValid)
+  const isEmailValid = useValue(loginOrSignup$.isEmailValid)
+  const isSubmited = useValue(loginOrSignup$.submitted)
+  const isNameValid = useValue(loginOrSignup$.isNameValid)
+  const isPasswordValid = useValue(loginOrSignup$.isPasswordValid)
+  const isLoginPasswordValid = useValue(loginOrSignup$.isLoginPasswordValid)
 
 
 

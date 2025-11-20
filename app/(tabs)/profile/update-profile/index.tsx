@@ -7,7 +7,6 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { ApiError } from '@/lib/constantLib';
 import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { authState } from '@/state/auth/state.auth';
@@ -15,6 +14,7 @@ import { modalActions } from '@/state/modals/state.modals';
 import { updateProfile$ } from '@/state/publicState/profile/public.state.profile.updateProfile';
 import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
+import { useValue } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
@@ -37,29 +37,29 @@ export default function UpdateProfile() {
     router.back();
   };
   
-  const user = useLegend$(authState.user)
-  const avatarUri = useLegend$(authState.user.avatarUri)
-  const username = useLegend$(updateProfile$.username)
-  const name = useLegend$(updateProfile$.name)
-  const bio = useLegend$(updateProfile$.bio)
-  const profileVisibleTo = useLegend$(updateProfile$.profileVisibleTo)
-  const avatar = useLegend$(updateProfile$.avatar)
-  const avatarFile = useLegend$(updateProfile$.avatarFile)
-  const avatarTokens = useLegend$(updateProfile$.avatarTokens)
-  const isAvatarSubmitted = useLegend$(updateProfile$.avatarSubmitted)
-  const isAvatarChecked = useLegend$(updateProfile$.isAvatarChecked)
-  const isAvatarValid = useLegend$(updateProfile$.isAvatarValid)
-  const isSubmitted = useLegend$(updateProfile$.submitted)
-  const isUsernameSubmitted = useLegend$(updateProfile$.usernameSubmitted)
-  const isUsernameChecked = useLegend$(updateProfile$.usernameChecked)
-  const isUsernameCheckedWhileNull = useLegend$(updateProfile$.isUsernameChecked)
-  const isNameValid = useLegend$(updateProfile$.isNameValid)
-  const isUsernameValid = useLegend$(updateProfile$.isUsernameValid)
-  const isProfileVisibleToValid = useLegend$(updateProfile$.isProfileVisibleToValid)
-  const isBioValid = useLegend$(updateProfile$.isBioValid)
-  const isValid = useLegend$(updateProfile$.isValid)
-  const isNull = useLegend$(updateProfile$.isNull)
-  const isAvatarRemoved = useLegend$(updateProfile$.removeAvatarDone)
+  const user = useValue(authState.user)
+  const avatarUri = useValue(authState.user.avatarUri)
+  const username = useValue(updateProfile$.username)
+  const name = useValue(updateProfile$.name)
+  const bio = useValue(updateProfile$.bio)
+  const profileVisibleTo = useValue(updateProfile$.profileVisibleTo)
+  const avatar = useValue(updateProfile$.avatar)
+  const avatarFile = useValue(updateProfile$.avatarFile)
+  const avatarTokens = useValue(updateProfile$.avatarTokens)
+  const isAvatarSubmitted = useValue(updateProfile$.avatarSubmitted)
+  const isAvatarChecked = useValue(updateProfile$.isAvatarChecked)
+  const isAvatarValid = useValue(updateProfile$.isAvatarValid)
+  const isSubmitted = useValue(updateProfile$.submitted)
+  const isUsernameSubmitted = useValue(updateProfile$.usernameSubmitted)
+  const isUsernameChecked = useValue(updateProfile$.usernameChecked)
+  const isUsernameCheckedWhileNull = useValue(updateProfile$.isUsernameChecked)
+  const isNameValid = useValue(updateProfile$.isNameValid)
+  const isUsernameValid = useValue(updateProfile$.isUsernameValid)
+  const isProfileVisibleToValid = useValue(updateProfile$.isProfileVisibleToValid)
+  const isBioValid = useValue(updateProfile$.isBioValid)
+  const isValid = useValue(updateProfile$.isValid)
+  const isNull = useValue(updateProfile$.isNull)
+  const isAvatarRemoved = useValue(updateProfile$.removeAvatarDone)
   
   const { theme } = useUnistyles();
   const { handlePressIn } = pressableAnimation();

@@ -5,16 +5,16 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import currentPostStore from '@/state/publicState/public.state.activePost';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
+import { useValue } from '@legendapp/state/react';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 export default function PostDetailsPage() {
-    const post = useLegend$(currentPostStore.post);
-    const user = useLegend$(currentUserStore.user);
+    const post = useValue(currentPostStore.post);
+    const user = useValue(currentUserStore.user);
     const { handlePressIn } = pressableAnimation();
 
 

@@ -7,7 +7,6 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { settingApi } from '@/lib/publicLib/settingApi/public.api.setting';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { setAppMode } from '@/state/appMode/state.appMode';
@@ -16,6 +15,7 @@ import { $personalStateUser } from '@/state/personalState/user/personal.state.us
 import { setting$ } from '@/state/settings/state.setting';
 import { hideModal, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
+import { useValue } from '@legendapp/state/react';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
@@ -37,7 +37,7 @@ export default function Settings() {
   }, []);
 
   const { handlePressIn } = pressableAnimation();
-  const email = useLegend$($personalStateUser.user.email);
+  const email = useValue($personalStateUser.user.email);
 
   const { editEmail, editPassword } = CreateSettingsFlows({
     settingApi,

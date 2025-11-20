@@ -2,13 +2,13 @@ import Postcard from '@/components/publicComponents/post/Postcard';
 import FollowerCard from '@/components/publicComponents/profile/FollowerCard';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { Post } from '@/model/Post';
 import { User } from '@/model/User';
 import activeUserFollowers from '@/state/publicState/public.state.activeUserFollowers';
 import activeUserFollowing from '@/state/publicState/public.state.activeUserFollowing';
 import activeUserPosts from '@/state/publicState/public.state.activeUserPosts';
 import { LegendList } from '@legendapp/list';
+import { useValue } from '@legendapp/state/react';
 import React, { useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
@@ -39,9 +39,9 @@ type ProfileListProps = {
 
 const ProfileList = React.memo(({ user, activeTab, onTabPress }: ProfileListProps) => {
   // Move hook calls to the top level of the component
-  const postsData = useLegend$(user?.id ? activeUserPosts(user.id) : []);
-  const followersData = useLegend$(user?.id ? activeUserFollowers(user.id) : []);
-  const followingData = useLegend$(user?.id ? activeUserFollowing(user.id) : []);
+  const postsData = useValue(user?.id ? activeUserPosts(user.id) : []);
+  const followersData = useValue(user?.id ? activeUserFollowers(user.id) : []);
+  const followingData = useValue(user?.id ? activeUserFollowing(user.id) : []);
   
   // Get content data based on active tab
   const contentData = useMemo((): ListItem[] => {

@@ -6,13 +6,13 @@ import { ThemedView } from "@/components/ui/common/ThemedView"
 import { ThemedViewWithSidebar } from "@/components/ui/common/ThemedViewWithSidebar"
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
-import { useLegend$ } from "@/hooks/commonHooks/hooks.useLegend"
 import { ApiError } from "@/lib/constantLib"
 import { profileApi } from "@/lib/publicLib/profileApi/public.api.profile"
 import { authState } from "@/state/auth/state.auth"
 import { createProfile$ } from "@/state/publicState/profile/public.state.profile.createProfile"
 import { runWithLoading, showAlert } from "@/utils/commonUtils/util.modal"
 import { getUser } from "@/utils/publicUtils/public.util.profile"
+import { useValue } from "@legendapp/state/react"
 import { router } from "expo-router"
 import { useEffect } from "react"
 import { Platform, Pressable, TextInput } from "react-native"
@@ -32,19 +32,19 @@ export default function CreateProfile() {
   };
 
   // All hooks must be called at the top level
-  const userId= useLegend$(authState.userId)
-  const name = useLegend$(createProfile$.name)
-  const payloadUsername = useLegend$(createProfile$.username)
-  const profileVisibleTo = useLegend$(createProfile$.profileVisibleTo)
-  const bio = useLegend$(createProfile$.bio)
-  const isUsernameSubmitted = useLegend$(createProfile$.usernameSubmitted)
-  const isSubmitted = useLegend$(createProfile$.submitted)
-  const isUsernameChecked = useLegend$(createProfile$.usernameChecked)
-  const isNameValid = useLegend$(createProfile$.isNameValid)
-  const isUsernameValid = useLegend$(createProfile$.isUsernameValid)
-  const isProfileVisibleToValid = useLegend$(createProfile$.isProfileVisibleToValid)
-  const isBioValid = useLegend$(createProfile$.isBioValid)
-  const isValid = useLegend$(createProfile$.isValid)
+  const userId= useValue(authState.userId)
+  const name = useValue(createProfile$.name)
+  const payloadUsername = useValue(createProfile$.username)
+  const profileVisibleTo = useValue(createProfile$.profileVisibleTo)
+  const bio = useValue(createProfile$.bio)
+  const isUsernameSubmitted = useValue(createProfile$.usernameSubmitted)
+  const isSubmitted = useValue(createProfile$.submitted)
+  const isUsernameChecked = useValue(createProfile$.usernameChecked)
+  const isNameValid = useValue(createProfile$.isNameValid)
+  const isUsernameValid = useValue(createProfile$.isUsernameValid)
+  const isProfileVisibleToValid = useValue(createProfile$.isProfileVisibleToValid)
+  const isBioValid = useValue(createProfile$.isBioValid)
+  const isValid = useValue(createProfile$.isValid)
   const { handlePressIn } = pressableAnimation();
   const { theme } = useUnistyles();
 

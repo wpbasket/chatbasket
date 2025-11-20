@@ -1,4 +1,4 @@
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
+import { useValue } from '@legendapp/state/react';
 import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { ThemedText } from '../ui/common/ThemedText';
@@ -9,7 +9,7 @@ import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 
 export default function Sidebar() {
-  const currentMode = useLegend$(appMode$.mode);
+  const currentMode = useValue(appMode$.mode);
   const { handlePressIn } = pressableAnimation();
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';

@@ -4,12 +4,12 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import {
     $contactRequestsState,
     type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { formatRelativeTimeShort } from '@/utils/commonUtils/util.date';
+import { useValue } from '@legendapp/state/react';
 import type { GestureResponderEvent } from 'react-native';
 import { Pressable } from 'react-native';
 import { styles } from '../requests.styles';
@@ -21,7 +21,7 @@ export type SentRowProps = {
 
 export default function SentRequestRow({ id, onOpenActions }: SentRowProps) {
   const { handlePressIn } = pressableAnimation();
-  const item = useLegend$($contactRequestsState.sentById[id]);
+  const item = useValue($contactRequestsState.sentById[id]);
   if (!item) {
     return null;
   }

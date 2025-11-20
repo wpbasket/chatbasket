@@ -5,7 +5,6 @@ import { ThemedView } from "@/components/ui/common/ThemedView"
 import { ThemedViewWithSidebar } from "@/components/ui/common/ThemedViewWithSidebar"
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
-import { useLegend$ } from "@/hooks/commonHooks/hooks.useLegend"
 import { ApiError } from "@/lib/constantLib"
 import { PersonalProfileApi } from "@/lib/personalLib/profileApi/personal.api.profile"
 import { authState } from "@/state/auth/state.auth"
@@ -13,6 +12,7 @@ import { $personalStateCreateProfile } from "@/state/personalState/profile/perso
 import { $personalStateUser } from "@/state/personalState/user/personal.state.user"
 import { runWithLoading, showAlert } from "@/utils/commonUtils/util.modal"
 import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile"
+import { useValue } from "@legendapp/state/react"
 import { router } from "expo-router"
 import { useEffect } from "react"
 import { CreateProfileForm } from "./components/CreateProfileForm"
@@ -32,12 +32,12 @@ export default function PersonalCreateProfile() {
   };
 
   // All hooks must be called at the top level
-  const name = useLegend$($personalStateCreateProfile.name)
-  const profileType = useLegend$($personalStateCreateProfile.profile_type)
-  const isSubmitted = useLegend$($personalStateCreateProfile.submitted)
-  const isNameValid = useLegend$($personalStateCreateProfile.isNameValid)
-  const isProfileTypeValid = useLegend$($personalStateCreateProfile.isProfileTypeValid)
-  const isValid = useLegend$($personalStateCreateProfile.isValid)
+  const name = useValue($personalStateCreateProfile.name)
+  const profileType = useValue($personalStateCreateProfile.profile_type)
+  const isSubmitted = useValue($personalStateCreateProfile.submitted)
+  const isNameValid = useValue($personalStateCreateProfile.isNameValid)
+  const isProfileTypeValid = useValue($personalStateCreateProfile.isProfileTypeValid)
+  const isValid = useValue($personalStateCreateProfile.isValid)
   const { handlePressIn } = pressableAnimation();
 
   useEffect(() => {

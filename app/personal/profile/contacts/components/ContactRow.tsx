@@ -4,11 +4,11 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import {
     $contactsState,
     type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
+import { useValue } from '@legendapp/state/react';
 import { Pressable } from 'react-native';
 import { styles } from '../contacts.styles';
 
@@ -20,7 +20,7 @@ export type ContactRowProps = {
 
 export default function ContactRow({ id, kind, onOpenActions }: ContactRowProps) {
   const { handlePressIn } = pressableAnimation();
-  const item = useLegend$(
+  const item = useValue(
     kind === 'contacts'
       ? $contactsState.contactsById[id]
       : $contactsState.addedYouById[id]

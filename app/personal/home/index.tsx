@@ -3,14 +3,14 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
+import { useValue } from '@legendapp/state/react';
 import { Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 export default function Home() {
   const { handlePressIn } = pressableAnimation();
-  const currentMode = useLegend$(appMode$.mode);
+  const currentMode = useValue(appMode$.mode);
 
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';

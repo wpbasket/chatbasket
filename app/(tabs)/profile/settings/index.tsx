@@ -11,7 +11,6 @@ import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { settingApi } from '@/lib/publicLib/settingApi/public.api.setting';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { setAppMode } from '@/state/appMode/state.appMode';
@@ -19,6 +18,7 @@ import { authState } from '@/state/auth/state.auth';
 import { setting$ } from '@/state/settings/state.setting';
 import { hideModal, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
+import { useValue } from '@legendapp/state/react';
 import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import CreateSettingsFlows from './settings.flows';
@@ -35,7 +35,7 @@ export default function Settings() {
   }, []);
 
   const { handlePressIn } = pressableAnimation();
-  const email = useLegend$(authState.user.email);
+  const email = useValue(authState.user.email);
 
   const { editEmail, editPassword } = CreateSettingsFlows({
     settingApi,

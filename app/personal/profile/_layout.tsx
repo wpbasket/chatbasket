@@ -1,18 +1,30 @@
+import LoadingScreen from "@/components/ui/common/LoadingScreen";
 import { ThemedView } from "@/components/ui/common/ThemedView";
-import { useLegend$ } from "@/hooks/commonHooks/hooks.useLegend";
+import { PersonalStorageGetUser } from "@/lib/storage/personalStorage/personal.storage.user";
 import { authState } from "@/state/auth/state.auth";
+import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile";
+import { useValue } from "@legendapp/state/react";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
-import { PersonalStorageGetUser } from "@/lib/storage/personalStorage/personal.storage.user";
 
 export default function PersonalProfileScreenLayout() {
-  const isInTheProfileUpdateMode = useLegend$(authState.isInTheProfileUpdateMode);
-  
+  const isInTheProfileUpdateMode = useValue(authState.isInTheProfileUpdateMode);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    PersonalStorageGetUser();
+    const init = async () => {
+      await PersonalStorageGetUser();
+      await PersonalUtilGetUser();
+      setLoading(false);
+    }
+    init();
   }, []);
+
+  if (loading) {
+    return <LoadingScreen />
+  }
 
   return (
     <>

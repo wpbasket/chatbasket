@@ -1,6 +1,6 @@
 // components/modals/AppModal.tsx
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { modalActions, modals$ } from '@/state/modals/state.modals';
+import { useValue } from '@legendapp/state/react';
 import React, { useState } from 'react';
 import { LayoutChangeEvent, Modal, Platform, Pressable, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
@@ -12,7 +12,7 @@ import { LoadingModal } from './types/LoadingModal';
 
 export function AppModal() {
   // Full stack of modals; last item is top-most
-  const stack = useLegend$(modals$);
+  const stack = useValue(modals$);
   const isAnyVisible = stack.length > 0;
 
   // Track measured content size per modal for accurate positioning

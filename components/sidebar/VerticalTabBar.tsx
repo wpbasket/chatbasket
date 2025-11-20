@@ -1,7 +1,7 @@
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol'
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons'
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend'
 import { appMode$ } from '@/state/appMode/state.appMode'
+import { useValue } from '@legendapp/state/react'
 import { Href, useRouter, useSegments } from "expo-router"
 import { Pressable } from "react-native"
 import { StyleSheet } from "react-native-unistyles"
@@ -77,7 +77,7 @@ const personalTabs = [
 export default function VerticalTabBar() {
   const router = useRouter()
   const segments = useSegments()
-  const mode = useLegend$(appMode$.mode)
+  const mode = useValue(appMode$.mode)
 
   return (
     <ThemedView style={styles.sidebar}>

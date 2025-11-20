@@ -1,7 +1,6 @@
 // import '../unistyles'
 import { AppModal } from '@/components/modals/AppModal';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/commonStorage/storage.auth';
 import { appMode$ } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
@@ -12,6 +11,7 @@ import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useValue } from '@legendapp/state/react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { SplashScreen, Stack } from 'expo-router';
@@ -50,9 +50,9 @@ export default function RootLayout() {
   }, []); // This runs only once on mount
 
   // const lock = true;
-  const lock = useLegend$(authState.isLoggedIn);
-  const sentOtp = useLegend$(authState.isSentOtp);
-  const mode = useLegend$(appMode$.mode);
+  const lock = useValue(authState.isLoggedIn);
+  const sentOtp = useValue(authState.isSentOtp);
+  const mode = useValue(appMode$.mode);
 
   const themeName = UnistylesRuntime.themeName;
 

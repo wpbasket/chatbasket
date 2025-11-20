@@ -1,7 +1,6 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import {
     $contactRequestsState,
@@ -11,6 +10,7 @@ import {
 import { showContactAlert } from '@/utils/commonUtils/util.contactMessages';
 import { hideModal, runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { observable } from '@legendapp/state';
+import { useValue } from '@legendapp/state/react';
 import { useRef } from 'react';
 import type { GestureResponderEvent } from 'react-native';
 import { Pressable, TextInput, View } from 'react-native';
@@ -140,7 +140,7 @@ type AddContactUsernameInputProps = {
 };
 
 const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddContactUsernameInputProps) => {
-  const usernameValue = useLegend$(addContact$.username);
+  const usernameValue = useValue(addContact$.username);
   const lettersRef = useRef<TextInput | null>(null);
   const numbersRef = useRef<TextInput | null>(null);
   const lettersValue = (usernameValue ?? '').slice(0, 4);
@@ -233,30 +233,30 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
 };
 
 type AddContactNicknameInputProps = {
-	styles: ContactsStyles;
+  styles: ContactsStyles;
 };
 
 const AddContactNicknameInput = ({ styles: contactStyles }: AddContactNicknameInputProps) => {
-	const profileType = useLegend$(addContact$.profileType);
-	const recipientId = useLegend$(addContact$.recipientId);
-	const nicknameValue = useLegend$(addContact$.nickname);
-	if (!recipientId || (profileType !== 'public' && profileType !== 'personal')) return null;
-	const maxLength = 40;
-	return (
-		<ThemedView style={{ gap: 5 }}>
-			<ThemedText type='default' selectable={false}>
-				Optional nickname (max 40 characters)
-			</ThemedText>
-			<TextInput
-				value={nicknameValue}
-				onChangeText={(text) => {
-					const next = text.slice(0, maxLength);
-					addContact$.nickname.set(next);
-				}}
-				style={[contactStyles.addInput, { outline: 'none' }]}
-			/>
-		</ThemedView>
-	);
+  const profileType = useValue(addContact$.profileType);
+  const recipientId = useValue(addContact$.recipientId);
+  const nicknameValue = useValue(addContact$.nickname);
+  if (!recipientId || (profileType !== 'public' && profileType !== 'personal')) return null;
+  const maxLength = 40;
+  return (
+    <ThemedView style={{ gap: 5 }}>
+      <ThemedText type='default' selectable={false}>
+        Optional nickname (max 40 characters)
+      </ThemedText>
+      <TextInput
+        value={nicknameValue}
+        onChangeText={(text) => {
+          const next = text.slice(0, maxLength);
+          addContact$.nickname.set(next);
+        }}
+        style={[contactStyles.addInput, { outline: 'none' }]}
+      />
+    </ThemedView>
+  );
 };
 
 type EditNicknameInputProps = {
@@ -264,7 +264,7 @@ type EditNicknameInputProps = {
 };
 
 const EditNicknameInput = ({ styles: contactStyles }: EditNicknameInputProps) => {
-  const value = useLegend$(editNickname$.value);
+  const value = useValue(editNickname$.value);
   const maxLength = 40;
   return (
     <ThemedView style={{ gap: 4 }}>
@@ -288,7 +288,7 @@ type AddContactErrorLabelProps = {
 };
 
 const AddContactErrorLabel = ({ styles: contactStyles }: AddContactErrorLabelProps) => {
-  const errorMessage = useLegend$(addContact$.error);
+  const errorMessage = useValue(addContact$.error);
   if (!errorMessage) return null;
   return (
     <ThemedText type='default' style={contactStyles.inputError} selectable={false}>
@@ -302,8 +302,8 @@ type AddContactProfileNoteProps = {
 };
 
 const AddContactProfileNote = ({ styles: contactStyles }: AddContactProfileNoteProps) => {
-  const profileType = useLegend$(addContact$.profileType);
-  const name = useLegend$(addContact$.name);
+  const profileType = useValue(addContact$.profileType);
+  const name = useValue(addContact$.name);
   if (!profileType && !name) return null;
   return (
     <ThemedView style={{ gap: 4 }}>
@@ -342,9 +342,9 @@ type AddContactActionButtonsProps = {
 };
 
 const AddContactActionButtons = ({ styles: contactStyles, handlePressIn, onCreateContact }: AddContactActionButtonsProps) => {
-  const checking = useLegend$(addContact$.isChecking);
-  const recipientId = useLegend$(addContact$.recipientId);
-  const profileType = useLegend$(addContact$.profileType);
+  const checking = useValue(addContact$.isChecking);
+  const recipientId = useValue(addContact$.recipientId);
+  const profileType = useValue(addContact$.profileType);
   const ctaLabel = profileType === 'public' ? 'Add contact' : 'Send request';
   const hasRecipient = !!recipientId;
   const primaryLabel = hasRecipient ? ctaLabel : 'Check username';
@@ -385,7 +385,7 @@ type EditNicknameActionButtonsProps = {
 };
 
 const EditNicknameActionButtons = ({ styles: contactStyles, handlePressIn, onSaveNickname }: EditNicknameActionButtonsProps) => {
-  const saving = useLegend$(editNickname$.isSaving);
+  const saving = useValue(editNickname$.isSaving);
   return (
     <ThemedView style={contactStyles.actionRow}>
       <Pressable

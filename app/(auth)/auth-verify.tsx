@@ -4,7 +4,6 @@ import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal'
 import { Platform, Pressable, TextInput, View } from 'react-native'
 import { StyleSheet } from 'react-native-unistyles'
 
-import { useLegend$ } from '@/hooks/commonHooks/hooks.useLegend'
 import { ApiError } from '@/lib/constantLib'
 import { authApi } from '@/lib/constantLib/authApi/api.auth'
 import { setSession } from '@/lib/storage/commonStorage/storage.auth'
@@ -12,19 +11,20 @@ import { authState } from '@/state/auth/state.auth'
 import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup'
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown'
 import { getUser } from '@/utils/publicUtils/public.util.profile'
+import { useValue } from '@legendapp/state/react'
 import { router } from 'expo-router'
 import { useEffect } from 'react'
 
 export default function AuthVerification() {
-    const otp = useLegend$(loginOrSignup$.otp)
-    const isOtpValid = useLegend$(loginOrSignup$.isOtpValid)
-    const email = useLegend$(loginOrSignup$.email)
-    const isSubmited = useLegend$(loginOrSignup$.submitted)
-    const isSignup = useLegend$(loginOrSignup$.isSignup)
-    const isSentOtp = useLegend$(authState.isSentOtp)
-    const resendCooldown = useLegend$(loginOrSignup$.resendCooldown)
-    const resendAttempts = useLegend$(loginOrSignup$.resendAttempts)
-    const resendExpiryAt = useLegend$(loginOrSignup$.resendExpiryAt)
+    const otp = useValue(loginOrSignup$.otp)
+    const isOtpValid = useValue(loginOrSignup$.isOtpValid)
+    const email = useValue(loginOrSignup$.email)
+    const isSubmited = useValue(loginOrSignup$.submitted)
+    const isSignup = useValue(loginOrSignup$.isSignup)
+    const isSentOtp = useValue(authState.isSentOtp)
+    const resendCooldown = useValue(loginOrSignup$.resendCooldown)
+    const resendAttempts = useValue(loginOrSignup$.resendAttempts)
+    const resendExpiryAt = useValue(loginOrSignup$.resendExpiryAt)
     const MAX_RESENDS = 3
 
     useEffect(() => {
