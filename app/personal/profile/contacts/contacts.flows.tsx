@@ -3,12 +3,12 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import {
-    $contactRequestsState,
-    $contactsState,
-    type ContactEntry,
+  $contactRequestsState,
+  $contactsState,
+  type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
-import { showContactAlert } from '@/utils/commonUtils/util.contactMessages';
 import { hideModal, runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
 import { observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
 import { useRef } from 'react';

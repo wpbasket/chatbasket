@@ -3,7 +3,7 @@ import { observable } from '@legendapp/state'
 
 export type AppMode = 'public' | 'personal'
 
-const initialMode: AppMode = (PreferencesStorage.getMode?.() as AppMode | null) ?? 'public'
+const initialMode: AppMode = (PreferencesStorage.getMode?.() as AppMode | null) ?? 'personal'
 
 export const appMode$ = observable({
   mode: initialMode as AppMode,

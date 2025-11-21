@@ -1,13 +1,13 @@
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import {
-    $contactRequestsState,
-    $contactsState,
-    type ContactEntry,
-    type PendingRequestEntry,
-    type SentRequestEntry,
+  $contactRequestsState,
+  $contactsState,
+  type ContactEntry,
+  type PendingRequestEntry,
+  type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
-import { showContactAlert } from '@/utils/commonUtils/util.contactMessages';
 import { runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
 import type { GestureResponderEvent } from 'react-native';
 
 export type RequestsFlowsDeps = {
