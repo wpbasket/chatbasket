@@ -46,7 +46,8 @@
           "microphonePermission": "Record videos to share on your personal or public timeline."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
