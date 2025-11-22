@@ -4,8 +4,8 @@ type MessageDictionary = Record<string, string>;
 
 const successMessages: MessageDictionary = {
   public_contact_added: 'Contact added successfully.',
+  personal_contact_added: 'Contact added. You are now mutual contacts.',
   contact_request_sent: 'Contact request sent.',
-  contact_request_accepted: 'Contact request accepted.',
   contact_request_declined: 'Contact request declined.',
   contact_request_undone: 'Contact request withdrawn.',
   contact_deleted: 'Contact removed.',

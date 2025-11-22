@@ -20,7 +20,7 @@ import { Memo, Show, useValue } from '@legendapp/state/react';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView } from 'react-native';
-import { styles } from './profile.styles';
+import styles from './profile.styles';
 
 // Empty State Component
 function ProfileEmptyState() {

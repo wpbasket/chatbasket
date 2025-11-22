@@ -84,6 +84,30 @@ export const $contactsState = observable({
     $contactsState.addedYouById.set(byId);
     $contactsState.addedYouIds.set(sorted.map((entry) => entry.id));
   },
+  setContactMutual(id: string, isMutual: boolean) {
+    const byId = $contactsState.contactsById[id];
+    if (byId) {
+      byId.isMutual.set(isMutual);
+    }
+
+    const contacts = $contactsState.contacts.get();
+    const index = contacts.findIndex((entry) => entry.id === id);
+    if (index !== -1) {
+      $contactsState.contacts[index].isMutual.set(isMutual);
+    }
+  },
+  setAddedYouMutual(id: string, isMutual: boolean) {
+    const byId = $contactsState.addedYouById[id];
+    if (byId) {
+      byId.isMutual.set(isMutual);
+    }
+
+    const addedYou = $contactsState.addedYou.get();
+    const index = addedYou.findIndex((entry) => entry.id === id);
+    if (index !== -1) {
+      $contactsState.addedYou[index].isMutual.set(isMutual);
+    }
+  },
   markFetched() {
     $contactsState.lastFetchedAt.set(Date.now());
   },

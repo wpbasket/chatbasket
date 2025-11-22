@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { Image, Pressable } from 'react-native';
-import { styles } from '../update-profile.styles';
+import styles from '../update-profile.styles';
 
 type UpdateProfileAvatarSectionProps = {
   avatarUri?: string | null;
@@ -12,7 +12,7 @@ type UpdateProfileAvatarSectionProps = {
   onPressInChangeAvatar: () => void;
 };
 
-export function UpdateProfileAvatarSection({
+export default function UpdateProfileAvatarSection({
   avatarUri,
   hasAvatar,
   showAvatarError,

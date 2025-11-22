@@ -20,9 +20,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { UpdateProfileAvatarSection } from './components/UpdateProfileAvatarSection';
-import { UpdateProfileForm } from './components/UpdateProfileForm';
-import { styles } from './update-profile.styles';
+import UpdateProfileAvatarSection from './components/UpdateProfileAvatarSection';
+import UpdateProfileForm from './components/UpdateProfileForm';
+import styles from './update-profile.styles';
 
 
 export default function PersonalUpdateProfile() {

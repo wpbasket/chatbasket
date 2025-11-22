@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native-unistyles';
 
-export const styles = StyleSheet.create((theme, rt) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
     paddingTop: rt.insets.top,
@@ -109,4 +109,5 @@ export const styles = StyleSheet.create((theme, rt) => ({
   },
 }));
 
+export default styles;
 export type ProfileStyles = typeof styles;

@@ -1,14 +1,14 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { Pressable, View } from 'react-native';
-import { styles } from '../settings.styles';
+import styles from '../settings.styles';
 
 type SettingsPasswordRowProps = {
   onPress: (event: any) => void | Promise<void>;
   onPressIn: () => void;
 };
 
-export function SettingsPasswordRow({
+export default function SettingsPasswordRow({
   onPress,
   onPressIn,
 }: SettingsPasswordRowProps) {

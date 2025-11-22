@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { Pressable } from 'react-native';
-import { styles } from '../contacts.styles';
+import styles from '../contacts.styles';
 
 export type ContactsHeaderSectionProps = {
   pendingCount: number;
@@ -15,7 +15,7 @@ export type ContactsHeaderSectionProps = {
   onPressAddContact: () => void;
 };
 
-export function ContactsHeaderSection({
+export default function ContactsHeaderSection({
   pendingCount,
   selectedTab,
   contactsCount,

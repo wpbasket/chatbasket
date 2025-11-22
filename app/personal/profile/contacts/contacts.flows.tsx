@@ -438,7 +438,11 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         );
         hideModal();
         showContactAlert(response.message, 'Request sent.');
-        if (response.message === 'public_contact_added' || response.message === 'already_in_contacts') {
+        if (
+          response.message === 'public_contact_added' ||
+          response.message === 'personal_contact_added' ||
+          response.message === 'already_in_contacts'
+        ) {
           await fetchContacts();
         } else if (response.message === 'contact_request_sent' || response.message === 'pending_request_exists') {
           $contactRequestsState.markFetched();
@@ -526,12 +530,10 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
           .get()
           .filter((entry) => entry.id !== contact.id)
       );
-      const updatedAddedYou = $contactsState.addedYou
-        .get()
-        .map((entry) =>
-          entry.id === contact.id ? { ...entry, isMutual: false } : entry
-        );
-      $contactsState.setAddedYou(updatedAddedYou);
+      const addedYouEntry = $contactsState.addedYouById[contact.id].get();
+      if (addedYouEntry) {
+        $contactsState.setAddedYouMutual(contact.id, false);
+      }
     } catch (error: any) {
       showContactAlert(error?.response?.data?.message, 'Could not remove contact.');
     }
@@ -544,16 +546,20 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
       );
       showContactAlert(response.message, 'Contact updated.');
 
-      if (response.message === 'public_contact_added' || response.message === 'already_in_contacts') {
+      if (
+        response.message === 'public_contact_added' ||
+        response.message === 'personal_contact_added' ||
+        response.message === 'already_in_contacts'
+      ) {
         const existing = $contactsState.contacts.get();
         const exists = existing.some((c) => c.id === contact.id);
         if (!exists) {
           $contactsState.setContacts([...existing, { ...contact, isMutual: true }]);
         }
-        const updatedAddedYou = $contactsState.addedYou
-          .get()
-          .map((entry) => (entry.id === contact.id ? { ...entry, isMutual: true } : entry));
-        $contactsState.setAddedYou(updatedAddedYou);
+        const addedYouEntry = $contactsState.addedYouById[contact.id].get();
+        if (addedYouEntry) {
+          $contactsState.setAddedYouMutual(contact.id, true);
+        }
       }
 
       if (response.message === 'contact_request_sent' || response.message === 'pending_request_exists') {
@@ -669,9 +675,15 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
 
   const openActionsFromAddedYou = async (contact: ContactEntry, event?: GestureResponderEvent) => {
     if (contact.isMutual) return;
-    const position = event
-      ? { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY }
-      : undefined;
+
+    // If there is no event (e.g. pressed the inline "Add" button on the row),
+    // perform a direct quick-add without opening the actions sheet.
+    if (!event) {
+      await handleAddContactQuick(contact);
+      return;
+    }
+
+    const position = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
 
     const controllers = [
       {

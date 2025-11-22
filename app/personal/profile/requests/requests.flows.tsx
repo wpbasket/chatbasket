@@ -6,7 +6,7 @@ import {
   type PendingRequestEntry,
   type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
-import { runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { runWithLoading, showConfirmDialog } from '@/utils/commonUtils/util.modal';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
 import type { GestureResponderEvent } from 'react-native';
 
@@ -21,35 +21,69 @@ export default function CreateRequestsFlows({
 }: RequestsFlowsDeps) {
   const addContactFromPending = (request: PendingRequestEntry) => {
     const existingContacts = contactsState.contacts.get();
-    if (existingContacts.some((entry) => entry.id === request.id)) {
-      return;
-    }
+    const isAlreadyContact = existingContacts.some((entry) => entry.id === request.id);
 
-    const newContact: ContactEntry = {
-      id: request.id,
-      name: request.name,
-      username: request.username,
-      bio: request.bio,
-      createdAt: request.requestedAt,
-      updatedAt: new Date().toISOString(),
-      avatarUrl: request.avatarUrl,
-      isMutual: true,
+    const existingAddedYou = contactsState.addedYou.get();
+    const existingIndex = existingAddedYou.findIndex((entry) => entry.id === request.id);
+
+    const baseEntry: ContactEntry =
+      existingIndex !== -1
+        ? existingAddedYou[existingIndex]
+        : {
+            id: request.id,
+            name: request.name,
+            username: request.username,
+            nickname: request.nickname,
+            bio: request.bio,
+            createdAt: request.requestedAt,
+            updatedAt: new Date().toISOString(),
+            avatarUrl: request.avatarUrl,
+            // Accepting a request means they added you; it does not automatically
+            // make the contact mutual until you add them back from "People who added you".
+            isMutual: false,
+          };
+
+    const updatedEntry: ContactEntry = {
+      ...baseEntry,
+      // If they are already in your contacts list, the relationship is mutual
+      // and the UI should show the mutual badge instead of the add button.
+      isMutual: isAlreadyContact,
     };
 
-    contactsState.setContacts([...existingContacts, newContact]);
-    const updatedAddedYou = contactsState.addedYou.get().filter((entry) => entry.id !== request.id);
-    contactsState.setAddedYou(updatedAddedYou);
+    if (existingIndex !== -1) {
+      const next = [...existingAddedYou];
+      next[existingIndex] = updatedEntry;
+      contactsState.setAddedYou(next);
+    } else {
+      contactsState.setAddedYou([...existingAddedYou, updatedEntry]);
+    }
   };
 
   const handleAccept = async (request: PendingRequestEntry) => {
     try {
-      const response = await runWithLoading(() =>
+      const existingContacts = contactsState.contacts.get();
+      const isAlreadyContact = existingContacts.some((entry) => entry.id === request.id);
+
+      const displayName =
+        request.nickname && request.nickname.trim().length > 0
+          ? request.nickname
+          : request.name;
+
+      await runWithLoading(() =>
         PersonalContactApi.acceptContactRequest({ contact_user_id: request.id })
       );
-      showContactAlert(response.message, 'Request accepted.');
+
+      const successMessage = isAlreadyContact
+        ? `Request accepted. You and ${displayName} are now mutual contacts.`
+        : `Request accepted. ${displayName} can now connect with you.`;
+
+      showContactAlert(null, successMessage);
       const pending = contactRequestsState.pending.get();
       contactRequestsState.setPending(pending.filter((entry) => entry.id !== request.id));
       addContactFromPending(request);
+      if (isAlreadyContact) {
+        contactsState.setContactMutual(request.id, true);
+      }
     } catch (err: any) {
       showContactAlert(err?.response?.data?.message, 'Could not accept request.');
     }
@@ -96,62 +130,16 @@ export default function CreateRequestsFlows({
   };
 
   const openPendingActions = async (request: PendingRequestEntry, event?: GestureResponderEvent) => {
-    const position = event
-      ? {
-          x: event.nativeEvent.pageX,
-          y: event.nativeEvent.pageY,
-        }
-      : undefined;
-
-    await showControllersModal(
-      [
-        {
-          id: 'accept',
-          label: 'Accept request',
-          onPress: () => handleAccept(request),
-        },
-        {
-          id: 'reject',
-          label: 'Decline request',
-          onPress: () => handleReject(request),
-        },
-      ],
-      {
-        position,
-        showConfirmButton: false,
-        showCancelButton: false,
-        closeOnControllerPress: true,
-      }
-    );
+    // Inline buttons on the row now handle Accept/Decline directly.
+    // Keep this function for future extensions, but do nothing for now.
+    return;
   };
 
   const openSentActions = async (request: SentRequestEntry, event?: GestureResponderEvent) => {
-    if (request.status?.toLowerCase() === 'declined') {
-      return;
-    }
-    const position = event
-      ? {
-          x: event.nativeEvent.pageX,
-          y: event.nativeEvent.pageY,
-        }
-      : undefined;
-
-    await showControllersModal(
-      [
-        {
-          id: 'undo',
-          label: 'Undo request',
-          onPress: () => handleUndo(request),
-        },
-      ],
-      {
-        position,
-        showConfirmButton: false,
-        showCancelButton: false,
-        closeOnControllerPress: true,
-      }
-    );
+    // Inline Undo button on the row now handles undoing sent requests.
+    // Keep this function for future extensions, but do nothing for now.
+    return;
   };
 
-  return { openPendingActions, openSentActions };
+  return { openPendingActions, openSentActions, handleAccept, handleReject, handleUndo };
 }

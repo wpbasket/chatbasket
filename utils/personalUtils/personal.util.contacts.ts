@@ -1,13 +1,13 @@
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import type {
-    PendingContactRequest,
-    SentContactRequest,
+  PendingContactRequest,
+  SentContactRequest,
 } from '@/lib/personalLib/models/personal.model.contact';
 import {
-    $contactRequestsState,
-    $contactsState,
-    type PendingRequestEntry,
-    type SentRequestEntry,
+  $contactRequestsState,
+  $contactsState,
+  type PendingRequestEntry,
+  type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 
 export async function PersonalUtilFetchContactRequests() {
@@ -42,7 +42,7 @@ export async function PersonalUtilFetchContactRequests() {
 
     $contactRequestsState.setPending(response.pending_requests.map(toPendingEntry));
 
-    const existingContactIds = new Set($contactsState.contacts.get().map((c) => c.id));
+    const existingContactIds = new Set($contactsState.contactsIds.get());
     const sentFiltered = response.sent_requests
       .map(toSentEntry)
       .filter((s) => !existingContactIds.has(s.id));

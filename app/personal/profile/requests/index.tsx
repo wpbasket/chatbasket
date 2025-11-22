@@ -19,11 +19,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect } from 'react';
 import { Platform, RefreshControl } from 'react-native';
 import PendingRequestRow from './components/PendingRequestRow';
-import { RequestsHeaderSummary } from './components/RequestsHeaderSummary';
-import { RequestsSegmentTabs } from './components/RequestsSegmentTabs';
+import RequestsHeaderSummary from './components/RequestsHeaderSummary';
+import RequestsSegmentTabs from './components/RequestsSegmentTabs';
 import SentRequestRow from './components/SentRequestRow';
 import CreateRequestsFlows from './requests.flows';
-import { styles } from './requests.styles';
+import styles from './requests.styles';
 
 export default function ContactRequests() {
   const pendingIds = useValue($contactRequestsState.pendingIds);
@@ -53,7 +53,7 @@ export default function ContactRequests() {
       };
     }, [fetchRequests, lastFetchedAt])
   );
-  const { openPendingActions, openSentActions } = CreateRequestsFlows({
+  const { openPendingActions, openSentActions, handleAccept, handleReject, handleUndo } = CreateRequestsFlows({
     contactRequestsState: $contactRequestsState,
     contactsState: $contactsState,
   });
@@ -72,16 +72,19 @@ export default function ContactRequests() {
           <PendingRequestRow
             id={item}
             onOpenActions={openPendingActions}
+            onAccept={handleAccept}
+            onReject={handleReject}
           />
         ) : (
           <SentRequestRow
             id={item}
             onOpenActions={openSentActions}
+            onUndo={handleUndo}
           />
         )}
       </ThemedView>
     ),
-    [openPendingActions, openSentActions, selectedTab]
+    [openPendingActions, openSentActions, handleAccept, handleReject, handleUndo, selectedTab]
   );
 
   const ListEmptyComponent = useCallback(

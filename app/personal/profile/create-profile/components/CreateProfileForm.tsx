@@ -2,7 +2,7 @@ import { Dropdown } from "@/components/ui/common/DropDown";
 import { ThemedText } from "@/components/ui/common/ThemedText";
 import { ThemedView } from "@/components/ui/common/ThemedView";
 import { Pressable, TextInput } from "react-native";
-import { styles } from "../create-profile.styles";
+import styles from "../create-profile.styles";
 
 type CreateProfileFormProps = {
   nameValue: string;
@@ -15,7 +15,7 @@ type CreateProfileFormProps = {
   onPressInSubmit: () => void;
 };
 
-export function CreateProfileForm({
+export default function CreateProfileForm({
   nameValue,
   profileTypeValue,
   showNameError,

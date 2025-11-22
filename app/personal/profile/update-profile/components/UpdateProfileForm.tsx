@@ -2,7 +2,7 @@ import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { Pressable, TextInput } from 'react-native';
-import { styles } from '../update-profile.styles';
+import styles from '../update-profile.styles';
 
 type UpdateProfileFormProps = {
   nameValue: string;
@@ -18,7 +18,7 @@ type UpdateProfileFormProps = {
   onPressInSubmit: () => void;
 };
 
-export function UpdateProfileForm({
+export default function UpdateProfileForm({
   nameValue,
   bioValue,
   profileVisibleToValue,

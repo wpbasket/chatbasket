@@ -5,12 +5,12 @@ import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import {
-    $contactsState,
-    type ContactEntry,
+  $contactsState,
+  type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { useValue } from '@legendapp/state/react';
 import { Pressable } from 'react-native';
-import { styles } from '../contacts.styles';
+import styles from '../contacts.styles';
 
 export type ContactRowProps = {
   id: string;
@@ -31,33 +31,62 @@ export default function ContactRow({ id, kind, onOpenActions }: ContactRowProps)
   }
 
   const displayName = item.nickname ?? item.name;
+  const shouldShowQuickAddButton = kind === 'addedYou' && !item.isMutual;
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.row, { opacity: pressed ? 0.1 : 1 }]}
-      onPressIn={handlePressIn}
-      onPress={(event) => onOpenActions(item, event)}
-    >
-      <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
-      <ThemedView style={styles.rowContent}>
-        <ThemedText type='semibold' style={styles.rowName} selectable>
-          {displayName}
-        </ThemedText>
-        <ThemedText type='small' style={styles.rowUsername} selectable>
-          <UsernameDisplay
-            username={item.username}
-            lettersStyle={styles.usernameLetters}
-            numbersStyle={styles.usernameNumbers}
-          />
-        </ThemedText>
-        {/* Bio intentionally hidden in contact card */}
-      </ThemedView>
-      {item.isMutual ? (
-        <ThemedView style={styles.badge}>
-          <FontAwesome5Icon name='account.friends' size={14} />
-          <ThemedText type='small' selectable={false}>Mutual</ThemedText>
+    <ThemedView style={styles.row}>
+      <Pressable
+        style={({ pressed }) => [
+          {
+            opacity: pressed ? 0.1 : 1,
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 16,
+          },
+        ]}
+        onPressIn={handlePressIn}
+        onPress={(event) => {
+          if (kind === 'contacts') {
+            onOpenActions(item, event);
+          }
+        }}
+      >
+        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
+        <ThemedView style={styles.rowContent}>
+          <ThemedText type='semibold' style={styles.rowName} selectable>
+            {displayName}
+          </ThemedText>
+          <ThemedText type='small' style={styles.rowUsername} selectable>
+            <UsernameDisplay
+              username={item.username}
+              lettersStyle={styles.usernameLetters}
+              numbersStyle={styles.usernameNumbers}
+            />
+          </ThemedText>
+          {/* Bio intentionally hidden in contact card */}
         </ThemedView>
+        {item.isMutual ? (
+          <ThemedView style={styles.badge}>
+            <FontAwesome5Icon name='account.friends' size={14} />
+            <ThemedText type='small' selectable={false}>Mutual</ThemedText>
+          </ThemedView>
+        ) : null}
+      </Pressable>
+      {shouldShowQuickAddButton ? (
+        <Pressable
+          onPressIn={handlePressIn}
+          onPress={() => onOpenActions(item)}
+          style={({ pressed }) => [
+            styles.addButton,
+            pressed ? styles.addButtonPressed : null,
+          ]}
+        >
+          <ThemedText type='smallBold' style={styles.addButtonLabel} selectable={false}>
+            + Add to contacts
+          </ThemedText>
+        </Pressable>
       ) : null}
-    </Pressable>
+    </ThemedView>
   );
 }

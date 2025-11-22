@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { styles } from '../requests.styles';
+import styles from '../requests.styles';
 
 export type RequestsHeaderSummaryProps = {
   pendingCount: number;
@@ -9,7 +9,7 @@ export type RequestsHeaderSummaryProps = {
   lastFetchedAt: any;
 };
 
-export function RequestsHeaderSummary({
+export default function RequestsHeaderSummary({
   pendingCount,
   sentCount,
   error,

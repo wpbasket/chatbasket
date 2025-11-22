@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native-unistyles';
 
-export const styles = StyleSheet.create((theme, rt) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
     paddingTop: rt.insets.top,
@@ -85,6 +85,37 @@ export const styles = StyleSheet.create((theme, rt) => ({
     fontSize: 11,
     opacity: 0.7,
   },
+  pendingActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pendingActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.neutral2,
+    borderTopRightRadius: 30,
+    borderTopLeftRadius: 20,
+    borderBottomRightRadius: 10,
+    borderBottomLeftRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  pendingActionButtonPressed: {
+    opacity: 0.7,
+  },
+  pendingActionButtonLabelPrimary: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pendingActionButtonLabelDanger: {
+    color: theme.colors.red,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   separator: {
     height: 1,
     backgroundColor: theme.colors.neutral,
@@ -112,4 +143,5 @@ export const styles = StyleSheet.create((theme, rt) => ({
   },
 }));
 
+export default styles;
 export type RequestsStyles = typeof styles;

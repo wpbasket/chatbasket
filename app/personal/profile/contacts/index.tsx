@@ -24,10 +24,10 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, RefreshControl } from 'react-native';
 import ContactRow from './components/ContactRow';
-import { ContactsHeaderSection } from './components/ContactsHeaderSection';
-import { ContactsSegmentTabs } from './components/ContactsSegmentTabs';
+import ContactsHeaderSection from './components/ContactsHeaderSection';
+import ContactsSegmentTabs from './components/ContactsSegmentTabs';
 import CreateContactsFlows from './contacts.flows';
-import { styles } from './contacts.styles';
+import styles from './contacts.styles';
 
 type ContactsListItem =
   | { kind: 'error'; id: string }
@@ -119,41 +119,47 @@ export default function Contacts() {
     }, [fetchContacts, fetchRequests, lastFetchedAt])
   );
 
+  const contactsItems = useMemo<ContactsListItem[]>(() => {
+    return contactsIds.map((contactId, index) => ({
+      kind: 'contact',
+      id: contactId,
+      contactId,
+      isLastInSection: index === contactsIds.length - 1,
+    }));
+  }, [contactsIds]);
+
+  const addedYouItems = useMemo<ContactsListItem[]>(() => {
+    return addedYouIds.map((contactId, index) => ({
+      kind: 'addedYou',
+      id: contactId,
+      contactId,
+      isLastInSection: index === addedYouIds.length - 1,
+    }));
+  }, [addedYouIds]);
+
   const listData = useMemo<ContactsListItem[]>(() => {
     const items: ContactsListItem[] = [];
+
     if (error) {
       items.push({ kind: 'error', id: 'error' });
     }
 
     if (selectedTab === 'contacts') {
-      if (!loading && !error && contactsIds.length === 0 && lastFetchedAt != null) {
+      if (!loading && !error && contactsItems.length === 0 && lastFetchedAt != null) {
         items.push({ kind: 'emptyContacts', id: 'empty-contacts' });
       } else {
-        contactsIds.forEach((contactId, index) => {
-          items.push({
-            kind: 'contact',
-            id: contactId,
-            contactId,
-            isLastInSection: index === contactsIds.length - 1,
-          });
-        });
+        items.push(...contactsItems);
       }
     } else {
-      if (!loading && !error && addedYouIds.length === 0 && lastFetchedAt != null) {
+      if (!loading && !error && addedYouItems.length === 0 && lastFetchedAt != null) {
         items.push({ kind: 'emptyAddedYou', id: 'empty-addedYou' });
       } else {
-        addedYouIds.forEach((contactId, index) => {
-          items.push({
-            kind: 'addedYou',
-            id: contactId,
-            contactId,
-            isLastInSection: index === addedYouIds.length - 1,
-          });
-        });
+        items.push(...addedYouItems);
       }
     }
+
     return items;
-  }, [addedYouIds, contactsIds, error, lastFetchedAt, loading, selectedTab]);
+  }, [addedYouItems, contactsItems, error, lastFetchedAt, loading, selectedTab]);
 
   const keyExtractor = useCallback((item: ContactsListItem) => item.id, []);
 

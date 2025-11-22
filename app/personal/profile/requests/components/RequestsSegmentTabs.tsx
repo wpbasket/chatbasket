@@ -1,14 +1,14 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { Pressable } from 'react-native';
-import { styles } from '../requests.styles';
+import styles from '../requests.styles';
 
 export type RequestsSegmentTabsProps = {
   selectedTab: 'pending' | 'sent';
   onChangeTab: (tab: 'pending' | 'sent') => void;
 };
 
-export function RequestsSegmentTabs({
+export default function RequestsSegmentTabs({
   selectedTab,
   onChangeTab,
 }: RequestsSegmentTabsProps) {

@@ -20,10 +20,10 @@ import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { UnistylesRuntime } from 'react-native-unistyles';
-import { SettingsEmailRow } from './components/SettingsEmailRow';
-import { SettingsPasswordRow } from './components/SettingsPasswordRow';
+import SettingsEmailRow from './components/SettingsEmailRow';
+import SettingsPasswordRow from './components/SettingsPasswordRow';
 import CreateSettingsFlows from './settings.flows';
-import { styles } from './settings.styles';
+import styles from './settings.styles';
 
 export default function Settings() {
   const MAX_RESENDS = 3;

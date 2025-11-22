@@ -15,8 +15,8 @@ import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile
 import { useValue } from "@legendapp/state/react"
 import { router } from "expo-router"
 import { useEffect } from "react"
-import { CreateProfileForm } from "./components/CreateProfileForm"
-import { styles } from "./create-profile.styles"
+import CreateProfileForm from "./components/CreateProfileForm"
+import styles from "./create-profile.styles"
 
 export default function PersonalCreateProfile() {
   // Redirect to profile if user already has a profile

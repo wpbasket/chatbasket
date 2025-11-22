@@ -1,14 +1,14 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { Pressable } from 'react-native';
-import { styles } from '../contacts.styles';
+import styles from '../contacts.styles';
 
 export type ContactsSegmentTabsProps = {
   selectedTab: 'contacts' | 'addedYou';
   onChangeTab: (tab: 'contacts' | 'addedYou') => void;
 };
 
-export function ContactsSegmentTabs({
+export default function ContactsSegmentTabs({
   selectedTab,
   onChangeTab,
 }: ContactsSegmentTabsProps) {
