@@ -7,7 +7,7 @@ import {
   $contactsState,
   type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
-import { hideModal, runWithLoading, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { hideModal, runWithLoading, showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
 import { observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
@@ -344,10 +344,8 @@ type AddContactActionButtonsProps = {
 const AddContactActionButtons = ({ styles: contactStyles, handlePressIn, onCreateContact }: AddContactActionButtonsProps) => {
   const checking = useValue(addContact$.isChecking);
   const recipientId = useValue(addContact$.recipientId);
-  const profileType = useValue(addContact$.profileType);
-  const ctaLabel = profileType === 'public' ? 'Add contact' : 'Send request';
   const hasRecipient = !!recipientId;
-  const primaryLabel = hasRecipient ? ctaLabel : 'Check username';
+  const primaryLabel = hasRecipient ? 'Add to contacts' : 'Check username';
 
   return (
     <ThemedView style={contactStyles.actionRow}>
@@ -437,7 +435,23 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
           PersonalContactApi.createContact({ contact_user_id: recipientId, nickname })
         );
         hideModal();
-        showContactAlert(response.message, 'Request sent.');
+
+        const isMutualAdd =
+          response.message === 'public_contact_added' ||
+          response.message === 'personal_contact_added';
+        const addedYouEntry = $contactsState.addedYouById[recipientId].get();
+
+        if (isMutualAdd && addedYouEntry) {
+          const rawDisplayName =
+            addedYouEntry.nickname ?? addedYouEntry.name ?? addContact$.name.get();
+          const displayName =
+            rawDisplayName && rawDisplayName.trim().length > 0
+              ? rawDisplayName.trim()
+              : 'this contact';
+          showAlert(`Contact added. You and ${displayName} are now mutual contacts.`);
+        } else {
+          showContactAlert(response.message, 'Request sent.');
+        }
         if (
           response.message === 'public_contact_added' ||
           response.message === 'personal_contact_added' ||
@@ -544,7 +558,18 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
       const response = await runWithLoading(() =>
         PersonalContactApi.createContact({ contact_user_id: contact.id, nickname: null })
       );
-      showContactAlert(response.message, 'Contact updated.');
+      if (
+        response.message === 'public_contact_added' ||
+        response.message === 'personal_contact_added'
+      ) {
+        const rawDisplayName = contact.nickname ?? contact.name;
+        const displayName = rawDisplayName && rawDisplayName.trim().length > 0
+          ? rawDisplayName.trim()
+          : 'this contact';
+        showAlert(`Contact added. You and ${displayName} are now mutual contacts.`);
+      } else {
+        showContactAlert(response.message, 'Contact updated.');
+      }
 
       if (
         response.message === 'public_contact_added' ||
