@@ -19,7 +19,7 @@ export default function PostDetailsPage() {
 
 
     const goToUserProfile = () => {
-        router.push('/(temp)/tempprofile');
+        router.push('/public/home/tempprofile');
     };
 
     const goBack = () => {

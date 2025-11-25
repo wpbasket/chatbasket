@@ -25,7 +25,7 @@ export default function FollowerCard({ follower, interactive }: Props) {
     const goToUserProfile = () => {
         // Navigate to the user's profile
         currentUserStore.user.set(userInfo ?? null); // Set the user in the store
-        router.push(`/(temp)/tempprofile`);
+        router.push('/public/home/tempprofile');
     };
     return (
         <ThemedView style={styles.container}>

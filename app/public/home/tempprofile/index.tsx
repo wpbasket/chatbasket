@@ -6,7 +6,7 @@ import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { useValue } from '@legendapp/state/react';
 import { useCallback, useState } from 'react';
 import { StyleSheet } from 'react-native-unistyles';
-import NotFoundScreen from '../+not-found';
+import NotFoundScreen from '@/app/+not-found';
 
 type TABS = 'Posts' | 'Followers' | 'Following'
 

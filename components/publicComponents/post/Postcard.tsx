@@ -22,12 +22,12 @@ export default function Postcard({ post, interactive }: Props) {
   const goToPostDetails = () => {
     currentPostStore.post.set(post); // Set the current post in Legend State store
     currentUserStore.user.set(userInfo ?? null); // Set the user who made the post
-    router.push('/(temp)/post'); // Navigate to post details screen
+    router.push('/public/home/post'); // Navigate to post details screen
   };
 
   const goToUserProfile = () => {
     currentUserStore.user.set(userInfo ?? null);
-    router.push('/(temp)/tempprofile');
+    router.push('/public/home/tempprofile');
   };
 
   return (

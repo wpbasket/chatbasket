@@ -3,7 +3,20 @@ import { observable } from '@legendapp/state'
 
 export type AppMode = 'public' | 'personal'
 
-const initialMode: AppMode = (PreferencesStorage.getMode?.() as AppMode | null) ?? 'personal'
+function getInitialMode(): AppMode {
+  if (typeof window !== 'undefined') {
+    const path = window.location?.pathname ?? ''
+    if (path.startsWith('/public')) {
+      return 'public'
+    }
+    if (path.startsWith('/personal')) {
+      return 'personal'
+    }
+  }
+  return (PreferencesStorage.getMode?.() as AppMode | null) ?? 'public'
+}
+
+const initialMode: AppMode = getInitialMode()
 
 export const appMode$ = observable({
   mode: initialMode as AppMode,

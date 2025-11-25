@@ -4,12 +4,9 @@ import { ThemedView } from "@/components/ui/common/ThemedView";
 import { UnistylesRuntime } from "react-native-unistyles";
 import { DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { StyleSheet } from "react-native-unistyles";
-import { useValue } from "@legendapp/state/react";
-import { authState } from "@/state/auth/state.auth";
 
-export default function ExploreScreenLayout() {
+export default function PostScreenLayout() {
 
-  const lock = useValue(authState.isLoggedIn)
   return (
     <>
       <ThemeProvider value={UnistylesRuntime.colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

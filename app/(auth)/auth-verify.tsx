@@ -14,6 +14,7 @@ import { getUser } from '@/utils/publicUtils/public.util.profile'
 import { useValue } from '@legendapp/state/react'
 import { router } from 'expo-router'
 import { useEffect } from 'react'
+import { setAppMode } from '@/state/appMode/state.appMode'
 
 export default function AuthVerification() {
     const otp = useValue(loginOrSignup$.otp)
@@ -62,6 +63,7 @@ export default function AuthVerification() {
                 const platform = Platform.select({ ios: 'native', android: 'native', web: 'web' })
                 if (isSignup) {
                     const response = await authApi.AuthVerificationSignup({ email: email!, secret: otp!, platform: platform! });
+                    setAppMode('personal');
                     setSession(response.sessionId, response.userId, response.sessionExpiry)
                     // Fire-and-forget user fetch so root layout can update when ready
                     void getUser()
@@ -69,6 +71,7 @@ export default function AuthVerification() {
                 }
                 else {
                     const response = await authApi.AuthVerificationLogin({ email: email!, secret: otp!, platform: platform! });
+                    setAppMode('personal');
                     setSession(response.sessionId, response.userId, response.sessionExpiry)
                     // Fire-and-forget user fetch so root layout can update when ready
                     void getUser()

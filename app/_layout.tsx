@@ -136,19 +136,15 @@ export default function RootLayout() {
             <Stack.Protected guard={lock}>
               <Stack.Screen name='index' options={{ headerShown: false }} />
 
-              <Stack.Protected guard={lock && mode === 'public'}>
-                <Stack.Screen name="public" options={{ headerShown: false }} />
-              </Stack.Protected>
 
               <Stack.Protected guard={lock && mode === 'personal'}>
                 <Stack.Screen name="personal" options={{ headerShown: false }} />
               </Stack.Protected>
 
             </Stack.Protected>
-
-            <Stack.Protected guard={mode === 'public'}>
-              <Stack.Screen name="(temp)/post" options={{ headerShown: false }} />
-              <Stack.Screen name="(temp)/tempprofile" options={{ headerShown: false }} />
+            
+            <Stack.Protected guard={mode === 'public'} >
+              <Stack.Screen name="public" options={{ headerShown: false }} />
             </Stack.Protected>
 
             <Stack.Screen name="+not-found" />
