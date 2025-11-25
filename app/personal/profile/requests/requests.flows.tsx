@@ -1,10 +1,14 @@
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import {
-  $contactRequestsState,
-  $contactsState,
-  type ContactEntry,
-  type PendingRequestEntry,
-  type SentRequestEntry,
+    PersonalStorageSetContactRequests,
+    PersonalStorageSetContacts,
+} from '@/lib/storage/personalStorage/personal.storage.contacts';
+import {
+    $contactRequestsState,
+    $contactsState,
+    type ContactEntry,
+    type PendingRequestEntry,
+    type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { runWithLoading, showConfirmDialog } from '@/utils/commonUtils/util.modal';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
@@ -84,6 +88,8 @@ export default function CreateRequestsFlows({
       if (isAlreadyContact) {
         contactsState.setContactMutual(request.id, true);
       }
+      void PersonalStorageSetContactRequests();
+      void PersonalStorageSetContacts();
     } catch (err: any) {
       showContactAlert(err?.response?.data?.message, 'Could not accept request.');
     }
@@ -105,6 +111,8 @@ export default function CreateRequestsFlows({
       contactRequestsState.setPending(pending.filter((entry) => entry.id !== request.id));
       const updatedAddedYou = contactsState.addedYou.get().filter((entry) => entry.id !== request.id);
       contactsState.setAddedYou(updatedAddedYou);
+      void PersonalStorageSetContactRequests();
+      void PersonalStorageSetContacts();
     } catch (err: any) {
       showContactAlert(err?.response?.data?.message, 'Could not decline request.');
     }
@@ -124,6 +132,7 @@ export default function CreateRequestsFlows({
       showContactAlert(response.message, 'Request undone.');
       const sent = contactRequestsState.sent.get();
       contactRequestsState.setSent(sent.filter((entry) => entry.id !== request.id));
+      void PersonalStorageSetContactRequests();
     } catch (err: any) {
       showContactAlert(err?.response?.data?.message, 'Could not undo request.');
     }

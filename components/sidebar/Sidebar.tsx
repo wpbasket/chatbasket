@@ -60,11 +60,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   modeToggle: {
     paddingHorizontal: 10,
+    paddingRight:20,
     // paddingVertical: 1,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 30,
-    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 35,
+    borderBottomLeftRadius: 35,
+    borderTopRightRadius:60,
+    borderBottomRightRadius: 12,
     backgroundColor: theme.colors.primaryDark,
   },
   modeText: {

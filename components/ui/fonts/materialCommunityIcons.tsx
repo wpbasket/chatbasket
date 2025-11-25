@@ -9,7 +9,9 @@ const MAPPING = {
   'magnify.scan': 'magnify-scan',
   'account.settings': 'account-settings',
   'account.emailEdit': 'email-edit',
-  'edit': 'pencil-circle'
+  'edit': 'pencil-circle',
+  'contacts.fill': 'contacts',
+  'contacts.outline': 'contacts-outline',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

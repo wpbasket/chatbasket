@@ -6,17 +6,17 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
-import type { Contact } from '@/lib/personalLib/models/personal.model.contact';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
   $contactRequestsState,
   $contactsState,
-  type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
-import { PersonalUtilFetchContactRequests } from '@/utils/personalUtils/personal.util.contacts';
+import {
+  PersonalUtilFetchContactRequests,
+  PersonalUtilFetchContacts,
+} from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
 import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -66,30 +66,7 @@ export default function Contacts() {
   }, []);
 
   const fetchContacts = useCallback(async () => {
-    try {
-      $contactsState.setLoading(true);
-      $contactsState.setError(null);
-      const response = await PersonalContactApi.getContacts();
-      const toEntry = (contact: Contact): ContactEntry => ({
-        id: contact.id,
-        name: contact.name,
-        username: contact.username,
-        nickname: contact.nickname,
-        bio: contact.bio,
-        createdAt: contact.created_at,
-        updatedAt: contact.updated_at,
-        avatarUrl: contact.avatar_url ?? null,
-        isMutual: contact.is_mutual,
-      });
-
-      $contactsState.setContacts(response.contacts.map(toEntry));
-      $contactsState.setAddedYou(response.people_who_added_you.map(toEntry));
-      $contactsState.markFetched();
-    } catch (error: any) {
-      $contactsState.setError(error?.message ?? 'Failed to load contacts.');
-    } finally {
-      $contactsState.setLoading(false);
-    }
+    await PersonalUtilFetchContacts();
   }, []);
 
   const fetchRequests = useCallback(async () => {

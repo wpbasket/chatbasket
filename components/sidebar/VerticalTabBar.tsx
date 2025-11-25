@@ -7,6 +7,7 @@ import { Pressable } from "react-native"
 import { StyleSheet } from "react-native-unistyles"
 import { ThemedText } from "../ui/common/ThemedText"
 import { ThemedView } from "../ui/common/ThemedView"
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6'
 
 const publicTabs = [
   {
@@ -56,6 +57,18 @@ const personalTabs = [
       <IconSymbol
         size={20}
         name={focused ? "house.fill" : "house.line"}
+        color={color}
+      />
+    )
+  },
+  {
+    label: "Contacts",
+    slug: "contacts",
+    href: "/personal/contacts",
+    icon: (color: string, focused: boolean) => (
+      <FontAwesome6
+        size={20}
+        name="contact-book"
         color={color}
       />
     )
@@ -120,8 +133,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabItem: {
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingRight: 10,
+    paddingLeft:15,
+    borderTopLeftRadius: 25,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 10,
+    borderTopRightRadius: 35,
   },
   activeTab: {
     backgroundColor: theme.colors.neutral0,
@@ -134,7 +151,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabText: {
     fontSize: 16,
-    letterSpacing:0.5,
+    letterSpacing: 0.5,
     color: theme.colors.text,
   },
   activeTabText: {

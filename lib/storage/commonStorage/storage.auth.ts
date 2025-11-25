@@ -1,59 +1,63 @@
 import { ProfileResponse } from "@/lib/publicLib";
 import { authState } from "@/state/auth/state.auth";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { MMKV } from "react-native-mmkv";
-import { PreferencesStorage } from "./storage.preferences";
+import { PersonalStorageRemoveContactRequests, PersonalStorageRemoveContacts } from "../personalStorage/personal.storage.contacts";
 import { PersonalStorageRemoveUser } from "../personalStorage/personal.storage.user";
+import { PreferencesStorage } from "./storage.preferences";
+import { getSecureMMKV } from "./storage.secure";
 
 
 const ENCRYPTION_KEY_NAME = 'mmkv-encryption-key';
 const WEB_SESSION_EXPIRY_KEY = 'web-session-expiry';
 const WEB_USER_KEY = 'user';
+let secureStorage: MMKV | null = null;
 
-// Generate and store encryption key once (native only)
-const getOrCreateEncryptionKey = async (): Promise<string> => {
-  let key = await SecureStore.getItemAsync(ENCRYPTION_KEY_NAME);
-
-  if (!key) {
-    // Generate a secure random key
-    key = Crypto.randomUUID().replace(/-/g, '');
-    await SecureStore.setItemAsync(ENCRYPTION_KEY_NAME, key);
-  }
-
-  return key;
-};
-
-// Storage instance (initialized later, native only)
-let secureStorage: MMKV;
-
-// Initialize secure storage - call this once at app start
 export const initializeSecureStorage = async (): Promise<void> => {
   if (Platform.OS === 'web') {
-    // Web doesn't need initialization - AsyncStorage is ready to use
     return;
   }
 
   try {
-    const encryptionKey = await getOrCreateEncryptionKey();
-
-    secureStorage = new MMKV({
+    const storage = await getSecureMMKV({
       id: 'secure-auth-storage',
-      encryptionKey,
+      encryptionKeyName: ENCRYPTION_KEY_NAME,
     });
+
+    if (!storage) {
+      throw new Error('Failed to initialize secure auth storage (getSecureMMKV returned null)');
+    }
+
+    // Quick verification: write/read/delete a small test value to ensure MMKV works as expected.
+    // This prevents later surprising failures if MMKV wasn't properly initialized.
+    try {
+      storage.set('__mmkv_init_check', 'ok');
+      const val = storage.getString('__mmkv_init_check');
+      storage.delete('__mmkv_init_check');
+      if (val !== 'ok') {
+        throw new Error('MMKV verification failed (read mismatch)');
+      }
+    } catch (verr) {
+      throw new Error('MMKV verification failed: ' + String(verr));
+    }
+
+    secureStorage = storage;
   } catch (error) {
     console.log('Failed to initialize secure storage:', error);
     throw error;
   }
 };
 
-// Helper to ensure storage is ready (native only)
 const ensureStorageReady = () => {
   if (Platform.OS !== 'web' && !secureStorage) {
     throw new Error('Secure storage not initialized. Call initializeSecureStorage() first.');
   }
+};
+
+const getSecureStorage = (): MMKV => {
+  ensureStorageReady();
+  return secureStorage as MMKV;
 };
 
 export const setSession = async (sessionId: string, userId: string, sessionExpiry: string) => {
@@ -73,11 +77,11 @@ export const setSession = async (sessionId: string, userId: string, sessionExpir
     authState.isSentOtp.set(false);
   } else {
     // Native: Store all session data in encrypted MMKV
-    ensureStorageReady();
+    const storage = getSecureStorage();
 
-    secureStorage.set('sessionId', sessionId);
-    secureStorage.set('userId', userId);
-    secureStorage.set('sessionExpiry', sessionExpiry);
+    storage.set('sessionId', sessionId);
+    storage.set('userId', userId);
+    storage.set('sessionExpiry', sessionExpiry);
 
     authState.sessionId.set(sessionId);
     authState.userId.set(userId);
@@ -105,12 +109,12 @@ export const getSession = async () => {
     }
   } else {
     // Native: Retrieve all session data from encrypted MMKV
-    ensureStorageReady();
-    
-    const sessionId = secureStorage.getString('sessionId');
-    const userId = secureStorage.getString('userId');
-    const sessionExpiry = secureStorage.getString('sessionExpiry');
-    const userData = secureStorage.getString('user');
+    const storage = getSecureStorage();
+
+    const sessionId = storage.getString('sessionId');
+    const userId = storage.getString('userId');
+    const sessionExpiry = storage.getString('sessionExpiry');
+    const userData = storage.getString('user');
     return { sessionId, userId, sessionExpiry, user: userData ? JSON.parse(userData) : null };
   }
 };
@@ -126,12 +130,12 @@ export const clearSession = async () => {
     }
   } else {
     // Native: Clear all session data from encrypted MMKV
-    ensureStorageReady();
+    const storage = getSecureStorage();
 
-    secureStorage.delete('sessionId');
-    secureStorage.delete('userId');
-    secureStorage.delete('sessionExpiry');
-    secureStorage.delete('user');
+    storage.delete('sessionId');
+    storage.delete('userId');
+    storage.delete('sessionExpiry');
+    storage.delete('user');
   }
 
   // Clear preferences storage for both platforms
@@ -145,6 +149,8 @@ export const clearSession = async () => {
   // Clear personal user storage for both platforms
   try {
     await PersonalStorageRemoveUser();
+    await PersonalStorageRemoveContacts();
+    await PersonalStorageRemoveContactRequests();
   } catch (error) {
     console.log('Failed to clear personal user storage:', error);
   }
@@ -255,7 +261,11 @@ export const setUserInStorage = async (): Promise<void> => {
     }
   } else {
     // Native: Store user data in encrypted MMKV
-    ensureStorageReady();
-    secureStorage.set('user', JSON.stringify(userData));
+    const storage = getSecureStorage();
+    if (storage) {
+      storage.set('user', JSON.stringify(userData));
+    } else {
+      console.log('Failed to store user data on native:', 'Storage is null');
+    }
   }
 };

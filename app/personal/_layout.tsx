@@ -7,6 +7,9 @@ import { Colors } from '@/constants/Colors';
 import { TabBarButton } from '@/components/ui/common/TabBarButton';
 import { useUnistyles } from 'react-native-unistyles';
 import { useWindowDimensions } from 'react-native';
+import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 export default function PersonalTabLayout() {
   const { theme } = useUnistyles();
@@ -33,7 +36,7 @@ export default function PersonalTabLayout() {
             // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
           },
-          web:{
+          web: {
             display: width > 800 ? 'none' : 'flex'
           },
           // web:{
@@ -50,6 +53,19 @@ export default function PersonalTabLayout() {
             <IconSymbol
               size={25}
               name={focused ? "house.fill" : "house.line"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name='contacts'
+        options={{
+          title: 'Contacts',
+          tabBarIcon: ({ color, focused }) => (
+            <FontAwesome6
+              size={25}
+              name="contact-book"
               color={color}
             />
           ),

@@ -8,11 +8,14 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
-  $contactRequestsState,
-  $contactsState,
+    $contactRequestsState,
+    $contactsState,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
-import { PersonalUtilFetchContactRequests } from '@/utils/personalUtils/personal.util.contacts';
+import {
+    PersonalUtilFetchContactRequests,
+    PersonalUtilFetchContacts,
+} from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
 import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -40,7 +43,10 @@ export default function ContactRequests() {
   }, []);
 
   const fetchRequests = useCallback(async () => {
-    await PersonalUtilFetchContactRequests();
+    await Promise.all([
+      PersonalUtilFetchContactRequests(),
+      PersonalUtilFetchContacts(),
+    ]);
   }, []);
 
   useFocusEffect(

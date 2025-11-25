@@ -2,10 +2,11 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
+import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
 import {
-  $contactRequestsState,
-  $contactsState,
-  type ContactEntry,
+    $contactRequestsState,
+    $contactsState,
+    type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { hideModal, runWithLoading, showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
@@ -522,6 +523,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         .get()
         .map((entry) => (entry.id === contact.id ? { ...entry, nickname: null } : entry));
       $contactsState.setAddedYou(nextAddedYou);
+      void PersonalStorageSetContacts();
     } catch (error: any) {
       showContactAlert(error?.response?.data?.message, 'Could not remove nickname.');
     }
@@ -548,6 +550,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
       if (addedYouEntry) {
         $contactsState.setAddedYouMutual(contact.id, false);
       }
+      void PersonalStorageSetContacts();
     } catch (error: any) {
       showContactAlert(error?.response?.data?.message, 'Could not remove contact.');
     }
@@ -590,6 +593,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
       if (response.message === 'contact_request_sent' || response.message === 'pending_request_exists') {
         $contactRequestsState.markFetched();
       }
+      void PersonalStorageSetContacts();
     } catch (error: any) {
       showContactAlert(error?.response?.data?.message, 'Could not add contact.');
     }
@@ -627,6 +631,7 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
           .get()
           .map((entry) => (entry.id === contact.id ? { ...entry, nickname } : entry));
         $contactsState.setAddedYou(nextAddedYou);
+        void PersonalStorageSetContacts();
       } catch (error: any) {
         showContactAlert(error?.response?.data?.message, 'Could not update nickname.');
       } finally {

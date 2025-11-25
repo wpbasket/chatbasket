@@ -9,6 +9,7 @@ import { initializeGlobalNetworkTracking } from '@/state/tools/state.network';
 import { getUser } from '@/utils/publicUtils/public.util.profile';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useValue } from '@legendapp/state/react';
@@ -74,6 +75,7 @@ export default function RootLayout() {
       ...MaterialCommunityIcons.font,
       ...FontAwesome5.font,
       ...Ionicons.font,
+      ...FontAwesome6.font,
     });
 
     useEffect(() => {
