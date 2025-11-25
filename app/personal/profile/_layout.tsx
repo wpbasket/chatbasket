@@ -36,8 +36,6 @@ export default function PersonalProfileScreenLayout() {
               <Stack.Screen name='create-profile' options={{ headerShown: false }} />
               <Stack.Screen name='update-profile' options={{ headerShown: false }} />
               <Stack.Screen name='settings' options={{ headerShown: false }} />
-              <Stack.Screen name="contacts" options={{headerShown:false}} />
-              <Stack.Screen name="requests" options={{headerShown:false}} />
             </Stack.Protected>
           </Stack>
         </ThemedView>

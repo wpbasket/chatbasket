@@ -7,8 +7,6 @@ import { Colors } from '@/constants/Colors';
 import { TabBarButton } from '@/components/ui/common/TabBarButton';
 import { useUnistyles } from 'react-native-unistyles';
 import { useWindowDimensions } from 'react-native';
-import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 export default function PersonalTabLayout() {
@@ -49,10 +47,10 @@ export default function PersonalTabLayout() {
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color }) => (
             <IconSymbol
               size={25}
-              name={focused ? "house.fill" : "house.line"}
+              name="house.fill"
               color={color}
             />
           ),
@@ -62,7 +60,7 @@ export default function PersonalTabLayout() {
         name='contacts'
         options={{
           title: 'Contacts',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color }) => (
             <FontAwesome6
               size={25}
               name="contact-book"

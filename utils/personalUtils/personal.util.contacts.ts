@@ -58,8 +58,18 @@ export async function PersonalUtilFetchContactRequests() {
     $contactRequestsState.markFetched();
     await PersonalStorageSetContactRequests();
   } catch (err: any) {
-    $contactRequestsState.setError(err?.message ?? 'Failed to load requests.');
     await PersonalStorageLoadContactRequests();
+
+    const hasPreviousData =
+      $contactRequestsState.lastFetchedAt.get() != null ||
+      $contactRequestsState.hasPending() ||
+      $contactRequestsState.hasSent();
+
+    if (hasPreviousData) {
+      $contactRequestsState.setError('Failed to refresh. You are seeing last fetched requests.');
+    } else {
+      $contactRequestsState.setError(err?.message ?? 'Failed to load requests.');
+    }
   } finally {
     $contactRequestsState.setLoading(false);
   }
@@ -88,8 +98,18 @@ export async function PersonalUtilFetchContacts() {
     $contactsState.markFetched();
     await PersonalStorageSetContacts();
   } catch (err: any) {
-    $contactsState.setError(err?.message ?? 'Failed to load contacts.');
     await PersonalStorageLoadContacts();
+
+    const hasPreviousData =
+      $contactsState.lastFetchedAt.get() != null ||
+      $contactsState.hasContacts() ||
+      $contactsState.hasAddedYou();
+
+    if (hasPreviousData) {
+      $contactsState.setError('Failed to refresh. You are seeing last fetched contacts.');
+    } else {
+      $contactsState.setError(err?.message ?? 'Failed to load contacts.');
+    }
   } finally {
     $contactsState.setLoading(false);
   }

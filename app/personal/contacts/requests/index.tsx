@@ -5,7 +5,6 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import {
     $contactRequestsState,
@@ -38,7 +37,7 @@ export default function ContactRequests() {
 
   useEffect(() => {
     return () => {
-      authState.isInTheProfileUpdateMode.set(false);
+      $contactsState.isInContacts.set(false);
     };
   }, []);
 
@@ -137,7 +136,7 @@ export default function ContactRequests() {
             />
 
             {error ? (
-              <ThemedText type='small' style={styles.errorText} selectable={false}>
+              <ThemedText style={styles.errorText} selectable={false}>
                 {error}
               </ThemedText>
             ) : null}

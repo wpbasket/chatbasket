@@ -91,15 +91,6 @@ export default function ProfileScreen() {
     return router.push('/personal/profile/settings');
   };
 
-  const openContacts = () => {
-    authState.isInTheProfileUpdateMode.set(true);
-    return router.push('/personal/profile/contacts');
-  };
-
-  const openRequests = () => {
-    authState.isInTheProfileUpdateMode.set(true);
-    return router.push('/personal/profile/requests');
-  };
 
   const logoutButton = (event: any) => {
     showConfirmDialog('Are you sure you want to logout?', {
@@ -230,35 +221,6 @@ export default function ProfileScreen() {
                           </ThemedView>
                           {/* Profile Mode End */}
 
-                          {/* Contacts */}
-                          <Pressable
-                            onPress={openContacts}
-                            onPressIn={handlePressIn}
-                            style={({ pressed }) => [
-                              { opacity: pressed ? 0.1 : 1 },
-                              styles.bucketContainer
-                            ]}>
-                            <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
-                            <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                              Contacts
-                            </ThemedText>
-                          </Pressable>
-                          {/* Contacts End */}
-
-                          {/* Requests */}
-                          <Pressable
-                            onPress={openRequests}
-                            onPressIn={handlePressIn}
-                            style={({ pressed }) => [
-                              { opacity: pressed ? 0.1 : 1 },
-                              styles.bucketContainer
-                            ]}>
-                            <FontAwesome5Icon name="list" size={20} color={bucketColor} />
-                            <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                              Requests
-                            </ThemedText>
-                          </Pressable>
-                          {/* Requests End */}
 
                           {/* Settings  */}
                           <Pressable

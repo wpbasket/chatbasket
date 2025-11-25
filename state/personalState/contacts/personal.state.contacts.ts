@@ -27,6 +27,7 @@ export type PendingRequestEntry = {
 export type SentRequestEntry = PendingRequestEntry;
 
 export const $contactsState = observable({
+  isInContacts: false,
   contacts: [] as ContactEntry[],
   addedYou: [] as ContactEntry[],
   contactsById: {} as Record<string, ContactEntry>,
@@ -121,6 +122,7 @@ export const $contactsState = observable({
     $contactsState.loading.set(false);
     $contactsState.error.set(null);
     $contactsState.lastFetchedAt.set(null);
+    $contactsState.isInContacts.set(false);
   },
   hasContacts() {
     return $contactsState.contacts.get().length > 0;

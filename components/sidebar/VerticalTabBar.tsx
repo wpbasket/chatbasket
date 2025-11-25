@@ -14,10 +14,10 @@ const publicTabs = [
     label: "Home",
     slug: "home",
     href: "/(tabs)/home",
-    icon: (color: string, focused: boolean) => (
+    icon: (color: string) => (
       <IconSymbol
         size={20}
-        name={focused ? "house.fill" : "house.line"}
+        name="house.fill" 
         color={color}
       />
     )
@@ -26,7 +26,7 @@ const publicTabs = [
     label: "Explore",
     slug: "explore",
     href: "/(tabs)/explore",
-    icon: (color: string, focused: boolean) => (
+    icon: (color: string) => (
       <MaterialCommunityIcon
         size={20}
         name="magnify.scan"
@@ -53,10 +53,10 @@ const personalTabs = [
     label: "Home",
     slug: "home",
     href: "/personal/home",
-    icon: (color: string, focused: boolean) => (
+    icon: (color: string) => (
       <IconSymbol
         size={20}
-        name={focused ? "house.fill" : "house.line"}
+        name="house.fill"
         color={color}
       />
     )
@@ -65,7 +65,7 @@ const personalTabs = [
     label: "Contacts",
     slug: "contacts",
     href: "/personal/contacts",
-    icon: (color: string, focused: boolean) => (
+    icon: (color: string) => (
       <FontAwesome6
         size={20}
         name="contact-book"

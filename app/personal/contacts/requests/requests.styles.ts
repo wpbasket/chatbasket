@@ -27,7 +27,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.BackgroundSelect,
+    backgroundColor: theme.colors.neutral0,
     borderRadius: 999,
     padding: 4,
     gap: 8,
@@ -112,7 +112,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     fontWeight: '600',
   },
   pendingActionButtonLabelDanger: {
-    color: theme.colors.red,
+    color: theme.colors.orange,
     fontSize: 12,
     fontWeight: '600',
   },

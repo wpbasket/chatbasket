@@ -5,8 +5,8 @@ import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import {
-  $contactsState,
-  type ContactEntry,
+    $contactsState,
+    type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { useValue } from '@legendapp/state/react';
 import { Pressable } from 'react-native';

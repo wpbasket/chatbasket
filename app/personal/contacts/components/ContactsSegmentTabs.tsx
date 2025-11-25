@@ -34,7 +34,7 @@ export default function ContactsSegmentTabs({
               ]}
               selectable={false}
             >
-              {tab === 'contacts' ? 'Contacts' : 'People who added you'}
+              {tab === 'contacts' ? 'Your contacts' : 'People who added you'}
             </ThemedText>
           </Pressable>
         );

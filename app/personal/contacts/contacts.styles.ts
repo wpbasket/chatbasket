@@ -66,7 +66,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.BackgroundSelect,
+    backgroundColor: theme.colors.neutral0,
     borderRadius: 999,
     padding: 4,
     gap: 8,
