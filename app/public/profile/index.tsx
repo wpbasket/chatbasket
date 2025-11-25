@@ -26,7 +26,7 @@ function ProfileEmptyState() {
   const { handlePressIn } = pressableAnimation();
   const goToCreateProfile = () => {
     authState.isInTheProfileUpdateMode.set(true)
-    router.push("/(tabs)/profile/create-profile");
+    router.push("/public/profile/create-profile");
   };
 
   return (
@@ -83,7 +83,7 @@ export default function ProfileScreen() {
   }
 
   const goBack = () => {
-    router.push('/(tabs)/home');
+    router.push('/public/home');
   };
 
   const bucketColor = styles.bucketColor.color.toString();
@@ -91,12 +91,12 @@ export default function ProfileScreen() {
 
   const editProfile = () => {
     authState.isInTheProfileUpdateMode.set(true)
-    return router.push('/(tabs)/profile/update-profile');
+    return router.push('/public/profile/update-profile');
   };
 
   const settings = () => {
     authState.isInTheProfileUpdateMode.set(true)
-    return router.push('/(tabs)/profile/settings');
+    return router.push('/public/profile/settings');
   };
 
 

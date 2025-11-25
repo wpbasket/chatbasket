@@ -4,7 +4,6 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { useValue } from '@legendapp/state/react';
-import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet } from 'react-native-unistyles';
 import NotFoundScreen from '../+not-found';
@@ -19,10 +18,6 @@ export default function Profile() {
     const onTabPress = useCallback((tab: TABS) => {
         setActiveTab(tab);
     }, []);
-
-    const goBack = () => {
-        router.back();
-    };
 
     if (!user) {
         return (

@@ -23,7 +23,7 @@ export default function CreateProfile() {
   useEffect(() => {
     if (authState.user.get()) {
       authState.isInTheProfileUpdateMode.set(false)
-      router.replace('/profile');
+      router.replace('/public/profile');
     }
   }, []);
 

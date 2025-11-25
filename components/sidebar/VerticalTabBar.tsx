@@ -13,7 +13,7 @@ const publicTabs = [
   {
     label: "Home",
     slug: "home",
-    href: "/(tabs)/home",
+    href: "/public/home",
     icon: (color: string) => (
       <IconSymbol
         size={20}
@@ -25,7 +25,7 @@ const publicTabs = [
   {
     label: "Explore",
     slug: "explore",
-    href: "/(tabs)/explore",
+    href: "/public/explore",
     icon: (color: string) => (
       <MaterialCommunityIcon
         size={20}
@@ -37,7 +37,7 @@ const publicTabs = [
   {
     label: "Profile",
     slug: "profile",
-    href: "/(tabs)/profile",
+    href: "/public/profile",
     icon: (color: string, focused: boolean) => (
       <IconSymbol
         size={20}
