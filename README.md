@@ -1,50 +1,228 @@
-# Welcome to your Expo app 👋
+# 💬 ChatBasket
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+🌐 **Website**: [chatbasket.me](https://chatbasket.me)
 
-## Get started
+A modern, cross-platform social messaging application built with **React Native** and **Expo SDK 54**. ChatBasket offers both personal messaging and public social feed experiences with a sleek, themeable UI.
 
-1. Install dependencies
+![React Native](https://img.shields.io/badge/React_Native-0.81.5-61DAFB?logo=react&logoColor=white)
+![Expo](https://img.shields.io/badge/Expo-SDK_54-000020?logo=expo&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Web-lightgrey)
 
+---
+
+## ✨ Features
+
+### 🔐 Authentication
+- Secure OTP-based authentication flow
+- Persistent login state with secure storage
+- Protected routes for authenticated users
+
+### 💭 Dual Mode Experience
+- **Personal Mode**: Private messaging and contacts management
+- **Public Mode**: Social feed with posts, explore section, and public profiles
+
+### 🎨 Modern UI/UX
+- Automatic dark/light theme support
+- Custom typography with Gantari and AstaSans fonts
+- Smooth animations powered by Reanimated and Legend Motion
+- Haptic feedback for enhanced interactions
+
+### 📱 Cross-Platform
+- Native iOS and Android support
+- Web support with responsive design
+- Edge-to-edge display on Android
+
+---
+
+## 🛠️ Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| **Framework** | React Native 0.81.5 + Expo SDK 54 |
+| **Navigation** | Expo Router with typed routes |
+| **State Management** | Legend State (reactive state) |
+| **Styling** | React Native Unistyles |
+| **Animations** | React Native Reanimated + Legend Motion |
+| **Storage** | MMKV + Async Storage + Secure Store |
+| **Notifications** | Expo Notifications |
+| **Networking** | NetInfo for connectivity tracking |
+
+---
+
+## 📁 Project Structure
+
+```
+chatbasket/
+├── app/                    # Expo Router screens
+│   ├── (auth)/            # Authentication screens
+│   ├── personal/          # Personal mode (home, contacts, profile)
+│   └── public/            # Public mode (home, explore, profile)
+├── components/            # Reusable UI components
+│   ├── header/            # Header components
+│   ├── modals/            # Modal dialogs
+│   ├── sidebar/           # Sidebar navigation
+│   └── ui/                # Common UI elements
+├── lib/                   # Core libraries
+│   ├── constantLib/       # Shared constants
+│   ├── personalLib/       # Personal mode utilities
+│   ├── publicLib/         # Public mode utilities
+│   └── storage/           # Storage adapters
+├── state/                 # Legend State stores
+│   ├── auth/              # Authentication state
+│   ├── personalState/     # Personal mode state
+│   ├── publicState/       # Public mode state
+│   └── settings/          # App settings
+├── utils/                 # Utility functions
+├── assets/                # Images and fonts
+└── constants/             # App-wide constants
+```
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+- Expo CLI (`npm install -g expo-cli`)
+- iOS Simulator (macOS) or Android Emulator
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd chatbasket
+   ```
+
+2. **Install dependencies**
    ```bash
    npm install
    ```
 
-2. Start the app
-
-   ```bash
-   npx expo start
+3. **Set up environment variables**
+   
+   Create a `.env` file in the root directory with your configuration:
+   ```env
+   # Add your environment variables here
    ```
 
-In the output, you'll find options to open the app in a
+4. **Start the development server**
+   ```bash
+   npm start
+   ```
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### Running the App
 
 ```bash
-npm run reset-project
+# Start Expo development server
+npm start
+
+# Run on Android
+npm run android
+
+# Run on iOS
+npm run ios
+
+# Run on Web
+npm run web
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## 📦 Building for Production
 
-To learn more about developing your project with Expo, look at the following resources:
+This project uses **EAS Build** for creating production builds.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+# Install EAS CLI
+npm install -g eas-cli
 
-## Join the community
+# Build for development (APK)
+eas build --profile development --platform android
 
-Join our community of developers creating universal apps.
+# Build for production
+eas build --profile production --platform android
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+# Build for preview (internal distribution)
+eas build --profile preview --platform android
+```
+
+---
+
+## 🧪 Linting
+
+```bash
+npm run lint
+```
+
+---
+
+## 📄 Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm start` | Start Expo development server |
+| `npm run android` | Run on Android device/emulator |
+| `npm run ios` | Run on iOS simulator |
+| `npm run web` | Run in web browser |
+| `npm run lint` | Run ESLint |
+| `npm run reset-project` | Reset project to initial state |
+
+---
+
+## 🔧 Configuration
+
+### App Configuration (`app.json`)
+
+- **Bundle ID**: `com.tasktoclear.chatbasket`
+- **Version**: 1.0.0
+- **Orientation**: Portrait
+- **New Architecture**: Enabled
+- **React Compiler**: Enabled
+
+### Build Profiles (`eas.json`)
+
+- **development**: Development client with APK build
+- **preview**: Internal distribution
+- **production**: Production build with auto-increment versioning
+
+---
+
+## 📱 Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Android | ✅ Supported | Edge-to-edge enabled |
+| iOS | ✅ Supported | Tablet support included |
+| Web | ✅ Supported | Single-page output |
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📝 License
+
+This project is private and proprietary.
+
+---
+
+## 👤 Author
+
+**TaskToClear**
+
+---
+
+<p align="center">
+  Made with ❤️ using React Native & Expo
+</p>
