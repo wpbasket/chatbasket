@@ -11,6 +11,7 @@ interface DropdownProps<T = any> {
   value?: T;
   placeholder?: string;
   options: DropdownPickerItem<T>[];
+  modalOptions?: DropdownPickerItem<T>[];
   onSelect: (value: T) => void;
   style?: ViewStyle;
   error?: boolean;
@@ -56,6 +57,7 @@ export function Dropdown<T = any>({
   value, 
   placeholder = 'Select option',
   options, 
+  modalOptions,
   onSelect, 
   style,
   error,
@@ -93,8 +95,10 @@ export function Dropdown<T = any>({
   
   const handlePress = (event: any) => {
     if (disabled) return;
+
+    const items = modalOptions ?? options;
     
-    if (!options || options.length === 0) {
+    if (!items || items.length === 0) {
       console.warn('Dropdown: No options provided');
       return;
     }
@@ -108,7 +112,7 @@ export function Dropdown<T = any>({
     const id = dropdownState$.id.get();
     modalActions.dropdownPicker({
       title,
-      items: options,
+      items,
       selectedValue: value,
       searchable,
       searchPlaceholder,

@@ -1,17 +1,20 @@
 import { ThemedView } from "@/components/ui/common/ThemedView";
-import { appMode$ } from "@/state/appMode/state.appMode";
 import { authState } from "@/state/auth/state.auth";
 import { useValue } from "@legendapp/state/react";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { router, Stack } from "expo-router";
+import { useEffect } from "react";
 import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
 
 export default function ProfileScreenLayout() {
   const isInTheProfileUpdateMode = useValue(authState.isInTheProfileUpdateMode);
   const lock = useValue(authState.isLoggedIn)
-  if (!lock) {
-    router.replace('/(auth)')
-  }
+  
+  useEffect(() => {
+    if (!lock) {
+      router.replace('/(auth)')
+    }
+  }, [lock])
 
   return (
     <>

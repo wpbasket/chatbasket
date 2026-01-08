@@ -1,4 +1,4 @@
-import { PersonalCreateProfilePayload, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateUserProfilePayload } from "@/lib/personalLib";
+import { PersonalCreateProfilePayload, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateUserProfilePayload, RegisterTokenPayload } from "@/lib/personalLib";
 import { apiClient, fileUploadClient, BooleanResponse } from "@/lib/constantLib";
 
 
@@ -46,11 +46,16 @@ async function removeAvatar(): Promise<BooleanResponse> {
 }
 
 
+async function registerNotificationToken(payload: RegisterTokenPayload): Promise<BooleanResponse> {
+    return apiClient.post<BooleanResponse>('/personal/profile/token/register', payload);
+}
+
 export const PersonalProfileApi = {
     logout,
     getProfile,
     createProfile,
     updateProfile,
     uploadAvatar,
-    removeAvatar
+    removeAvatar,
+    registerNotificationToken
 }

@@ -10,9 +10,11 @@ import Sidebar from '@/components/sidebar/Sidebar';
 import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import { useNotificationPermission } from '@/hooks/commonHooks/hooks.notificationPermission';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { settingApi } from '@/lib/publicLib/settingApi/public.api.setting';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
+import { openNotificationSettingsFromApp } from '@/notification/registerFcmOrApn';
 import { setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { setting$ } from '@/state/settings/state.setting';
@@ -33,6 +35,8 @@ export default function Settings() {
       authState.isInTheProfileUpdateMode.set(false)
     };
   }, []);
+
+  useNotificationPermission();
 
   const { handlePressIn } = pressableAnimation();
   const email = useValue(authState.user.email);
@@ -110,6 +114,24 @@ export default function Settings() {
   const handleSelectMode = (value: ModeOption) => {
     if (PreferencesStorage.setMode) PreferencesStorage.setMode(value)
     setAppMode(value)
+  }
+
+  type NotificationOption = 'enabled' | 'disabled'
+  const selectedNotificationValue = useValue(setting$.notifications)
+
+  const notificationDisplayOptions: DropdownPickerItem<NotificationOption>[] = [
+    { label: 'Enabled', value: 'enabled' },
+    { label: 'Disabled', value: 'disabled' },
+  ]
+
+  const notificationActionOptions: DropdownPickerItem<NotificationOption>[] =
+    selectedNotificationValue === 'enabled'
+      ? [{ label: 'Disable', value: 'disabled' }]
+      : [{ label: 'Enable', value: 'enabled' }]
+
+  const handleSelectNotifications = async (value: NotificationOption) => {
+    void value;
+    await openNotificationSettingsFromApp();
   }
 
   return (
@@ -192,6 +214,22 @@ export default function Settings() {
                     value={selectedModeValue}
                     options={modeOptions}
                     onSelect={handleSelectMode}
+                    style={styles.dropdownBorder}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <View style={styles.itemTitleContainer}>
+                  <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
+                </View>
+                <View style={styles.themePickerContainer}>
+                  <Dropdown
+                    placeholder='Notifications'
+                    value={selectedNotificationValue}
+                    options={notificationDisplayOptions}
+                    modalOptions={notificationActionOptions}
+                    onSelect={handleSelectNotifications}
                     style={styles.dropdownBorder}
                   />
                 </View>

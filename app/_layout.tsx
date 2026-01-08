@@ -1,7 +1,9 @@
 // import '../unistyles'
 import { AppModal } from '@/components/modals/AppModal';
 import { ThemedView } from '@/components/ui/common/ThemedView';
+import { IncomingShareListener } from '@/hooks/useIncomingShare';
 import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/commonStorage/storage.auth';
+import { checkInitialNotification, registerTokenWithBackend, setupNotificationListeners } from '@/notification/registerFcmOrApn';
 import { appMode$ } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { initUserPosts } from '@/state/publicState/public.state.initUserPosts';
@@ -16,6 +18,7 @@ import { useValue } from '@legendapp/state/react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { SplashScreen, Stack } from 'expo-router';
+import { ShareIntentProvider } from 'expo-share-intent';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react'; // Import useState
 import { Platform } from 'react-native';
@@ -50,6 +53,8 @@ export default function RootLayout() {
     init();
   }, []); // This runs only once on mount
 
+
+
   // const lock = true;
   const lock = useValue(authState.isLoggedIn);
   const sentOtp = useValue(authState.isSentOtp);
@@ -60,6 +65,14 @@ export default function RootLayout() {
   useEffect(() => {
     // Initialize once - runs for the entire app lifecycle
     initializeGlobalNetworkTracking();
+
+    // Setup push notification listeners
+    const cleanupNotificationListeners = setupNotificationListeners();
+
+    // Cleanup listeners on unmount
+    return () => {
+      cleanupNotificationListeners();
+    };
   }, []);
 
   // --- NATIVE PLATFORM LOGIC (Your setup, with one addition) ---
@@ -84,6 +97,12 @@ export default function RootLayout() {
       if (loaded) {
         SplashScreen.hideAsync();
         initUserPosts();
+        // Register push notification token after app is fully loaded and visible
+        if (authState.isLoggedIn.get()) {
+          void registerTokenWithBackend();
+          // Check if app was opened via notification (Cold Start)
+          void checkInitialNotification();
+        }
       }
     }, [loaded]);
 
@@ -122,37 +141,40 @@ export default function RootLayout() {
   // By this point, `lock` has the correct value from storage, so the router makes the right decision immediately.
   return (
     <>
-      <ThemeProvider value={themeName === 'dark' ? DarkTheme : DefaultTheme}>
-        <ThemedView style={styles.outerContainer}>
-          <Stack>
-            <Stack.Protected guard={!lock}>
-              <Stack.Screen name="(auth)/index" options={{ headerShown: false }} />
-              <Stack.Screen name="(auth)/auth" options={{ headerShown: false }} />
-              <Stack.Protected guard={sentOtp}>
-                <Stack.Screen name="(auth)/auth-verify" options={{ headerShown: false }} />
-              </Stack.Protected>
-            </Stack.Protected>
-
-            <Stack.Protected guard={lock}>
-              <Stack.Screen name='index' options={{ headerShown: false }} />
-
-
-              <Stack.Protected guard={lock && mode === 'personal'}>
-                <Stack.Screen name="personal" options={{ headerShown: false }} />
+      <ShareIntentProvider>
+        <IncomingShareListener />
+        <ThemeProvider value={themeName === 'dark' ? DarkTheme : DefaultTheme}>
+          <ThemedView style={styles.outerContainer}>
+            <Stack>
+              <Stack.Protected guard={!lock}>
+                <Stack.Screen name="(auth)/index" options={{ headerShown: false }} />
+                <Stack.Screen name="(auth)/auth" options={{ headerShown: false }} />
+                <Stack.Protected guard={sentOtp}>
+                  <Stack.Screen name="(auth)/auth-verify" options={{ headerShown: false }} />
+                </Stack.Protected>
               </Stack.Protected>
 
-            </Stack.Protected>
-            
-            <Stack.Protected guard={mode === 'public'} >
-              <Stack.Screen name="public" options={{ headerShown: false }} />
-            </Stack.Protected>
+              <Stack.Protected guard={lock}>
+                <Stack.Screen name='index' options={{ headerShown: false }} />
 
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
-          <AppModal />
-        </ThemedView>
-      </ThemeProvider>
+
+                <Stack.Protected guard={lock && mode === 'personal'}>
+                  <Stack.Screen name="personal" options={{ headerShown: false }} />
+                </Stack.Protected>
+
+              </Stack.Protected>
+
+              <Stack.Protected guard={mode === 'public'} >
+                <Stack.Screen name="public" options={{ headerShown: false }} />
+              </Stack.Protected>
+
+              <Stack.Screen name="+not-found" />
+            </Stack>
+            <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
+            <AppModal />
+          </ThemedView>
+        </ThemeProvider>
+      </ShareIntentProvider>
     </>
   );
 }

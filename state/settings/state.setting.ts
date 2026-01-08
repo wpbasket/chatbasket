@@ -20,6 +20,8 @@ export const setting$ = observable({
   otp: null as string | null,
   isOTPSent: false,
 
+  notifications: 'disabled' as 'enabled' | 'disabled',
+
   // Resend OTP controls
   resendCooldown: 0 as number, // seconds remaining before next resend
   resendAttempts: 0 as number, // number of resends used
@@ -46,6 +48,7 @@ export const setting$ = observable({
     setting$.password.set(null);
     setting$.otp.set(null);
     setting$.isOTPSent.set(false);
+    setting$.notifications.set('disabled');
     setting$.resendCooldown.set(0);
     setting$.resendAttempts.set(0);
     setting$.resendExpiryAt.set(null);

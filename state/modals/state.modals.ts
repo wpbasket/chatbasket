@@ -1,13 +1,13 @@
 // state/modals/modals.ts
-import { observable } from '@legendapp/state';
 import type {
-  ModalType,
   ConfirmModalProps,
-  DropdownPickerModalProps,
-  ModalPosition,
   ControllersModalProps,
+  DropdownPickerModalProps,
   LoadingModalProps,
+  ModalPosition,
+  ModalType,
 } from '@/components/modals/types/modal.types';
+import { observable } from '@legendapp/state';
 
 // A single modal entry in the stack
 export interface ModalEntry {

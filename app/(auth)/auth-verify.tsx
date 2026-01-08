@@ -7,6 +7,7 @@ import { StyleSheet } from 'react-native-unistyles'
 import { ApiError } from '@/lib/constantLib'
 import { authApi } from '@/lib/constantLib/authApi/api.auth'
 import { setSession } from '@/lib/storage/commonStorage/storage.auth'
+import { setAppMode } from '@/state/appMode/state.appMode'
 import { authState } from '@/state/auth/state.auth'
 import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup'
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown'
@@ -14,7 +15,7 @@ import { getUser } from '@/utils/publicUtils/public.util.profile'
 import { useValue } from '@legendapp/state/react'
 import { router } from 'expo-router'
 import { useEffect } from 'react'
-import { setAppMode } from '@/state/appMode/state.appMode'
+import { registerTokenWithBackend } from '../../notification/registerFcmOrApn'
 
 export default function AuthVerification() {
     const otp = useValue(loginOrSignup$.otp)
@@ -67,6 +68,8 @@ export default function AuthVerification() {
                     setSession(response.sessionId, response.userId, response.sessionExpiry)
                     // Fire-and-forget user fetch so root layout can update when ready
                     void getUser()
+                    // Request notification permissions immediately after successful signup
+                    void registerTokenWithBackend()
 
                 }
                 else {
@@ -75,6 +78,8 @@ export default function AuthVerification() {
                     setSession(response.sessionId, response.userId, response.sessionExpiry)
                     // Fire-and-forget user fetch so root layout can update when ready
                     void getUser()
+                    // Request notification permissions immediately after successful login
+                    void registerTokenWithBackend()
                 }
             } catch (error) {
                 if (error instanceof ApiError) {

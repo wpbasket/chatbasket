@@ -21,6 +21,7 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView } from 'react-native';
 import styles from './profile.styles';
+import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
 
 // Empty State Component
 function ProfileEmptyState() {
@@ -111,7 +112,7 @@ export default function ProfileScreen() {
 
   const logout = async () => {
     try {
-      const response = await profileApi.logout({ allSessions: false });
+      const response = await PersonalProfileApi.logout({ all_sessions: false });
       if (response.status) {
         clearSession();
       }

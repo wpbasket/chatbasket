@@ -8,6 +8,7 @@ import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
 import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
 import { authState } from '@/state/auth/state.auth';
@@ -119,7 +120,7 @@ export default function ProfileScreen() {
 
   const logout = async () => {
     try {
-      const response = await profileApi.logout({ allSessions: false });
+      const response = await PersonalProfileApi.logout({ all_sessions: false });
       if (response.status) {
         clearSession();
       }

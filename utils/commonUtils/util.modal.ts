@@ -38,7 +38,8 @@ export const showConfirmDialog = async (
 };
 
 export const showAlert = (message: string, title?: string, position?: ModalPosition): void => {
-  modalActions.alert(message, title, position);
+  const id = `alert:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  modalActions.alert(message, title, position, id);
 };
 
 export const showDropdownPicker = async <T = any>(
