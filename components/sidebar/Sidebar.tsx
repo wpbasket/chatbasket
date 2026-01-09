@@ -1,4 +1,5 @@
 import { useValue } from '@legendapp/state/react';
+import { useRouter } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { ThemedText } from '../ui/common/ThemedText';
@@ -10,10 +11,13 @@ import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 
 export default function Sidebar() {
   const currentMode = useValue(appMode$.mode);
+  const router = useRouter();
   const { handlePressIn } = pressableAnimation();
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';
     setAppMode(next);
+    // Navigate to the corresponding home screen
+    router.push(next === 'public' ? '/public/home' : '/personal/home');
   };
   return (
     <ThemedView style={styles.container}>
@@ -21,7 +25,7 @@ export default function Sidebar() {
         <ThemedText type="logo" style={styles.logo} selectable={false}>
           ChatBasket
         </ThemedText>
-        <Pressable 
+        <Pressable
           onPress={toggleMode}
           onPressIn={handlePressIn}
           style={({ pressed }) => [
@@ -60,11 +64,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   modeToggle: {
     paddingHorizontal: 10,
-    paddingRight:20,
+    paddingRight: 20,
     // paddingVertical: 1,
     borderTopLeftRadius: 35,
     borderBottomLeftRadius: 35,
-    borderTopRightRadius:60,
+    borderTopRightRadius: 60,
     borderBottomRightRadius: 12,
     backgroundColor: theme.colors.primaryDark,
   },

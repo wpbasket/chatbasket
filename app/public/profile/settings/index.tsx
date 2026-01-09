@@ -114,6 +114,8 @@ export default function Settings() {
   const handleSelectMode = (value: ModeOption) => {
     if (PreferencesStorage.setMode) PreferencesStorage.setMode(value)
     setAppMode(value)
+    // Navigate to the corresponding home screen
+    router.push(value === 'public' ? '/public/home' : '/personal/home')
   }
 
   type NotificationOption = 'enabled' | 'disabled'

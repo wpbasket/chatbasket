@@ -5,45 +5,48 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { useValue } from '@legendapp/state/react';
+import { useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 export default function Home() {
   const { handlePressIn } = pressableAnimation();
   const currentMode = useValue(appMode$.mode);
+  const router = useRouter();
 
   const toggleMode = () => {
     const next = currentMode === 'public' ? 'personal' : 'public';
     setAppMode(next);
+    router.push(next === 'public' ? '/public/home' : '/personal/home');
   };
   return (
     <>
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.container} >
-          <ThemedView style={styles.titleContainer} >
-            <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
-            <Pressable 
-              onPress={toggleMode}
-              onPressIn={handlePressIn}
-              style={({ pressed }) => [
-                { opacity: pressed ? 0.1 : 1 },
-                styles.modeToggle
-              ]}
-            >
-              <ThemedText type="default" style={styles.modeText} selectable={false}>
-                {currentMode === 'public' ? 'Public' : 'Personal'}
-              </ThemedText>
-            </Pressable>
-          </ThemedView>
+      <ThemedViewWithSidebar>
+        <ThemedViewWithSidebar.Sidebar>
+          <Sidebar />
+        </ThemedViewWithSidebar.Sidebar>
+        <ThemedViewWithSidebar.Main>
+          <ThemedView style={styles.container} >
+            <ThemedView style={styles.titleContainer} >
+              <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
+              <Pressable
+                onPress={toggleMode}
+                onPressIn={handlePressIn}
+                style={({ pressed }) => [
+                  { opacity: pressed ? 0.1 : 1 },
+                  styles.modeToggle
+                ]}
+              >
+                <ThemedText type="default" style={styles.modeText} selectable={false}>
+                  {currentMode === 'public' ? 'Public' : 'Personal'}
+                </ThemedText>
+              </Pressable>
+            </ThemedView>
 
-          <ThemedText style={styles.commingSoon}>Comming soon</ThemedText>
-        </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
+            <ThemedText style={styles.commingSoon}>Comming soon</ThemedText>
+          </ThemedView>
+        </ThemedViewWithSidebar.Main>
+      </ThemedViewWithSidebar>
     </>
   );
 }
@@ -52,18 +55,18 @@ const styles = StyleSheet.create((theme, rt) => ({
   container: {
     flex: 1,
     paddingTop: {
-      xs:rt.insets.top,
-      sm:rt.insets.top,
-      md:rt.insets.top,
-      lg:11
+      xs: rt.insets.top,
+      sm: rt.insets.top,
+      md: rt.insets.top,
+      lg: 11
     }
   },
   titleContainer: {
-    display:{
-      xs:'flex',
-      sm:'flex',
-      md:'flex',
-      lg:'none'
+    display: {
+      xs: 'flex',
+      sm: 'flex',
+      md: 'flex',
+      lg: 'none'
     },
     flexDirection: 'row',
     alignItems: 'center',
@@ -106,7 +109,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   commingSoon: {
     fontSize: 18,
-    color:'gray',
+    color: 'gray',
     textAlign: 'center',
     marginTop: 320,
   },

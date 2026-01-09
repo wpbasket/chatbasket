@@ -11,6 +11,55 @@ A modern, cross-platform social messaging application built with **React Native*
 
 ---
 
+## 📐 Engineering & Architecture
+
+We have documented the complex engineering patterns used in this app in detailed READMEs located in their respective directories.
+
+### Core Systems
+1.  **[Root Architecture & Routing](./app/README_ROOT_ARCHITECTURE.md)**
+    *   *How `_layout.tsx` orchestrates initialization, Deep Links, and Route Guards.*
+2.  **[Authentication System](./state/auth/README_AUTH.md)**
+    *   *Session management, Token Encryption, and Hydration loop.*
+3.  **[Deep Linking & Race Conditions](./state/appMode/README_DEEP_LINKING.md)**
+    *   *How we solved the "Native Deep Link" race condition using synchronous Mode updates.*
+
+### Infrastructure
+4.  **[Notification System (Two-Token)](./notification/README_NOTIFICATIONS.md)**
+    *   *Android FCM implementation, Share Intent conflicts, and Background Listeners.*
+5.  **[Storage Strategy (Hybrid Encryption)](./lib/storage/README_STORAGE.md)**
+    *   *Why we mix MMKV (Speed) with SecureStore (Key Management).*
+6.  **[API Layer](./lib/README_API_ARCHITECTURE.md)**
+    *   *Typed Singleton patterns for decoupling UI from Network logic.*
+
+### UI & State patterns
+7.  **[Global Modal System](./components/modals/README_MODAL_ARCHITECTURE.md)**
+    *   *The "Imperative Promise" pattern for clean modal usage.*
+8.  **[UI Design System](./components/ui/README_UI_SYSTEM.md)**
+    *   *Semantic Theming using `react-native-unistyles`.*
+9.  **[State Management patterns](./state/README_STATE_PATTERNS.md)**
+    *   *Legend-State "Observable Store" philosophy.*
+
+---
+
+## 🔄 App Lifecycle Overview
+
+For new developers, here is how the app boots up:
+
+1.  **Splash Screen**: The app launches and holds the Splash Screen (in `_layout.tsx`).
+2.  **Auth Hydration**:
+    *   Reads Encrypted Session Tokens from MMKV.
+    *   If valid, sets `authState.isLoggedIn = true`.
+3.  **Deep Link Check (Critical)**:
+    *   Checks `Linking.getInitialURL()`.
+    *   If a link exists (e.g., `chatbasket://public/profile`), it sets `appMode = 'public'` **synchronously**.
+4.  **Route Guard Evaluation**:
+    *   `Stack.Protected` runs.
+    *   If `isLoggedIn` is false -> Redirect to `/login`.
+    *   If `appMode` matches the Route -> Render Screen.
+5.  **Render**: The Splash Screen fades, and the user interacts with the app.
+
+---
+
 ## ✨ Features
 
 ### 🔐 Authentication
@@ -54,175 +103,28 @@ A modern, cross-platform social messaging application built with **React Native*
 
 ```
 chatbasket/
-├── app/                    # Expo Router screens
+├── app/                    # Expo Router screens (Has README)
 │   ├── (auth)/            # Authentication screens
 │   ├── personal/          # Personal mode (home, contacts, profile)
 │   └── public/            # Public mode (home, explore, profile)
 ├── components/            # Reusable UI components
-│   ├── header/            # Header components
-│   ├── modals/            # Modal dialogs
-│   ├── sidebar/           # Sidebar navigation
-│   └── ui/                # Common UI elements
+│   ├── modals/            # Modal dialogs (Has README)
+│   ├── ui/                # Common UI elements (Has README)
 ├── lib/                   # Core libraries
-│   ├── constantLib/       # Shared constants
-│   ├── personalLib/       # Personal mode utilities
-│   ├── publicLib/         # Public mode utilities
-│   └── storage/           # Storage adapters
+│   ├── storage/           # Storage adapters (Has README)
+├── notification/          # Push Notifications (Has README)
 ├── state/                 # Legend State stores
-│   ├── auth/              # Authentication state
-│   ├── personalState/     # Personal mode state
-│   ├── publicState/       # Public mode state
-│   └── settings/          # App settings
-├── utils/                 # Utility functions
-├── assets/                # Images and fonts
-└── constants/             # App-wide constants
+│   ├── auth/              # Authentication state (Has README)
+│   ├── appMode/           # Mode switching logic (Has README)
+└── utils/                 # Utility functions
 ```
 
 ---
 
-## 🚀 Getting Started
 
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-- Expo CLI (`npm install -g expo-cli`)
-- iOS Simulator (macOS) or Android Emulator
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd chatbasket
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables**
-   
-   Create a `.env` file in the root directory with your configuration:
-   ```env
-   # Add your environment variables here
-   ```
-
-4. **Start the development server**
-   ```bash
-   npm start
-   ```
-
-### Running the App
-
-```bash
-# Start Expo development server
-npm start
-
-# Run on Android
-npm run android
-
-# Run on iOS
-npm run ios
-
-# Run on Web
-npm run web
-```
 
 ---
 
-## 📦 Building for Production
-
-This project uses **EAS Build** for creating production builds.
-
-```bash
-# Install EAS CLI
-npm install -g eas-cli
-
-# Build for development (APK)
-eas build --profile development --platform android
-
-# Build for production
-eas build --profile production --platform android
-
-# Build for preview (internal distribution)
-eas build --profile preview --platform android
-```
-
----
-
-## 🧪 Linting
-
-```bash
-npm run lint
-```
-
----
-
-## 📄 Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm start` | Start Expo development server |
-| `npm run android` | Run on Android device/emulator |
-| `npm run ios` | Run on iOS simulator |
-| `npm run web` | Run in web browser |
-| `npm run lint` | Run ESLint |
-| `npm run reset-project` | Reset project to initial state |
-
----
-
-## 🔧 Configuration
-
-### App Configuration (`app.json`)
-
-- **Bundle ID**: `com.tasktoclear.chatbasket`
-- **Version**: 1.0.0
-- **Orientation**: Portrait
-- **New Architecture**: Enabled
-- **React Compiler**: Enabled
-
-### Build Profiles (`eas.json`)
-
-- **development**: Development client with APK build
-- **preview**: Internal distribution
-- **production**: Production build with auto-increment versioning
-
----
-
-## 📱 Platform Support
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| Android | ✅ Supported | Edge-to-edge enabled |
-| iOS | ✅ Supported | Tablet support included |
-| Web | ✅ Supported | Single-page output |
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
+##  License
 
 This project is private and proprietary.
-
----
-
-## 👤 Author
-
-**TaskToClear**
-
----
-
-<p align="center">
-  Made with ❤️ using React Native & Expo
-</p>

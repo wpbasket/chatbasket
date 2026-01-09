@@ -4,7 +4,7 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IncomingShareListener } from '@/hooks/useIncomingShare';
 import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/commonStorage/storage.auth';
 import { checkInitialNotification, registerTokenWithBackend, setupNotificationListeners } from '@/notification/registerFcmOrApn';
-import { appMode$ } from '@/state/appMode/state.appMode';
+import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { initUserPosts } from '@/state/publicState/public.state.initUserPosts';
 import { initializeGlobalNetworkTracking } from '@/state/tools/state.network';
@@ -17,10 +17,11 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useValue } from '@legendapp/state/react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { SplashScreen, Stack } from 'expo-router';
+import * as Linking from 'expo-linking';
+import { SplashScreen, Stack, useSegments } from 'expo-router';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react'; // Import useState
+import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
@@ -37,6 +38,14 @@ export default function RootLayout() {
   useEffect(() => {
     const init = async () => {
       try {
+        // Check for initial deep link (Cold Start)
+        if (Platform.OS === 'android' || Platform.OS === 'ios') {
+          const initialUrl = await Linking.getInitialURL();
+          if (initialUrl) {
+            handleDeepLink(initialUrl);
+          }
+        }
+
         await initializeSecureStorage();
         await restoreAuthState();
         // Direct background fetch of user after restoring auth (only if logged in)
@@ -46,12 +55,31 @@ export default function RootLayout() {
       } catch (e) {
         console.warn("Failed to initialize auth", e);
       } finally {
-        // Mark authentication as loaded. Now the app knows if the user is logged in or not.
         setAuthLoaded(true);
       }
     };
     init();
+
+    // Listen for incoming deep links (Warm Start / Background -> Foreground)
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []); // This runs only once on mount
+
+  // Helper to process deep links
+  const handleDeepLink = (url: string) => {
+    if (!url) return;
+    const parsed = Linking.parse(url);
+    if (parsed.path?.startsWith('public')) {
+      setAppMode('public');
+    } else if (parsed.path?.startsWith('personal')) {
+      setAppMode('personal');
+    }
+  };
 
 
 
@@ -61,6 +89,27 @@ export default function RootLayout() {
   const mode = useValue(appMode$.mode);
 
   const themeName = UnistylesRuntime.themeName;
+  const segments = useSegments();
+
+  // Sync app mode with route on native platforms
+  // Always sync on native to respect deep links and navigation
+  useEffect(() => {
+    // Only sync on native - web handles this via getInitialMode() checking window.location.pathname
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      if (segments.length > 0) {
+        const firstSegment = segments[0];
+        // We act on route changes. If the route says "public", we become public.
+        // We DON'T listen to 'mode' changes here to avoid reverting manual toggles
+        // before navigation processes.
+        if (firstSegment === 'public') {
+          setAppMode('public');
+        } else if (firstSegment === 'personal') {
+          setAppMode('personal');
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments]);
 
   useEffect(() => {
     // Initialize once - runs for the entire app lifecycle
