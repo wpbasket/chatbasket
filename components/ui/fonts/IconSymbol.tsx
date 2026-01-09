@@ -1,7 +1,7 @@
-import { useUnistyles } from 'react-native-unistyles';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
 import { StyleProp, TextStyle } from 'react-native';
+import { useUnistyles } from 'react-native-unistyles';
 // Map SFSymbol-like names to Ionicons names (industry standard)
 const MAPPING = {
   'house.fill': 'home',
@@ -11,7 +11,7 @@ const MAPPING = {
   'chevron.left.forwardslash.chevron.right': 'code-slash',
   'chevron.right': 'chevron-forward',
   'arrow.left': 'arrow-back',
-  'arrow.right':'arrow-forward',
+  'arrow.right': 'arrow-forward',
   'person.fill': 'person',
   'person.line': 'person-outline',
   'account.add': 'person-add',

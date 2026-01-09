@@ -129,10 +129,10 @@ export default function Auth() {
   if (method == 'login') {
     return (
       <ThemedView style={styles.ctn}>
-        <StatusBar style="dark" />
+        {/* <StatusBar style="dark" /> */}
         <View style={styles.container}>
           <View style={styles.mainctn}>
-            <ThemedText type="title" color='#2C3E50'>Login</ThemedText>
+            <ThemedText type="title" >Login</ThemedText>
             {/* <ThemedText>{'\n'}</ThemedText> */}
             <TextInput
               placeholder="Email"
@@ -182,10 +182,10 @@ export default function Auth() {
   if (method == 'signup') {
     return (
       <ThemedView style={styles.ctn}>
-        <StatusBar style="dark" />
+        {/* <StatusBar style="dark" /> */}
         <View style={styles.container}>
           <View style={styles.mainctn}>
-            <ThemedText type="title" color='#2C3E50'>Signup</ThemedText>
+            <ThemedText type="title">Signup</ThemedText>
             <TextInput
               placeholder='Name'
               inputMode='text'
@@ -246,7 +246,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: 100,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
   },
   container: {
     width: {
@@ -313,7 +313,7 @@ const styles = StyleSheet.create((theme) => ({
     borderTopRightRadius: 25,
     paddingHorizontal: 15,
     // marginBottom: 5,
-    color: '#2C3E50',
+    color: theme.colors.text
     // backgroundColor: 'rgb(255, 255, 255)'
   },
   inputError: {
@@ -333,7 +333,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 16,
   },
   forgotPassword: {
-    color: '#2C3E50'
+    color: theme.colors.title
   },
   welcomeText: {
     color: '#2C3E50',

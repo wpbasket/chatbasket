@@ -184,7 +184,7 @@ const styles = StyleSheet.create((theme) => ({
         paddingBottom: 100,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: 'white',
+        backgroundColor: theme.colors.background,
     },
     container: {
         width: {
@@ -252,7 +252,7 @@ const styles = StyleSheet.create((theme) => ({
         borderTopRightRadius: 25,
         paddingHorizontal: 10,
         marginBottom: 10,
-        color: '#2C3E50',
+        color: theme.colors.text,
         // backgroundColor: 'rgb(255, 255, 255)'
     },
     inputError: {
@@ -275,6 +275,6 @@ const styles = StyleSheet.create((theme) => ({
         alignSelf: 'flex-start',
     },
     resendOtp: {
-        color: '#2C3E50'
+        color: theme.colors.title
     }
 }))

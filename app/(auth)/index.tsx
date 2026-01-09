@@ -21,14 +21,14 @@ export default function Index() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      {/* <StatusBar style="dark" /> */}
       <ParallaxScrollView>
         <View style={styles.container}>
           <View style={styles.headerContainer}>
             <ThemedText type="logo" style={styles.logo}>
               ChatBasket
             </ThemedText>
-            <ThemedText type="subtitle" style={styles.tagline}>
+            <ThemedText type="gantariWithoutColorAndSize" style={styles.tagline}>
               BUILT TO CONNECT AND {'\n'}DESIGNED TO SCALE
             </ThemedText>
           </View>
@@ -77,7 +77,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   container: {
     flex: 1,
     paddingTop: rt.insets.top + 20,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.background,
     // padding: 10,
     justifyContent: "space-between",
     // paddingTop: 20,
@@ -95,9 +95,8 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   tagline: {
     fontSize: 62,
-    color: '#2C3E50',
+    color: theme.colors.text,
     marginTop: 10,
-    letterSpacing: 2,
     lineHeight: 60,
   },
   buttonsContainer: {

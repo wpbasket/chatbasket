@@ -66,6 +66,13 @@ function handleRegistrationError(errorMessage: string): void {
  */
 export async function registerForPushNotifications(): Promise<{ token: string; type: TokenType } | null> {
     try {
+        // iOS push notifications are currently disabled
+        // TODO: Enable when FCM is configured for iOS via react-native-firebase
+        if (Platform.OS === 'ios') {
+            console.log('ℹ️ Push notifications are currently disabled for iOS');
+            return null;
+        }
+
         // Set up Android notification channel (required for Android)
         if (Platform.OS === 'android') {
             await Notifications.setNotificationChannelAsync('default', {
@@ -105,8 +112,8 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
         const deviceToken = await Notifications.getDevicePushTokenAsync();
         const token = deviceToken.data;
 
-        // Determine token type based on platform
-        const type: TokenType = Platform.OS === 'ios' ? 'apn' : 'fcm';
+        // Token type is FCM since iOS is currently disabled
+        const type: TokenType = 'fcm';
 
         return { token, type };
     } catch (error) {

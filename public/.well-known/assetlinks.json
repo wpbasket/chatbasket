@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tasktoclear.chatbasket",
+      "sha256_cert_fingerprints": [
+        "14:5D:89:44:D1:4F:74:64:A7:69:84:B8:5E:02:CA:8B:ED:1E:75:16:15:F9:D9:E9:0A:94:C9:F6:70:FC:21:8C"
+      ]
+    }
+  }
+]
