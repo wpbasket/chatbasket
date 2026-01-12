@@ -9,7 +9,6 @@ import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
-import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
 import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
 import { authState } from '@/state/auth/state.auth';
 import { createProfile$ } from '@/state/publicState/profile/public.state.profile.createProfile';
@@ -67,7 +66,7 @@ export default function ProfileScreen() {
   const user = useValue(authState.user);
   const userNotFound = useValue(createProfile$.userNotFound);
   const avatarUrl = useValue(authState.user.avatarUri);
-  console.log(avatarUrl);
+
   const { handlePressIn } = pressableAnimation();
 
 
