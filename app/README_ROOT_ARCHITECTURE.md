@@ -8,12 +8,16 @@ This file is the most critical engineering component in the Frontend. It orchest
 ### Responsibilities
 
 1.  **Deep Link Handling (The "Race" Fix)**
-    *   To prevent Route Guards from blocking deep links, we detect `Linking.getInitialURL()` *before* rendering the navigation stack.
-    *   Logic: "If URL starts with 'public', set AppMode='public' *synchronously*."
+    *   **Cold Start (Native)**: `+native-intent.tsx` handles initial deep links using Expo Router's `redirectSystemPath()` pattern. It sets AppMode synchronously before navigation.
+    *   **Warm Start**: `_layout.tsx` listens to `Linking.addEventListener('url')` for deep links when app is backgrounded.
+    *   **Web**: Handled via `getInitialMode()` checking `window.location.pathname` in `state.appMode.ts`.
+    *   Logic: "If URL starts with 'public', set AppMode='public' *synchronously*.\"
 
 2.  **App Mode Synchronization**
     *   We use `useSegments()` to listen to navigation changes.
-    *   Rule: If the Router says we are in `/public`, we force the State to `public`.
+    *   **Optimization**: Mode is only set if it differs from current value (prevents redundant state updates).
+    *   **Warm Start Handler**: Uses `useCallback` to memoize the deep link handler, recreating only when mode changes.
+    *   Rule: If the Router says we are in `/public`, we sync the State to `public`.
     *   *Safety*: We do NOT redirect based on State manual toggles here to avoid infinite loops.
 
 3.  **Authentication Hydration**

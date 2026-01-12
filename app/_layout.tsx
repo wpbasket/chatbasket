@@ -21,7 +21,7 @@ import * as Linking from 'expo-linking';
 import { SplashScreen, Stack, useSegments } from 'expo-router';
 import { ShareIntentProvider } from 'expo-share-intent';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
@@ -35,16 +35,29 @@ export default function RootLayout() {
   // NEW: State to track if the authentication status has been loaded from storage.
   const [authLoaded, setAuthLoaded] = useState(false);
 
+  // const lock = true;
+  const lock = useValue(authState.isLoggedIn);
+  const sentOtp = useValue(authState.isSentOtp);
+  const mode = useValue(appMode$.mode);
+
+  // Helper to process deep links (memoized to avoid recreation on every render)
+  const handleDeepLink = useCallback((url: string) => {
+    if (!url) return;
+    const parsed = Linking.parse(url);
+
+    // OPTIMIZATION: Only set mode if it's different to avoid redundant state updates
+    if (parsed.path?.startsWith('public') && mode !== 'public') {
+      setAppMode('public');
+    } else if (parsed.path?.startsWith('personal') && mode !== 'personal') {
+      setAppMode('personal');
+    }
+  }, [mode]); // Recreate only when mode changes
+
   useEffect(() => {
     const init = async () => {
       try {
-        // Check for initial deep link (Cold Start)
-        if (Platform.OS === 'android' || Platform.OS === 'ios') {
-          const initialUrl = await Linking.getInitialURL();
-          if (initialUrl) {
-            handleDeepLink(initialUrl);
-          }
-        }
+        // Note: Cold start deep links are now handled by +native-intent.tsx
+        // This is the modern Expo Router pattern for initial URL handling
 
         await initializeSecureStorage();
         await restoreAuthState();
@@ -61,6 +74,7 @@ export default function RootLayout() {
     init();
 
     // Listen for incoming deep links (Warm Start / Background -> Foreground)
+    // Cold starts are handled by +native-intent.tsx
     const subscription = Linking.addEventListener('url', (event) => {
       handleDeepLink(event.url);
     });
@@ -68,44 +82,24 @@ export default function RootLayout() {
     return () => {
       subscription.remove();
     };
-  }, []); // This runs only once on mount
-
-  // Helper to process deep links
-  const handleDeepLink = (url: string) => {
-    if (!url) return;
-    const parsed = Linking.parse(url);
-    if (parsed.path?.startsWith('public')) {
-      setAppMode('public');
-    } else if (parsed.path?.startsWith('personal')) {
-      setAppMode('personal');
-    }
-  };
-
-
-
-  // const lock = true;
-  const lock = useValue(authState.isLoggedIn);
-  const sentOtp = useValue(authState.isSentOtp);
-  const mode = useValue(appMode$.mode);
+  }, [handleDeepLink]); // Depend on handleDeepLink
 
   const themeName = UnistylesRuntime.themeName;
   const segments = useSegments();
 
-  // Sync app mode with route on native platforms
-  // Always sync on native to respect deep links and navigation
+  // Sync app mode with route during navigation
+  // On native: +native-intent.tsx handles cold starts, this handles subsequent navigations
+  // On web: getInitialMode() reads window.location.pathname, this handles client-side navigation
   useEffect(() => {
-    // Only sync on native - web handles this via getInitialMode() checking window.location.pathname
-    if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      if (segments.length > 0) {
-        const firstSegment = segments[0];
-        // We act on route changes. If the route says "public", we become public.
-        // We DON'T listen to 'mode' changes here to avoid reverting manual toggles
-        // before navigation processes.
-        if (firstSegment === 'public') {
-          setAppMode('public');
-        } else if (firstSegment === 'personal') {
-          setAppMode('personal');
-        }
+    if (segments.length > 0) {
+      const firstSegment = segments[0];
+
+      // Sync mode with current route
+      // OPTIMIZATION: Only set mode if it's different to avoid redundant state updates
+      if (firstSegment === 'public' && mode !== 'public') {
+        setAppMode('public');
+      } else if (firstSegment === 'personal' && mode !== 'personal') {
+        setAppMode('personal');
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

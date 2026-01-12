@@ -50,8 +50,9 @@ For new developers, here is how the app boots up:
     *   Reads Encrypted Session Tokens from MMKV.
     *   If valid, sets `authState.isLoggedIn = true`.
 3.  **Deep Link Check (Critical)**:
-    *   Checks `Linking.getInitialURL()`.
-    *   If a link exists (e.g., `chatbasket://public/profile`), it sets `appMode = 'public'` **synchronously**.
+    *   **Native**: `+native-intent.tsx` intercepts initial deep links via `redirectSystemPath()`.
+    *   **Web**: `state.appMode.ts` checks `window.location.pathname` during initialization.
+    *   If a deep link exists (e.g., `chatbasket://public/profile`), it sets `appMode = 'public'` **synchronously**.
 4.  **Route Guard Evaluation**:
     *   `Stack.Protected` runs.
     *   If `isLoggedIn` is false -> Redirect to `/login`.
