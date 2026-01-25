@@ -21,7 +21,7 @@ export async function redirectSystemPath({
     if (initial && path) {
         // Extract the actual path from full URL
         // Deep links can come as:
-        // 1. Full URL: "https://chatbasket.me/public/home"
+        // 1. Full URL: "https://chatbasket.live/public/home"
         // 2. App scheme: "chatbasket://public/home"
         // 3. Path only: "public/home"
         let cleanPath = path;
@@ -31,7 +31,7 @@ export async function redirectSystemPath({
             // Use a base URL as fallback for relative paths (Expo best practice)
             if (path.includes('://')) {
                 const url = new URL(path);
-                cleanPath = url.pathname; // Gets "/public/home" from "https://chatbasket.me/public/home"
+                cleanPath = url.pathname; // Gets "/public/home" from "https://chatbasket.live/public/home"
                 // Remove leading slash if present
                 if (cleanPath.startsWith('/')) {
                     cleanPath = cleanPath.substring(1);

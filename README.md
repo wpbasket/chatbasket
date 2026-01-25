@@ -1,6 +1,6 @@
 # 💬 ChatBasket
 
-🌐 **Website**: [chatbasket.me](https://chatbasket.me)
+🌐 **Website**: [chatbasket.live](https://chatbasket.live)
 
 A modern, cross-platform social messaging application built with **React Native** and **Expo SDK 54**. ChatBasket offers both personal messaging and public social feed experiences with a sleek, themeable UI.
 
