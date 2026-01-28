@@ -1,13 +1,12 @@
+import TabBarBackground from '@/components/ui/common/TabBarBackground';
+import { TabBarButton } from '@/components/ui/common/TabBarButton';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import { Colors } from '@/constants/Colors';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
-import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import TabBarBackground from '@/components/ui/common/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { TabBarButton } from '@/components/ui/common/TabBarButton';
+import { Platform, useWindowDimensions } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { useWindowDimensions } from 'react-native';
 
 export default function TabLayout() {
   const { theme } = useUnistyles();
@@ -34,7 +33,7 @@ export default function TabLayout() {
             // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
           },
-          web:{
+          web: {
             display: width > 800 ? 'none' : 'flex'
           },
           // web:{
@@ -43,6 +42,12 @@ export default function TabLayout() {
           default: { backgroundColor: theme.colors.background },
         }),
       }}>
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,
+        }}
+      />
       <Tabs.Screen
         name="home"
         options={{

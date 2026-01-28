@@ -1,13 +1,12 @@
+import TabBarBackground from '@/components/ui/common/TabBarBackground';
+import { TabBarButton } from '@/components/ui/common/TabBarButton';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
+import { Colors } from '@/constants/Colors';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
-import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import TabBarBackground from '@/components/ui/common/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { TabBarButton } from '@/components/ui/common/TabBarButton';
+import { Platform, useWindowDimensions } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
-import { useWindowDimensions } from 'react-native';
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 export default function PersonalTabLayout() {
   const { theme } = useUnistyles();
@@ -43,6 +42,12 @@ export default function PersonalTabLayout() {
           default: { backgroundColor: theme.colors.background },
         }),
       }}>
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,
+        }}
+      />
       <Tabs.Screen
         name="home"
         options={{
