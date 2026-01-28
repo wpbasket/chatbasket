@@ -100,28 +100,6 @@ For new developers, here is how the app boots up:
 
 ---
 
-## 📁 Project Structure
-
-```
-chatbasket/
-├── app/                    # Expo Router screens (Has README)
-│   ├── (auth)/            # Authentication screens
-│   ├── personal/          # Personal mode (home, contacts, profile)
-│   └── public/            # Public mode (home, explore, profile)
-├── components/            # Reusable UI components
-│   ├── modals/            # Modal dialogs (Has README)
-│   ├── ui/                # Common UI elements (Has README)
-├── lib/                   # Core libraries
-│   ├── storage/           # Storage adapters (Has README)
-├── notification/          # Push Notifications (Has README)
-├── state/                 # Legend State stores
-│   ├── auth/              # Authentication state (Has README)
-│   ├── appMode/           # Mode switching logic (Has README)
-└── utils/                 # Utility functions
-```
-
----
-
 
 
 ---
