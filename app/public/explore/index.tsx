@@ -14,7 +14,7 @@ export default function Explore() {
         </ThemedViewWithSidebar.Sidebar>
         <ThemedViewWithSidebar.Main>
           <ThemedView style={styles.container}>
-            <ThemedText>Comming soon</ThemedText>
+            <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
           </ThemedView>
         </ThemedViewWithSidebar.Main>
       </ThemedViewWithSidebar>

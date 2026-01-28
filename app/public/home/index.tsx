@@ -1,18 +1,17 @@
-import Postcard from '@/components/publicComponents/post/Postcard';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
-import userPostsStore from '@/state/publicState/public.state.userPostsStore';
-import { LegendList } from "@legendapp/list";
+// import userPostsStore from '@/state/publicState/public.state.userPostsStore';
+// import { LegendList } from "@legendapp/list";
 import { useValue } from '@legendapp/state/react';
 import { useRouter } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 export default function Home() {
-  const posts_for_user = useValue(userPostsStore.posts);
+  // const posts_for_user = useValue(userPostsStore.posts);
   const currentMode = useValue(appMode$.mode);
   const router = useRouter();
 
@@ -43,7 +42,7 @@ export default function Home() {
                 </ThemedText>
               </Pressable>
             </ThemedView>
-            <LegendList
+            {/* <LegendList
               data={posts_for_user}
               keyExtractor={(item) => item.id.toString()}
               renderItem={({ item }) => (
@@ -54,7 +53,10 @@ export default function Home() {
               scrollEnabled={true}
               recycleItems={true}
               maintainVisibleContentPosition={true}
-            />
+            /> */}
+            <ThemedView style={styles.temp_container}>
+              <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
+            </ThemedView>
           </ThemedView>
         </ThemedViewWithSidebar.Main>
       </ThemedViewWithSidebar>
@@ -71,6 +73,12 @@ const styles = StyleSheet.create((theme, rt) => ({
       md: rt.insets.top,
       lg: 11
     }
+  },
+  temp_container: {
+    flex: 1,
+    paddingTop: rt.insets.top,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleContainer: {
     display: {
