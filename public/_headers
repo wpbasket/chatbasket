@@ -1,0 +1,18 @@
+# ----------------------------------------------------------------------
+# Security Headers for Chatbasket (Expo Web)
+# ----------------------------------------------------------------------
+# 1. Content-Security-Policy (CSP): 
+#    - Blocks XSS (no unauthorized scripts).
+#    - Allows 'unsafe-inline' for Styles/Scripts (Required for Expo Web).
+#    - Restricts data connections to 'self' and Official API.
+# 2. HSTS: Forces HTTPS for 1 Year.
+# 3. X-Frame-Options: Prevents Clickjacking.
+# ----------------------------------------------------------------------
+
+/*
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.chatbasket.live https://chatbasket.live https://1.1.1.1 https://one.one.one.one https://cloudflareinsights.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; object-src 'none';
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
