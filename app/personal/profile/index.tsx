@@ -66,6 +66,7 @@ function ProfileEmptyState() {
 
 export default function ProfileScreen() {
   const { handlePressIn } = pressableAnimation();
+  const refreshing = useValue($personalStateUser.refreshing);
 
   const onRefresh = useCallback(async () => {
     $personalStateUser.refreshing.set(true);
@@ -136,7 +137,7 @@ export default function ProfileScreen() {
                   <ScrollView
                     refreshControl={
                       <RefreshControl
-                        refreshing={useValue($personalStateUser.refreshing)}
+                        refreshing={refreshing}
                         onRefresh={onRefresh}
                       />
                     }
