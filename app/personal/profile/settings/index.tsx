@@ -8,7 +8,6 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { useNotificationPermission } from '@/hooks/commonHooks/hooks.notificationPermission';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { settingApi } from '@/lib/publicLib/settingApi/public.api.setting';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { openNotificationSettingsFromApp } from '@/notification/registerFcmOrApn';
 import { setAppMode } from '@/state/appMode/state.appMode';
@@ -26,6 +25,7 @@ import SettingsEmailRow from './components/SettingsEmailRow';
 import SettingsPasswordRow from './components/SettingsPasswordRow';
 import CreateSettingsFlows from './settings.flows';
 import styles from './settings.styles';
+import { settingApi } from '@/lib/commonLib/settingApi/common.api.setting';
 
 export default function Settings() {
   const MAX_RESENDS = 3;

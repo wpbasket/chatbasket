@@ -1,10 +1,11 @@
 import {
-    apiClient,
-    type AuthResponse,
-    type AuthVerificationPayload,
-    type LoginPayload,
-    type SessionResponse,
-    type SignupPayload,
+  apiClient,
+  type AuthResponse,
+  type AuthVerificationPayload,
+  type LoginPayload,
+  type ResendOTPPayload,
+  type SessionResponse,
+  type SignupPayload,
 } from '@/lib/constantLib';
 
 /**
@@ -43,10 +44,20 @@ async function AuthVerificationLogin(payload: AuthVerificationPayload): Promise<
   return apiClient.post<SessionResponse>('/auth/login-verification', payload);
 }
 
+/**
+ * Resend OTP for both signup and login flows
+ * @param payload email: string; type: 'signup' | 'login';
+ * @returns status:boolean; message:string;
+ */
+async function resendOTP(payload: ResendOTPPayload): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/resend-otp', payload);
+}
+
 
 export const authApi = {
   signup,
   login,
   AuthVerificationSignup,
   AuthVerificationLogin,
+  resendOTP,
 };

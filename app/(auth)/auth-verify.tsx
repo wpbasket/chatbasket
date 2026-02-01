@@ -83,13 +83,8 @@ export default function AuthVerification() {
                 }
             } catch (error) {
                 if (error instanceof ApiError) {
-                    if (['unauthorized'].includes(error.type)) {
-                        showAlert('Invalid OTP');
-                        return;
-                    }
-                    else {
-                        showAlert('Something went wrong try again');
-                    }
+                    // Show the specific error message from backend (e.g., "Invalid OTP" or "OTP has expired")
+                    showAlert(error.message || 'Verification failed');
                 } else {
                     showAlert('Unexpected error occurred try again');
                 }
@@ -104,7 +99,12 @@ export default function AuthVerification() {
             return
         }
         try {
-            const response = await authApi.login({ email: loginOrSignup$.email.get()!, password: loginOrSignup$.password.get()! })
+            // Use unified resend-otp endpoint
+            const response = await authApi.resendOTP({
+                email: loginOrSignup$.email.get()!,
+                type: isSignup ? 'signup' : 'login'
+            })
+
             if (response.status) {
                 showAlert('OTP sent successfully')
                 authState.isSentOtp.set(true)
@@ -113,13 +113,7 @@ export default function AuthVerification() {
             }
         } catch (error) {
             if (error instanceof ApiError) {
-                if (['unauthorized'].includes(error.type)) {
-                    showAlert('Invalid OTP');
-                    return;
-                }
-                else {
-                    showAlert('Something went wrong try again');
-                }
+                showAlert(error.message || 'Failed to resend OTP');
             } else {
                 showAlert('Unexpected error occurred try again');
             }
@@ -240,10 +234,10 @@ const styles = StyleSheet.create((theme) => ({
             lg: 20
         },
         borderColor: {
-          xs:theme.colors.neutral2,
-          sm:theme.colors.neutral2,
-          md:theme.colors.neutral2,
-          lg:theme.colors.neutral4,
+            xs: theme.colors.neutral2,
+            sm: theme.colors.neutral2,
+            md: theme.colors.neutral2,
+            lg: theme.colors.neutral4,
         },
         borderWidth: 1,
         borderTopLeftRadius: 8,

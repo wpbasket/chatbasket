@@ -6,7 +6,7 @@ import { Url } from '../constants/constants';
 import { ApiError } from '../models/model.api';
 
 
-const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/verify-otp'];
+const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/signup-verification', '/auth/login-verification', '/auth/resend-otp'];
 
 export class ApiClient {
   private baseURL = Url.BASE_URL;
@@ -48,7 +48,7 @@ export class ApiClient {
 
       // 🚫 Handle session expiration or invalid session
       if (['session_invalid', 'missing_auth'].includes(type)) {
-        clearSession(); 
+        clearSession();
 
         // Toast can be shown if needed
         // Toast.show({

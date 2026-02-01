@@ -1,7 +1,7 @@
 // models/auth.model.ts or a shared file
 
 
-  
+
 
 export interface SignupPayload {
     name: string;
@@ -31,5 +31,10 @@ export interface SessionResponse {
     email: string;
     sessionId: string;
     sessionExpiry: string;
+}
+
+export interface ResendOTPPayload {
+    email: string;
+    type: 'signup' | 'login';
 }
 

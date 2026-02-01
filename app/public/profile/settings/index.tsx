@@ -12,7 +12,7 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { useNotificationPermission } from '@/hooks/commonHooks/hooks.notificationPermission';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { settingApi } from '@/lib/publicLib/settingApi/public.api.setting';
+import { settingApi } from '@/lib/commonLib/settingApi/common.api.setting';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { openNotificationSettingsFromApp } from '@/notification/registerFcmOrApn';
 import { setAppMode } from '@/state/appMode/state.appMode';
