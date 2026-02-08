@@ -9,14 +9,13 @@ export async function PersonalUtilGetUser() {
     const response = await PersonalProfileApi.getProfile();
     if (response) {
       $personalStateUser.user.set(response);
-      PersonalStorageSetUser();
+      PersonalStorageSetUser(response);
     }
   } catch (error) {
     if (error instanceof ApiError) {
       if (['not_found'].includes(error.type)) {
         $personalStateUser.user.set(null);
-        PersonalStorageSetUser();
-        $personalStateUser.user.set(null);
+        PersonalStorageSetUser(null as any);
         console.log('User profile not found');
         $personalStateCreateProfile.userNotFound.set(true);
       }

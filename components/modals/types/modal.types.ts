@@ -1,4 +1,5 @@
-// types/modal.types.ts
+import type { ReactNode } from 'react';
+
 export interface BaseModalProps {
   onClose?: () => void;
   // Controls whether tapping on overlay/backdrop should close the modal (default: true)
@@ -6,7 +7,7 @@ export interface BaseModalProps {
 }
 
 export interface ConfirmModalProps extends BaseModalProps {
-  message: string;
+  message: string | ReactNode;
   onConfirm: () => void;
   confirmText?: string;
   cancelText?: string;
@@ -67,7 +68,6 @@ export interface ModalPosition {
 }
 
 // Controllers modal
-import type { ReactNode } from 'react';
 
 export interface ControllerSpec {
   id: string;

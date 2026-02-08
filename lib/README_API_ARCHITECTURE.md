@@ -7,12 +7,12 @@
 We decouple the **UI** from the **Network Implementation**. Components never call `fetch()` directly. They call Semantic API Methods.
 
 ### 1. The Base Client (`apiClient`)
-*   Located in `lib/constantLib`.
-*   wraps the underlying HTTP client (e.g., `mandarin` or `axios`).
-*   **Responsibilities**:
-    *   Automatically adds `Authorization: Bearer <token>` headers.
-    *   Handles Base URL configuration.
-    *   Standardizes Error Handling (interceptors).
+* Located in `lib/constantLib/clients/client.ts` (Expo `fetch` wrapper).
+* **Responsibilities**:
+  * Automatically adds `Authorization: Bearer <sessionId>:<userId>` on **native** (web relies on HttpOnly cookies + `credentials: 'include'`).
+  * Handles Base URL normalization.
+  * Whitelists auth endpoints from auth headers.
+  * Standardizes error handling; clears session when backend returns `session_invalid` / `missing_auth`.
 
 ### 2. The API Definition (e.g., `public.api.profile.ts`)
 *   **Role**: Define the Contract.

@@ -4,7 +4,7 @@ import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal'
 import { Platform, Pressable, TextInput, View } from 'react-native'
 import { StyleSheet } from 'react-native-unistyles'
 
-import { ApiError } from '@/lib/constantLib'
+import { ApiError, AuthVerificationPayload, SessionResponse } from '@/lib/constantLib'
 import { authApi } from '@/lib/constantLib/authApi/api.auth'
 import { setSession } from '@/lib/storage/commonStorage/storage.auth'
 import { setAppMode } from '@/state/appMode/state.appMode'
@@ -15,7 +15,10 @@ import { getUser } from '@/utils/publicUtils/public.util.profile'
 import { useValue } from '@legendapp/state/react'
 import { router } from 'expo-router'
 import { useEffect } from 'react'
+import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.setting'
 import { registerTokenWithBackend } from '../../notification/registerFcmOrApn'
+import { showConfirmDialog } from '@/utils/commonUtils/util.modal'
+import { PersonalStorageSetDeviceStatus } from '@/lib/storage/personalStorage/personal.storage.device'
 
 export default function AuthVerification() {
     const otp = useValue(loginOrSignup$.otp)
@@ -59,37 +62,79 @@ export default function AuthVerification() {
             return router.back()
         }
 
-        await runWithLoading(async () => {
-            try {
-                const platform = Platform.select({ ios: 'native', android: 'native', web: 'web' })
-                if (isSignup) {
-                    const response = await authApi.AuthVerificationSignup({ email: email!, secret: otp!, platform: platform! });
-                    setAppMode('personal');
-                    setSession(response.sessionId, response.userId, response.sessionExpiry)
-                    // Fire-and-forget user fetch so root layout can update when ready
-                    void getUser()
-                    // Request notification permissions immediately after successful signup
-                    void registerTokenWithBackend()
+        let response: SessionResponse | undefined;
 
-                }
-                else {
-                    const response = await authApi.AuthVerificationLogin({ email: email!, secret: otp!, platform: platform! });
-                    setAppMode('personal');
-                    setSession(response.sessionId, response.userId, response.sessionExpiry)
-                    // Fire-and-forget user fetch so root layout can update when ready
-                    void getUser()
-                    // Request notification permissions immediately after successful login
-                    void registerTokenWithBackend()
-                }
-            } catch (error) {
-                if (error instanceof ApiError) {
-                    // Show the specific error message from backend (e.g., "Invalid OTP" or "OTP has expired")
-                    showAlert(error.message || 'Verification failed');
+        try {
+            response = await runWithLoading(async () => {
+                const platform = Platform.select({ ios: 'ios', android: 'android', web: 'web' })
+                if (isSignup) {
+                    return await authApi.AuthVerificationSignup({ email: email!, secret: otp!, platform: platform! });
                 } else {
-                    showAlert('Unexpected error occurred try again');
+                    return await authApi.AuthVerificationLogin({ email: email!, secret: otp!, platform: platform! });
                 }
+            }, { message: 'Verifying' });
+        } catch (error) {
+            if (error instanceof ApiError) {
+                showAlert(error.message || 'Verification failed');
+            } else {
+                showAlert('Unexpected error occurred try again');
+                console.log(error);
             }
-        }, { message: 'Verifying' })
+            return;
+        }
+
+        if (!response) return;
+
+        const platform = Platform.select({ ios: 'ios', android: 'android', web: 'web' })
+
+        // If platform is native and it's NOT already primary, prompt user to switch
+        if (platform !== 'web' && !response.isPrimary) {
+            const existingName = response.primaryDeviceName || 'Another Device';
+            const confirm = await showConfirmDialog(
+                <>
+                    This device is currently NOT your Primary Device. "
+                    <ThemedText style={{ color: 'red', fontWeight: 'bold' }}>{existingName}</ThemedText>
+                    " is currently set as Primary. Do you want to switch?
+                </>,
+                {
+                    confirmText: 'Switch',
+                    cancelText: 'Keep as Secondary',
+                    confirmVariant: 'default'
+                }
+            );
+
+            if (confirm) {
+                // Set session temporarily to allow calling the settings API
+                await setSession({
+                    sessionId: response.sessionId,
+                    userId: response.userId,
+                    sessionExpiry: response.sessionExpiry
+                });
+                await PersonalStorageSetDeviceStatus({
+                    isPrimary: response.isPrimary,
+                    deviceName: response.primaryDeviceName || ''
+                });
+                // Fire-and-forget: Set central without blocking or loading
+                void PersonalSettingApi.setCentralDevice();
+            }
+        }
+
+        setAppMode('personal');
+        // Final session set (re-confirms session if it was already set temporarily above, or sets it now)
+        await setSession({
+            sessionId: response.sessionId,
+            userId: response.userId,
+            sessionExpiry: response.sessionExpiry
+        });
+        await PersonalStorageSetDeviceStatus({
+            isPrimary: response.isPrimary,
+            deviceName: response.primaryDeviceName || ''
+        });
+
+        // Fire-and-forget user fetch so root layout can update when ready
+        void getUser()
+        // Request notification permissions immediately after successful auth
+        void registerTokenWithBackend()
     }
 
     const handleResendOtp = async () => {

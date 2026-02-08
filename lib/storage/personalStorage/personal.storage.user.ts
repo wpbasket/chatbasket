@@ -1,55 +1,30 @@
-import { MMKV } from "react-native-mmkv";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PersonalProfileResponse } from "@/lib/personalLib";
 import { $personalStateUser } from "@/state/personalState/user/personal.state.user";
-import { Platform } from "react-native";
+import { AppStorage } from "../storage.wrapper";
 
-const PersonalUserKey='user-profile';
-const mmkv = new MMKV({ id: 'personal-user' })
-const isWeb = Platform.OS === 'web'
+const PersonalUserKey = 'user-profile';
 
-export const PersonalStorageSetUser = async (): Promise<void> => {
-  const userData: PersonalProfileResponse | null = $personalStateUser.user.get(); 
+type PersonalUserSchema = {
+  [PersonalUserKey]: PersonalProfileResponse;
+};
 
-  if (!userData) {
+const mmkv = new AppStorage<PersonalUserSchema>('personal-user');
+
+export const PersonalStorageSetUser = async (userData?: PersonalProfileResponse): Promise<void> => {
+  const data = userData || $personalStateUser.user.get();
+
+  if (!data) {
     return;
   }
 
-  try {
-    if (isWeb) {
-      await AsyncStorage.setItem(PersonalUserKey, JSON.stringify(userData));
-    } else {
-      mmkv.set(PersonalUserKey, JSON.stringify(userData));
-    }
-  } catch {
-    // no-op
-  }
-}
+  await mmkv.set(PersonalUserKey, data);
+};
 
 export const PersonalStorageGetUser = async (): Promise<void> => {
-  try {
-    if (isWeb) {
-      const userData = await AsyncStorage.getItem(PersonalUserKey);
-      const user=userData ? JSON.parse(userData) : null;
-      $personalStateUser.user.set(user);
-    } else {
-      const userData = mmkv.getString(PersonalUserKey);
-      const user=userData ? JSON.parse(userData) : null;
-      $personalStateUser.user.set(user);
-    }
-  } catch {
-    // no-op
-  }
-}
+  const user = await mmkv.get(PersonalUserKey);
+  $personalStateUser.user.set(user);
+};
 
 export const PersonalStorageRemoveUser = async (): Promise<void> => {
-  try {
-    if (isWeb) {
-      await AsyncStorage.removeItem(PersonalUserKey);
-    } else {
-      mmkv.delete(PersonalUserKey);
-    }
-  } catch {
-    // no-op
-  }
-}
+  await mmkv.remove(PersonalUserKey);
+};

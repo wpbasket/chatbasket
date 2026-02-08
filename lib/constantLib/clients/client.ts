@@ -11,6 +11,25 @@ const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/signup-verificatio
 export class ApiClient {
   private baseURL = Url.BASE_URL;
 
+  private buildUrl(endpoint: string, params?: Record<string, any>): string {
+    const base = (this.baseURL || '').replace(/\/+$|\/+$/g, '');
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${base}${path}`;
+
+    if (!params || Object.keys(params).length === 0) {
+      return url;
+    }
+
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      searchParams.append(key, String(value));
+    });
+
+    const queryString = searchParams.toString();
+    return queryString ? `${url}?${queryString}` : url;
+  }
+
   async request<T>(endpoint: string, options: FetchRequestInit = {}): Promise<T> {
     const isWeb = Platform.OS === 'web';
     const sessionId = authState.sessionId.get();
@@ -21,17 +40,18 @@ export class ApiClient {
     if (sessionId && userId && !AUTH_WHITELIST.includes(endpoint) && !isWeb) {
       dynamicHeaders['Authorization'] = `Bearer ${sessionId}:${userId}`;
     }
-    // Normalize URL joining to avoid malformed URLs when endpoint lacks a leading slash
-    const base = (this.baseURL || '').replace(/\/+$/, '');
-    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${base}${path}`;
+    const isAbsolute = /^https?:\/\//i.test(endpoint);
+    const url = isAbsolute ? endpoint : this.buildUrl(endpoint);
+
+    const bodyIsFormData = options.body instanceof FormData;
+    const headers: Record<string, string> = {
+      ...(!bodyIsFormData ? { 'Content-Type': 'application/json' } : {}),
+      ...dynamicHeaders,
+      ...(options.headers as Record<string, string> | undefined),
+    };
 
     const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...dynamicHeaders,
-        ...options.headers,
-      },
+      headers,
       ...(isWeb && { credentials: 'include' }),
       ...options,
     });
@@ -64,33 +84,41 @@ export class ApiClient {
     return response.json();
   }
 
-  get<T>(endpoint: string) {
-    return this.request<T>(endpoint, { method: 'GET' });
+  get<T>(endpoint: string, params?: Record<string, any>) {
+    const url = this.buildUrl(endpoint, params);
+    return this.request<T>(url, { method: 'GET' });
   }
 
-  post<T>(endpoint: string, data?: any) {
+  post<T>(endpoint: string, data?: any, options?: FetchRequestInit) {
+    const body = data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined;
     return this.request<T>(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body,
+      ...options,
     });
   }
 
-  put<T>(endpoint: string, data?: any) {
+  put<T>(endpoint: string, data?: any, options?: FetchRequestInit) {
+    const body = data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined;
     return this.request<T>(endpoint, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body,
+      ...options,
     });
   }
 
-  patch<T>(endpoint: string, data?: any) {
+  patch<T>(endpoint: string, data?: any, options?: FetchRequestInit) {
+    const body = data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined;
     return this.request<T>(endpoint, {
       method: 'PATCH',
-      body: JSON.stringify(data),
+      body,
+      ...options,
     });
   }
 
-  delete<T>(endpoint: string) {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+  delete<T>(endpoint: string, params?: Record<string, any>) {
+    const url = this.buildUrl(endpoint, params);
+    return this.request<T>(url, { method: 'DELETE' });
   }
 }
 

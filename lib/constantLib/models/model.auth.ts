@@ -31,6 +31,8 @@ export interface SessionResponse {
     email: string;
     sessionId: string;
     sessionExpiry: string;
+    isPrimary: boolean;
+    primaryDeviceName?: string;
 }
 
 export interface ResendOTPPayload {

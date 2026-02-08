@@ -1,9 +1,10 @@
 // utils/modal.utils.ts
 import type { ControllerSpec, ControllersModalProps, DropdownPickerItem, DropdownPickerModalProps, LoadingModalProps, ModalPosition } from '@/components/modals/types/modal.types';
 import { modal$, modalActions } from '@/state/modals/state.modals';
+import type { ReactNode } from 'react';
 
 export const showConfirmDialog = async (
-  message: string,
+  message: string | ReactNode,
   options?: {
     confirmText?: string;
     cancelText?: string;

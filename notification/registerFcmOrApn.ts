@@ -1,6 +1,6 @@
 // registerFcmOrApn.ts
 import { TokenType } from '@/lib/personalLib/models/personal.model.notification';
-import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
+import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.setting';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
@@ -60,11 +60,10 @@ function handleRegistrationError(errorMessage: string): void {
 }
 
 /**
- * Register for push notifications and get the native device token (FCM/APN)
- * This gets the native token for use with your own backend FCM/APN service
- * @returns Promise<{ token: string, type: TokenType } | null>
+ * Get native push token with optional silent mode
+ * @param silent If true, only checks existing permissions without requesting new ones
  */
-export async function registerForPushNotifications(): Promise<{ token: string; type: TokenType } | null> {
+export async function getPushToken(silent: boolean = false): Promise<{ token: string; type: TokenType } | null> {
     try {
         // iOS push notifications are currently disabled
         // TODO: Enable when FCM is configured for iOS via react-native-firebase
@@ -85,7 +84,7 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
 
         // Check if running on a physical device
         if (!Device.isDevice) {
-            handleRegistrationError('Must use physical device for push notifications');
+            if (!silent) handleRegistrationError('Must use physical device for push notifications');
             return null;
         }
 
@@ -93,18 +92,23 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
         const { status: existingStatus, canAskAgain } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
 
-        // Request permissions if not granted AND can ask again
-        if (existingStatus !== 'granted' && canAskAgain) {
+        // If silent, stop here if not granted
+        if (silent && existingStatus !== 'granted') {
+            return null;
+        }
+
+        // Request permissions if not granted AND can ask again (and not silent)
+        if (!silent && existingStatus !== 'granted' && canAskAgain) {
             const { status } = await Notifications.requestPermissionsAsync();
             finalStatus = status;
-        } else if (existingStatus !== 'granted' && !canAskAgain) {
+        } else if (!silent && existingStatus !== 'granted' && !canAskAgain) {
             handleRegistrationError('Notification permission denied (cannot ask again). Enable it from Settings.');
             return null;
         }
 
         // Check if permissions were granted
         if (finalStatus !== 'granted') {
-            handleRegistrationError(`Permission not granted. Status: ${finalStatus}`);
+            if (!silent) handleRegistrationError(`Permission not granted. Status: ${finalStatus}`);
             return null;
         }
 
@@ -117,14 +121,21 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
 
         return { token, type };
     } catch (error) {
-        console.log('❌ Failed to get push token:', error);
+        if (!silent) console.log('❌ Failed to get push token:', error);
         return null;
     }
 }
 
 /**
- * Register the device token with your backend
- * This sends the token to your API endpoint for storage
+ * Register for push notifications (Interactive/Verbose)
+ * Wrapper for getPushToken(false)
+ */
+export async function registerForPushNotifications(): Promise<{ token: string; type: TokenType } | null> {
+    return getPushToken(false);
+}
+
+/**
+ * Register the device token with your backend using the current session
  * @returns Promise<boolean> - Returns true if registration was successful
  */
 export async function registerTokenWithBackend(): Promise<boolean> {
@@ -137,10 +148,11 @@ export async function registerTokenWithBackend(): Promise<boolean> {
 
         const { token, type } = tokenData;
 
-        // Send token to backend API
-        const response = await PersonalProfileApi.registerNotificationToken({
+        // Send token to backend API (Session-based approach)
+        const response = await PersonalSettingApi.updateSessionNotificationToken({
             token,
             type,
+            device_name: Device.deviceName ?? undefined,
         });
 
         if (response.status) {

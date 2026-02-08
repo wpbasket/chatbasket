@@ -48,15 +48,20 @@ export async function PersonalUtilFetchContactRequests() {
       status: entry.status,
     });
 
-    $contactRequestsState.setPending(response.pending_requests.map(toPendingEntry));
-
     const existingContactIds = new Set($contactsState.contactsIds.get());
     const sentFiltered = response.sent_requests
       .map(toSentEntry)
       .filter((s) => !existingContactIds.has(s.id));
-    $contactRequestsState.setSent(sentFiltered);
+
+    const requestsPayload = {
+      pending: response.pending_requests.map(toPendingEntry),
+      sent: sentFiltered,
+      lastFetchedAt: Date.now(),
+    };
+    $contactRequestsState.setPending(requestsPayload.pending);
+    $contactRequestsState.setSent(requestsPayload.sent);
     $contactRequestsState.markFetched();
-    await PersonalStorageSetContactRequests();
+    await PersonalStorageSetContactRequests(requestsPayload);
   } catch (err: any) {
     await PersonalStorageLoadContactRequests();
 
@@ -79,6 +84,7 @@ export async function PersonalUtilFetchContacts() {
   try {
     $contactsState.setLoading(true);
     $contactsState.setError(null);
+
     const response = await PersonalContactApi.getContacts();
 
     const toEntry = (contact: Contact): ContactEntry => ({
@@ -93,10 +99,15 @@ export async function PersonalUtilFetchContacts() {
       isMutual: contact.is_mutual,
     });
 
-    $contactsState.setContacts(response.contacts.map(toEntry));
-    $contactsState.setAddedYou(response.people_who_added_you.map(toEntry));
+    const contactsPayload = {
+      contacts: response.contacts.map(toEntry),
+      addedYou: response.people_who_added_you.map(toEntry),
+      lastFetchedAt: Date.now(),
+    };
+    $contactsState.setContacts(contactsPayload.contacts);
+    $contactsState.setAddedYou(contactsPayload.addedYou);
     $contactsState.markFetched();
-    await PersonalStorageSetContacts();
+    await PersonalStorageSetContacts(contactsPayload);
   } catch (err: any) {
     await PersonalStorageLoadContacts();
 

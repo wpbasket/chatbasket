@@ -7,4 +7,5 @@ export type TokenType = 'fcm' | 'apn';
 export interface RegisterTokenPayload {
   token: string;
   type: TokenType;
+  device_name?: string;
 }

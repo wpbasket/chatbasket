@@ -9,6 +9,7 @@ const MAPPING = {
   'account.friends': 'user-friends',
   'hashtag': 'hashtag',
   'list':'list-ul',
+  'plus': 'plus',
 } as const;
 
 export type FontAwesome5IconName = keyof typeof MAPPING;

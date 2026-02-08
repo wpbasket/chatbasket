@@ -1,12 +1,56 @@
 # Storage Architecture
 
-**Libraries:** `react-native-mmkv`, `expo-secure-store`, `expo-crypto`
-**Strategy:** Hybrid Encrypted Storage
+**Libraries:** `react-native-mmkv`, `expo-secure-store`, `expo-crypto`, `@react-native-async-storage/async-storage`
+**Strategy:** Hybrid Encrypted Storage & Unified Typed Wrappers
 
-## The "Encrypted MMKV" Pattern
+## 1. Generic Typed Wrapper (`storage.wrapper.ts`)
+**Use this for all new storage modules.**
+
+The `AppStorage<T>` class provides a unified, strictly-typed interface that works across **Native (MMKV)** and **Web (AsyncStorage or sync localStorage)**.
+
+### Why use it?
+* **Platform Agnostic**: Native uses MMKV; Web can be `async` (AsyncStorage) or `sync` (localStorage) via `webBackend` option to avoid hydration flashes for critical prefs.
+* **Strict Typing**: Schema interface enforces key/value types.
+* **Automatic Serialization + Safe Migration**: JSON stringifies; `_safeParse` tolerates legacy raw strings.
+* **Security Options**: Supports encrypted instances via `createSecure`.
+* **Batch Safety**: `setMany` filters out `undefined` to prevent corrupt writes; `getMany`/`getSyncMany` read multiple keys efficiently.
+* **Scoped Clearing**: `clearAll` only removes keys for the current namespace (prefix) on web.
+
+### Usage Examples
+
+#### Standard Storage (Fast, Non-Sensitive)
+```typescript
+import { AppStorage } from "@/lib/storage/storage.wrapper"; 
+
+type FeatureSchema = { 'last-sync': number; 'enabled': boolean };
+
+// Synchronous instantiation
+const storage = new AppStorage<FeatureSchema>('feature-scope');
+
+await storage.set('enabled', true);
+```
+
+#### Secure Storage (Encrypted, Sensitive Data)
+Use `AppStorage.createSecure` to automatically handle hardware-backed encryption keys.
+
+```typescript
+type SecretSchema = { 'api-token': string; 'refresh-token': string };
+
+// Async instantiation (generates/fetches 128-bit AES key)
+const secureStorage = await AppStorage.createSecure<SecretSchema>('my-secrets');
+
+await secureStorage.set('api-token', 'xyz-123'); // Encrypted on disk
+```
+
+### Web Sync Backend (Flicker-Free Preferences)
+Use `new AppStorage(id, undefined, { webBackend: 'sync' })` for web-only keys that must be read synchronously (e.g., theme/mode) to avoid white flash during hydration.
+
+---
+
+## 2. The "Encrypted MMKV" Pattern (Under the hood)
 Instead of choosing between "Slow but Secure" (SecureStore) and "Fast but Insecure" (MMKV), we combine them to get **Encrypted High-Performance Storage**.
 
-### Implementation (`storage.secure.ts`)
+### Implementation Details
 
 1.  **The Key**: We generate a random 16-byte AES-128 key using `expo-crypto`.
 2.  **Key Storage**: This key is stored in `expo-secure-store` (Keychain/Keystore).

@@ -20,6 +20,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     flexDirection: 'row',
     // backgroundColor:'red',
     width: 367,
+    justifyContent: 'space-between',
   },
   sectionHeader: {
     fontSize: 18,
@@ -53,7 +54,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     // backgroundColor: 'blue'
   },
   themePickerContainer: {
-    width: 267,
+    width: 217,
     height: 30,
     borderColor: theme.colors.neutral5,
     borderWidth: 1,
@@ -65,7 +66,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   dropdownBorder: {
     height: 27,
-    width: 265,
+    width: 215,
     borderWidth: 0,
     borderTopLeftRadius: 25,
     borderBottomLeftRadius: 25,

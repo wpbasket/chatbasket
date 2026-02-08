@@ -13,6 +13,6 @@ export class ApiError extends Error {
 }
 
 export interface BooleanResponse {
-    status: boolean; 
+    status: boolean;
     message: string;
 }

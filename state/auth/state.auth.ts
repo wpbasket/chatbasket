@@ -11,4 +11,6 @@ export const authState = observable({
   isInTheProfileUpdateMode: false,
   name: null as string | null,
   email: null as string | null,
+  isPrimary: null as boolean | null,
+  primaryDeviceName: null as string | null,
 });

@@ -2,7 +2,7 @@
 import { AppModal } from '@/components/modals/AppModal';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IncomingShareListener } from '@/hooks/useIncomingShare';
-import { initializeSecureStorage, restoreAuthState } from '@/lib/storage/commonStorage/storage.auth';
+import { initializeAppStorage } from '@/lib/storage/storage.init';
 import { checkInitialNotification, registerTokenWithBackend, setupNotificationListeners } from '@/notification/registerFcmOrApn';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
@@ -59,8 +59,9 @@ export default function RootLayout() {
         // Note: Cold start deep links are now handled by +native-intent.tsx
         // This is the modern Expo Router pattern for initial URL handling
 
-        await initializeSecureStorage();
-        await restoreAuthState();
+        // Initialize all storage (Auth, User, Contacts, Device)
+        await initializeAppStorage();
+
         // Direct background fetch of user after restoring auth (only if logged in)
         if (authState.isLoggedIn.get()) {
           void getUser();

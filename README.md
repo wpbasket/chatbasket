@@ -64,8 +64,9 @@ For new developers, here is how the app boots up:
 ## ✨ Features
 
 ### 🔐 Authentication
-- Secure OTP-based authentication flow
-- Persistent login state with secure storage
+- Secure OTP-based authentication flow (no refresh tokens; sessions carry expiry only)
+- Persistent login state with secure storage on native; web persists expiry while session token stays in HttpOnly cookie
+- Primary device metadata (`isPrimary`, `primaryDeviceName`) returned on login for UI prompts
 - Protected routes for authenticated users
 
 ### 💭 Dual Mode Experience

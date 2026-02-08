@@ -6,6 +6,7 @@ import { StyleProp, TextStyle } from 'react-native';
 const MAPPING = {
   'bucket': 'bucket',
   'account.logout': 'aircraft-take-off',
+  'circle-with-plus': 'circle-with-plus',
 } as const;
 
 export type EntypoIconName = keyof typeof MAPPING;

@@ -9,7 +9,7 @@ import { apiClient, fileUploadClient, BooleanResponse } from "@/lib/constantLib"
  * @returns status: boolean; message: string;
  */
 async function logout(payload: PersonalLogoutPayload): Promise<BooleanResponse> {
-    return apiClient.post<BooleanResponse>('/personal/profile/logout', payload); 
+    return apiClient.post<BooleanResponse>('/personal/profile/logout', payload);
 }
 
 /** 
@@ -46,10 +46,6 @@ async function removeAvatar(): Promise<BooleanResponse> {
 }
 
 
-async function registerNotificationToken(payload: RegisterTokenPayload): Promise<BooleanResponse> {
-    return apiClient.post<BooleanResponse>('/personal/profile/token/register', payload);
-}
-
 export const PersonalProfileApi = {
     logout,
     getProfile,
@@ -57,5 +53,4 @@ export const PersonalProfileApi = {
     updateProfile,
     uploadAvatar,
     removeAvatar,
-    registerNotificationToken
 }

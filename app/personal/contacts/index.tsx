@@ -6,10 +6,12 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
+// import { chatApi } from '@/lib/personalLib';
 import { modalActions } from '@/state/modals/state.modals';
 import {
   $contactRequestsState,
   $contactsState,
+  type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
 import {
@@ -20,7 +22,7 @@ import { LegendList } from '@legendapp/list';
 import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, RefreshControl } from 'react-native';
 import ContactRow from './components/ContactRow';
 import ContactsHeaderSection from './components/ContactsHeaderSection';
@@ -48,7 +50,6 @@ type ContactsListItem =
 export default function Contacts() {
   const contactsIds = useValue($contactsState.contactsIds);
   const addedYouIds = useValue($contactsState.addedYouIds);
-  console.log('in contact screen')
   const loading = useValue($contactsState.loading);
   const error = useValue($contactsState.error);
   const lastFetchedAt = useValue($contactsState.lastFetchedAt);
@@ -79,14 +80,13 @@ export default function Contacts() {
 
   useFocusEffect(
     useCallback(() => {
-      if (lastFetchedAt == null) {
-        void fetchContacts();
-        void fetchRequests();
-      }
+      void fetchContacts();
+      void fetchRequests();
+
       return () => {
         modalActions.close();
       };
-    }, [fetchContacts, fetchRequests, lastFetchedAt])
+    }, [fetchContacts, fetchRequests])
   );
 
   const contactsItems = useMemo<ContactsListItem[]>(() => {
@@ -133,6 +133,29 @@ export default function Contacts() {
 
   const keyExtractor = useCallback((item: ContactsListItem) => item.id, []);
 
+  const handleMessage = useCallback(async (entry: ContactEntry) => {
+    try {
+      // TODO: Implement chat functionality when chatApi is available
+      alert('Chat functionality coming soon!');
+      return;
+      
+      // Pre-flight eligibility
+      // const eligibility = await chatApi.checkEligibility({ recipient_id: entry.id });
+      // if (!eligibility.allowed) {
+      //   // simple feedback
+      //   alert(eligibility.reason || 'Messaging not allowed');
+      //   return;
+      // }
+
+      // Create or get chat
+      // const chat = await chatApi.createChat({ recipient_id: entry.id });
+      // TODO: Refresh chat state when chat state module is implemented
+      // router.push(`/personal/home/${chat.chat_id}` as any);
+    } catch (err: any) {
+      alert(err?.message ?? 'Failed to start chat');
+    }
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: { item: ContactsListItem }) => {
       switch (item.kind) {
@@ -155,6 +178,7 @@ export default function Contacts() {
                 id={item.contactId}
                 kind='contacts'
                 onOpenActions={openActionsFromContacts}
+                onMessage={handleMessage}
               />
             </ThemedView>
           );
@@ -210,7 +234,9 @@ export default function Contacts() {
 
             <ContactsSegmentTabs
               selectedTab={selectedTab}
-              onChangeTab={(tab) => setSelectedTab(tab)}
+              onChangeTab={(tab) => {
+                setSelectedTab(tab);
+              }}
             />
 
             <LegendList
@@ -222,7 +248,13 @@ export default function Contacts() {
               maintainVisibleContentPosition={true}
               showsVerticalScrollIndicator={Platform.OS === 'web' ? false : true}
               refreshControl={
-                <RefreshControl refreshing={loading} onRefresh={fetchContacts} />
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={() => {
+                    void fetchContacts();
+                    void fetchRequests();
+                  }}
+                />
               }
             />
           </ThemedView>

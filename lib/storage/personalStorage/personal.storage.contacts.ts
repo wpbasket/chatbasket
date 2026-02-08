@@ -1,14 +1,8 @@
 import { $contactRequestsState, $contactsState, type ContactEntry, type PendingRequestEntry, type SentRequestEntry } from "@/state/personalState/contacts/personal.state.contacts";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
-import { MMKV } from "react-native-mmkv";
-import { getSecureMMKV } from "../commonStorage/storage.secure";
+import { AppStorage } from "../storage.wrapper";
 
 const ContactsKey = "personal-contacts";
 const ContactRequestsKey = "personal-contact-requests";
-const ENCRYPTION_KEY_NAME = "mmkv-personal-contacts-key";
-const isWeb = Platform.OS === "web";
-let contactsStorage: MMKV | null = null;
 
 type ContactsPayload = {
   contacts: ContactEntry[];
@@ -22,153 +16,142 @@ type ContactRequestsPayload = {
   lastFetchedAt: number | null;
 };
 
-const getContactsStorage = async (): Promise<MMKV | null> => {
-  if (isWeb) return null;
-  if (contactsStorage) return contactsStorage;
-
-  const storage = await getSecureMMKV({
-    id: "personal-contacts",
-    encryptionKeyName: ENCRYPTION_KEY_NAME,
-  });
-
-  if (!storage) {
-    return null;
-  }
-
-  try {
-    storage.set("__mmkv_personal_contacts_check", "ok");
-    const val = storage.getString("__mmkv_personal_contacts_check");
-    storage.delete("__mmkv_personal_contacts_check");
-    if (val !== "ok") {
-      throw new Error("MMKV personal contacts verification failed (read mismatch)");
-    }
-  } catch (err) {
-    console.log("Failed to verify personal contacts storage:", err);
-    return null;
-  }
-
-  contactsStorage = storage;
-  return contactsStorage;
+type ContactsSchema = {
+  [ContactsKey]: ContactsPayload;
+  [ContactRequestsKey]: ContactRequestsPayload;
 };
 
-export const PersonalStorageSetContacts = async (): Promise<void> => {
-  const payload: ContactsPayload = {
-    contacts: $contactsState.contacts.get(),
-    addedYou: $contactsState.addedYou.get(),
-    lastFetchedAt: $contactsState.lastFetchedAt.get(),
-  };
+let contactsStorage: AppStorage<ContactsSchema> | null = null;
+const debugPrefix = '[PersonalContactsStorage]';
 
+export const initializeContactsStorage = async (): Promise<void> => {
+  if (!contactsStorage) {
+    console.log(debugPrefix, 'initializing secure storage instance');
+    contactsStorage = await AppStorage.createSecure<ContactsSchema>("personal-contacts");
+  } else {
+    console.log(debugPrefix, 'initializeContactsStorage called but storage already set');
+  }
+}
+
+const getStorage = async (): Promise<AppStorage<ContactsSchema>> => {
+  if (!contactsStorage) {
+    console.log(debugPrefix, 'getStorage -> storage missing, initializing now');
+    await initializeContactsStorage();
+  }
+  console.log(debugPrefix, 'getStorage -> returning instance');
+  return contactsStorage!;
+};
+
+export const PersonalStorageSetContacts = async (contactsData?: ContactsPayload): Promise<void> => {
   try {
-    const serialized = JSON.stringify(payload);
-    if (isWeb) {
-      await AsyncStorage.setItem(ContactsKey, serialized);
-    } else {
-      const storage = await getContactsStorage();
-      if (!storage) return;
-      storage.set(ContactsKey, serialized);
-    }
-  } catch {
+    console.log(debugPrefix, 'setContacts invoked', { providedPayload: Boolean(contactsData) });
+    const storage = await getStorage();
+    const data = contactsData || {
+      contacts: $contactsState.contacts.get(),
+      addedYou: $contactsState.addedYou.get(),
+      lastFetchedAt: $contactsState.lastFetchedAt.get(),
+    };
+    console.log(debugPrefix, 'persisting contacts payload', {
+      contacts: data.contacts.length,
+      addedYou: data.addedYou.length,
+      lastFetchedAt: data.lastFetchedAt,
+    });
+    await storage.set(ContactsKey, data);
+  } catch (e) {
+    console.error('Failed to set personal contacts:', e);
   }
 };
 
 export const PersonalStorageLoadContacts = async (): Promise<void> => {
   try {
-    let raw: string | null | undefined;
-    if (isWeb) {
-      raw = await AsyncStorage.getItem(ContactsKey);
-    } else {
-      const storage = await getContactsStorage();
-      if (!storage) return;
-      raw = storage.getString(ContactsKey);
+    console.log(debugPrefix, 'loadContacts invoked');
+    const storage = await getStorage();
+    const payload = await storage.get(ContactsKey);
+
+    if (!payload) {
+      console.log(debugPrefix, 'loadContacts -> no payload found');
+      return;
     }
 
-    if (!raw) return;
+    console.log(debugPrefix, 'loadContacts -> payload found', {
+      contacts: payload.contacts?.length ?? 0,
+      addedYou: payload.addedYou?.length ?? 0,
+      lastFetchedAt: payload.lastFetchedAt,
+    });
 
-    const payload = JSON.parse(raw) as Partial<ContactsPayload>;
-
-    if (payload.contacts) {
-      $contactsState.setContacts(payload.contacts);
-    }
-    if (payload.addedYou) {
-      $contactsState.setAddedYou(payload.addedYou);
-    }
+    if (payload.contacts) $contactsState.setContacts(payload.contacts);
+    if (payload.addedYou) $contactsState.setAddedYou(payload.addedYou);
     if (typeof payload.lastFetchedAt === "number") {
       $contactsState.lastFetchedAt.set(payload.lastFetchedAt);
     }
-  } catch {
+  } catch (e) {
+    console.error('Failed to load personal contacts:', e);
   }
 };
 
 export const PersonalStorageRemoveContacts = async (): Promise<void> => {
   try {
-    if (isWeb) {
-      await AsyncStorage.removeItem(ContactsKey);
-    } else {
-      const storage = await getContactsStorage();
-      if (!storage) return;
-      storage.delete(ContactsKey);
-    }
-  } catch {
+    console.log(debugPrefix, 'removeContacts invoked');
+    const storage = await getStorage();
+    await storage.remove(ContactsKey);
+  } catch (e) {
+    console.error('Failed to remove personal contacts:', e);
   }
 };
 
-export const PersonalStorageSetContactRequests = async (): Promise<void> => {
-  const payload: ContactRequestsPayload = {
-    pending: $contactRequestsState.pending.get(),
-    sent: $contactRequestsState.sent.get(),
-    lastFetchedAt: $contactRequestsState.lastFetchedAt.get(),
-  };
-
+export const PersonalStorageSetContactRequests = async (requestsData?: ContactRequestsPayload): Promise<void> => {
   try {
-    const serialized = JSON.stringify(payload);
-    if (isWeb) {
-      await AsyncStorage.setItem(ContactRequestsKey, serialized);
-    } else {
-      const storage = await getContactsStorage();
-      if (!storage) return;
-      storage.set(ContactRequestsKey, serialized);
-    }
-  } catch {
+    console.log(debugPrefix, 'setContactRequests invoked', { providedPayload: Boolean(requestsData) });
+    const storage = await getStorage();
+    const data = requestsData || {
+      pending: $contactRequestsState.pending.get(),
+      sent: $contactRequestsState.sent.get(),
+      lastFetchedAt: $contactRequestsState.lastFetchedAt.get(),
+    };
+    console.log(debugPrefix, 'persisting contact requests payload', {
+      pending: data.pending.length,
+      sent: data.sent.length,
+      lastFetchedAt: data.lastFetchedAt,
+    });
+    await storage.set(ContactRequestsKey, data);
+  } catch (e) {
+    console.error('Failed to set personal contact requests:', e);
   }
 };
 
 export const PersonalStorageLoadContactRequests = async (): Promise<void> => {
   try {
-    let raw: string | null | undefined;
-    if (isWeb) {
-      raw = await AsyncStorage.getItem(ContactRequestsKey);
-    } else {
-      const storage = await getContactsStorage();
-      if (!storage) return;
-      raw = storage.getString(ContactRequestsKey);
+    console.log(debugPrefix, 'loadContactRequests invoked');
+    const storage = await getStorage();
+    const payload = await storage.get(ContactRequestsKey);
+
+    if (!payload) {
+      console.log(debugPrefix, 'loadContactRequests -> no payload found');
+      return;
     }
 
-    if (!raw) return;
+    console.log(debugPrefix, 'loadContactRequests -> payload found', {
+      pending: payload.pending?.length ?? 0,
+      sent: payload.sent?.length ?? 0,
+      lastFetchedAt: payload.lastFetchedAt,
+    });
 
-    const payload = JSON.parse(raw) as Partial<ContactRequestsPayload>;
-
-    if (payload.pending) {
-      $contactRequestsState.setPending(payload.pending);
-    }
-    if (payload.sent) {
-      $contactRequestsState.setSent(payload.sent);
-    }
+    if (payload.pending) $contactRequestsState.setPending(payload.pending);
+    if (payload.sent) $contactRequestsState.setSent(payload.sent);
     if (typeof payload.lastFetchedAt === "number") {
       $contactRequestsState.lastFetchedAt.set(payload.lastFetchedAt);
     }
-  } catch {
+  } catch (e) {
+    console.error('Failed to load personal contact requests:', e);
   }
 };
 
 export const PersonalStorageRemoveContactRequests = async (): Promise<void> => {
   try {
-    if (isWeb) {
-      await AsyncStorage.removeItem(ContactRequestsKey);
-    } else {
-      const storage = await getContactsStorage();
-      if (!storage) return;
-      storage.delete(ContactRequestsKey);
-    }
-  } catch {
+    console.log(debugPrefix, 'removeContactRequests invoked');
+    const storage = await getStorage();
+    await storage.remove(ContactRequestsKey);
+  } catch (e) {
+    console.error('Failed to remove personal contact requests:', e);
   }
 };

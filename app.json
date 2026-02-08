@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ChatBasket",
+    "name": "Chatbasket",
     "slug": "chatbasket",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -98,7 +98,8 @@
             "audio/*"
           ]
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

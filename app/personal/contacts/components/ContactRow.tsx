@@ -16,9 +16,10 @@ export type ContactRowProps = {
   id: string;
   kind: 'contacts' | 'addedYou';
   onOpenActions: (item: ContactEntry, event?: any) => void;
+  onMessage?: (item: ContactEntry) => void;
 };
 
-export default function ContactRow({ id, kind, onOpenActions }: ContactRowProps) {
+export default function ContactRow({ id, kind, onOpenActions, onMessage }: ContactRowProps) {
   const { handlePressIn } = pressableAnimation();
   const item = useValue(
     kind === 'contacts'
@@ -73,6 +74,20 @@ export default function ContactRow({ id, kind, onOpenActions }: ContactRowProps)
           </ThemedView>
         ) : null}
       </Pressable>
+      {kind === 'contacts' && onMessage ? (
+        <Pressable
+          onPressIn={handlePressIn}
+          onPress={() => onMessage(item)}
+          style={({ pressed }) => [
+            styles.addButton,
+            pressed ? styles.addButtonPressed : null,
+          ]}
+        >
+          <ThemedText type='smallBold' style={styles.addButtonLabel} selectable={false}>
+            Message
+          </ThemedText>
+        </Pressable>
+      ) : null}
       {shouldShowQuickAddButton ? (
         <Pressable
           onPressIn={handlePressIn}

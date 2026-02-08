@@ -1,4 +1,5 @@
 import Header from '@/components/header/Header';
+import { commonAuthApi } from '@/lib/commonLib/authApi/common.api.auth';
 import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { Dropdown } from '@/components/ui/common/DropDown';
@@ -9,23 +10,25 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { useNotificationPermission } from '@/hooks/commonHooks/hooks.notificationPermission';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
+import { PersonalStorageSetDeviceStatus } from '@/lib/storage/personalStorage/personal.storage.device';
 import { openNotificationSettingsFromApp } from '@/notification/registerFcmOrApn';
 import { setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { setting$ } from '@/state/settings/state.setting';
-import { hideModal, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { hideModal, runWithLoading, showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useValue } from '@legendapp/state/react';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { Alert, Platform, Pressable, View } from 'react-native';
 import { UnistylesRuntime } from 'react-native-unistyles';
 import SettingsEmailRow from './components/SettingsEmailRow';
 import SettingsPasswordRow from './components/SettingsPasswordRow';
 import CreateSettingsFlows from './settings.flows';
 import styles from './settings.styles';
 import { settingApi } from '@/lib/commonLib/settingApi/common.api.setting';
+import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.setting';
 
 export default function Settings() {
   const MAX_RESENDS = 3;
@@ -138,6 +141,79 @@ export default function Settings() {
     await openNotificationSettingsFromApp();
   }
 
+  // Device Type State
+  const isPrimary = useValue(authState.isPrimary);
+  const deviceType = isPrimary === null ? 'Not fetched' : (isPrimary ? 'Primary' : 'Secondary');
+
+  // Effect to fetch initial status
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await commonAuthApi.getMe();
+        if (response) {
+          await PersonalStorageSetDeviceStatus({
+            isPrimary: response.isPrimary,
+            deviceName: response.primaryDeviceName || null
+          });
+        }
+      } catch (e) {
+        // Fallback to existing authState
+      }
+    };
+    checkStatus();
+  }, []);
+
+  const handleSetCentralDevice = async () => {
+    let response;
+    try {
+      response = await runWithLoading(async () => {
+        return await commonAuthApi.getMe();
+      }, { message: 'Checking status...' });
+    } catch (e) {
+      return;
+    }
+
+    if (!response) return;
+
+    // Update state based on fresh response
+    await PersonalStorageSetDeviceStatus({
+      isPrimary: response.isPrimary,
+      deviceName: response.primaryDeviceName || null
+    });
+
+    if (response.isPrimary) {
+      showAlert("This device is already set as your Primary Device.");
+      return;
+    }
+
+    const existingName = response.primaryDeviceName || 'Another Device';
+
+    const confirm = await showConfirmDialog(
+      <>
+        This device is currently NOT your Primary Device. "
+        <ThemedText style={{ color: 'red', fontWeight: 'bold' }}>{existingName}</ThemedText>
+        " is currently set as Primary. Do you want to switch?
+      </>,
+      {
+        confirmText: 'Switch',
+        cancelText: 'Keep as Secondary',
+        confirmVariant: 'default'
+      }
+    );
+
+    if (confirm) {
+      try {
+        await runWithLoading(async () => {
+          await PersonalSettingApi.setCentralDevice();
+          await PersonalStorageSetDeviceStatus({ isPrimary: true, deviceName: null });
+        }, { message: "Updating..." });
+        showAlert("Primary Device updated successfully.");
+      } catch (e) {
+        // Error already handled
+      }
+    }
+  };
+
   return (
     <ThemedViewWithSidebar>
       <ThemedViewWithSidebar.Sidebar>
@@ -217,6 +293,19 @@ export default function Settings() {
                   />
                 </View>
               </View>
+
+              {Platform.OS !== 'web' && (
+                <View style={styles.section}>
+                  <View style={styles.itemTitleContainer}>
+                    <ThemedText style={styles.itemTitle}>Device Type :</ThemedText>
+                  </View>
+                  <View style={styles.themePickerContainer}>
+                    <Pressable onPress={handleSetCentralDevice} style={[styles.dropdownBorder, { justifyContent: 'center' }]}>
+                      <ThemedText type='default'>{deviceType}</ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
 
 
             </View>
