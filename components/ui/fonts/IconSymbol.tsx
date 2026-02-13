@@ -19,7 +19,11 @@ const MAPPING = {
   'account.lock': 'lock-closed',
   'account.unlock': 'lock-open',
   'check': 'checkmark-sharp',
+  'checkmark.circle': 'checkmark-circle-outline',
   'theme': 'sunny-sharp',
+  'magnifyingglass': 'search',
+  'clock': 'time-outline',
+  'alert': 'alert-circle-outline',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

@@ -17,7 +17,7 @@ export async function getUser() {
         authState.user.set(null);
         setUserInStorage();
         authState.user.set(null);
-        console.log('User not found');
+        // console.log('User not found');
         createProfile$.userNotFound.set(true);
       }
     }

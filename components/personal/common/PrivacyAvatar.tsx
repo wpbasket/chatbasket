@@ -7,7 +7,19 @@ export interface PrivacyAvatarProps {
   uri: string | null;
   name: string;
   size?: number;
+  colorKey?: string;
 }
+
+const AVATAR_COLORS = [
+  '#00bb77',  
+  '#8200fcd0', 
+  '#F89B29', 
+  '#eb5757',
+  '#ff0f7be0', 
+  '#50c9c3', 
+  '#083b7d',
+
+] as const;
 
 const getInitials = (name: string) => {
   if (!name) return '?';
@@ -17,7 +29,17 @@ const getInitials = (name: string) => {
   return (trimmed[0] ?? '?').toUpperCase();
 };
 
-export function PrivacyAvatar({ uri, name, size = 48 }: PrivacyAvatarProps) {
+const getAvatarColor = (name: string) => {
+  if (!name) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[index];
+};
+
+export function PrivacyAvatar({ uri, name, size = 48, colorKey }: PrivacyAvatarProps) {
   const dimensionStyle = {
     width: size,
     height: size,
@@ -28,9 +50,17 @@ export function PrivacyAvatar({ uri, name, size = 48 }: PrivacyAvatarProps) {
     return <Image source={{ uri }} style={[styles.image, dimensionStyle]} />;
   }
 
+  const backgroundColor = getAvatarColor(colorKey || name);
+
   return (
-    <ThemedView style={[styles.placeholder, dimensionStyle]}>
-      <ThemedText type='smallBold' style={styles.initials} selectable={false}>
+    <ThemedView
+      style={[
+        styles.placeholder,
+        dimensionStyle,
+        { backgroundColor }
+      ]}
+    >
+      <ThemedText type='smallBold' style={[styles.initials, { lineHeight: size }]} selectable={false}>
         {getInitials(name)}
       </ThemedText>
     </ThemedView>
@@ -45,13 +75,18 @@ const styles = StyleSheet.create((theme) => ({
   placeholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.icon,
-    borderWidth: 1,
-    borderColor: theme.colors.neutral,
+    borderWidth: 0, // Removed border for cleaner gradient look
   },
   initials: {
-    color: theme.colors.white,
-    fontSize: 25,
+    color: '#FFFFFF', // White text for gradients
+    fontSize: 20, // Adjusted for better fit
     fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.1)', // Subtle shadow for legibility
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+    // lineHeight set dynamically to match size
   },
 }));

@@ -12,9 +12,10 @@ type Props = {
   leftButton?: HeaderButton;
   Icon: React.ReactNode;
   centerIcon?: boolean;
+  RightIcon?: React.ReactNode;
 };
 
-export default function Header({ leftButton, Icon, centerIcon }: Props) {
+export default function Header({ leftButton, Icon, centerIcon, RightIcon }: Props) {
   const { handlePressIn } = pressableAnimation();
 
   return (
@@ -26,8 +27,7 @@ export default function Header({ leftButton, Icon, centerIcon }: Props) {
             onPress={leftButton.onPress}
             style={({ pressed }) => [
               styles.leftButton,
-              pressed && styles.activeLeftButton, 
-              
+              pressed && styles.activeLeftButton,
             ]}
             onPressIn={handlePressIn}
             accessibilityRole="button"
@@ -48,6 +48,11 @@ export default function Header({ leftButton, Icon, centerIcon }: Props) {
           {Icon}
         </View>
       )}
+
+      {/* Right Icon/Button */}
+      <View style={styles.rightIconContainer}>
+        {RightIcon}
+      </View>
     </ThemedView>
   );
 }
@@ -79,10 +84,17 @@ const styles = StyleSheet.create((theme) => ({
     position: 'absolute',
     left: '50%',
     transform: [{ translateX: '-50%' }],
-    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   leftAlignedIcon: {
     marginLeft: 24,
-    height: 30,
+    justifyContent: 'center',
+  },
+  rightIconContainer: {
+    position: 'absolute',
+    right: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }));

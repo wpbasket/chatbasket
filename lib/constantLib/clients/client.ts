@@ -67,7 +67,7 @@ export class ApiClient {
       const { message = '', type = 'unknown_error', code = response.status } = errorData;
 
       // 🚫 Handle session expiration or invalid session
-      if (['session_invalid', 'missing_auth'].includes(type)) {
+      if (['session_invalid', 'missing_auth', 'unauthorized', 'invalid_user_id', 'user_not_found'].includes(type)) {
         clearSession();
 
         // Toast can be shown if needed

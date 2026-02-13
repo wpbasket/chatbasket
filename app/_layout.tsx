@@ -24,6 +24,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
 
 
@@ -187,37 +188,39 @@ export default function RootLayout() {
     <>
       <ShareIntentProvider>
         <IncomingShareListener />
-        <ThemeProvider value={themeName === 'dark' ? DarkTheme : DefaultTheme}>
-          <ThemedView style={styles.outerContainer}>
-            <Stack>
-              <Stack.Protected guard={!lock}>
-                <Stack.Screen name="(auth)/index" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)/auth" options={{ headerShown: false }} />
-                <Stack.Protected guard={sentOtp}>
-                  <Stack.Screen name="(auth)/auth-verify" options={{ headerShown: false }} />
-                </Stack.Protected>
-              </Stack.Protected>
-
-              <Stack.Protected guard={lock}>
-                <Stack.Screen name='index' options={{ headerShown: false }} />
-
-
-                <Stack.Protected guard={lock && mode === 'personal'}>
-                  <Stack.Screen name="personal" options={{ headerShown: false }} />
+        <KeyboardProvider>
+          <ThemeProvider value={themeName === 'dark' ? DarkTheme : DefaultTheme}>
+            <ThemedView style={styles.outerContainer}>
+              <Stack>
+                <Stack.Protected guard={!lock}>
+                  <Stack.Screen name="(auth)/index" options={{ headerShown: false }} />
+                  <Stack.Screen name="(auth)/auth" options={{ headerShown: false }} />
+                  <Stack.Protected guard={sentOtp}>
+                    <Stack.Screen name="(auth)/auth-verify" options={{ headerShown: false }} />
+                  </Stack.Protected>
                 </Stack.Protected>
 
-              </Stack.Protected>
+                <Stack.Protected guard={lock}>
+                  <Stack.Screen name='index' options={{ headerShown: false }} />
 
-              <Stack.Protected guard={mode === 'public'} >
-                <Stack.Screen name="public" options={{ headerShown: false }} />
-              </Stack.Protected>
 
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
-            <AppModal />
-          </ThemedView>
-        </ThemeProvider>
+                  <Stack.Protected guard={lock && mode === 'personal'}>
+                    <Stack.Screen name="personal" options={{ headerShown: false }} />
+                  </Stack.Protected>
+
+                </Stack.Protected>
+
+                <Stack.Protected guard={mode === 'public'} >
+                  <Stack.Screen name="public" options={{ headerShown: false }} />
+                </Stack.Protected>
+
+                <Stack.Screen name="+not-found" />
+              </Stack>
+              <StatusBar style={themeName === 'dark' ? 'light' : 'dark'} />
+              <AppModal />
+            </ThemedView>
+          </ThemeProvider>
+        </KeyboardProvider>
       </ShareIntentProvider>
     </>
   );

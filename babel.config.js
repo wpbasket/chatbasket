@@ -5,8 +5,8 @@ module.exports = function (api) {
     plugins: [
       '@legendapp/state/babel',
       // other plugins
-      ['react-native-unistyles/plugin',{root: 'app',}]
-
+      ['react-native-unistyles/plugin', { root: 'app', }],
+      'react-native-reanimated/plugin',
     ]
   };
 };

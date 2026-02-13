@@ -5,11 +5,10 @@
 
 import { Platform } from "react-native";
 
-
 export const Colors = {
   light: {
     primary: '#00bb77',
-    primaryWhite:'#FFFFFF',
+    primaryWhite: '#FFFFFF',
     primaryOpacity: 'rgba(0, 187, 119, 0.1)',
     whiteOrBlack: '#000000',
     blackOrWhite: '#FFFFFF',
@@ -19,10 +18,7 @@ export const Colors = {
     primaryDark: '#00bb77',
     text: '#2C3E50',
     reverseText: '#FFFFFF',
-    // text: '#11181C',
-    // background: 'rgb(255, 255, 255)',
     background: 'rgb(255, 255, 255)',
-    // BackgroundSelect: 'rgba(238, 247, 247,1)',
     BackgroundSelect: '#FFFFFF',
     BackgroundSelect2: '#FFFFFF',
     backgroundSelect3: 'rgb(240, 240, 240)',
@@ -30,8 +26,8 @@ export const Colors = {
     reverseBackground: 'rgb(13,13,13)',
     icon: '#687076',
     tabIconSelected: '#00bb77',
-    title: '#2C3E50', // Dark blue-gray for main title
-    subtitle: '#34495E', // Slightly lighter blue-gray for subtitles
+    title: '#2C3E50',
+    subtitle: '#34495E',
     reverseSubtitle: '#BDC3C7',
     loader: '#00bb77',
     skyblue: 'rgba(92, 222, 251, 1)',
@@ -48,11 +44,27 @@ export const Colors = {
     neutral1: 'rgba(115, 115, 115, 0.2)',
     neutral4: 'rgba(115, 115, 115, 0.7)',
     red: '#FF0000',
-    // skyblue: 'rgba(0, 187, 230, 1)' // sky blue alternative
+    surface: '#FFFFFF',
+    onPrimary: '#FFFFFF',
+    textPrimary: '#11181C',
+    textSecondary: '#687076',
+    border: '#E6E8EB',
+    card: '#EAEDF0',
+    bubbleSentAlt: '#00cc88',
+    greenForest: '#065F46', // Deep, premium emerald
+    greenSage: '#86A789',   // Soft, modern sage
+    greenTeal: '#0D9488',   // Tech-focused teal
+    bubbleBlue: '#2EB4EA',  // Electric blue (Apple style)
+    bubblePurple: '#9F5AFD', // Modern tech purple
+    bubbleSlate: '#4A5568',  // Sophisticated slate
+    shadow: '#000000',
+    errorBackground: '#FEF0F0',
+    errorBorder: '#FED7D7',
+    errorText: '#E53E3E',
   },
   dark: {
     primary: '#00bb77',
-    primaryWhite:'#00bb77',
+    primaryWhite: '#00bb77',
     primaryOpacity: 'rgba(115, 115, 115, 0.1)',
     white: '#FFFFFF',
     black: '#000000',
@@ -64,15 +76,14 @@ export const Colors = {
     reverseText: '#2C3E50',
     background: Platform.OS == 'web' ? 'rgb(15,15,15)' : 'rgb(13,13,13)',
     BackgroundSelect: 'rgba(24,25,27,1)',
-    // BackgroundSelect:'rgba(24,25,27,1)',
     BackgroundSelect2: Platform.OS == 'web' ? 'rgb(15,15,15)' : 'rgb(13,13,13)',
     backgroundSelect3: 'rgb(22,22,22)',
     lightbackgroundText: 'rgb(238, 247, 247)',
     reverseBackground: 'rgb(238, 247, 247)',
     icon: '#9BA1A6',
     tabIconSelected: '#00bb77',
-    title: 'rgb(238, 247, 247)', // Light gray-white for main title
-    subtitle: '#BDC3C7', // Slightly darker gray for subtitles
+    title: 'rgb(238, 247, 247)',
+    subtitle: '#BDC3C7',
     reverseSubtitle: '#34495E',
     loader: 'rgb(238,247,247)',
     skyblue: 'rgba(92, 222, 251, 1)',
@@ -87,14 +98,27 @@ export const Colors = {
     neutral3: 'rgba(115, 115, 115, 0.3)',
     neutral0: 'rgba(115, 115, 115, 0.1)',
     neutral1: 'rgba(115, 115, 115, 0.2)',
-    neutral4:'#2D2D31',
-
+    neutral4: '#2D2D31',
     red: '#FF0000',
-    // skyblue: 'rgba(0, 187, 230, 1)' // sky blue alternative
+    surface: '#1A1A1A',
+    onPrimary: '#FFFFFF',
+    textPrimary: '#ECEDEE',
+    textSecondary: '#9BA1A6',
+    border: '#2D2D2D',
+    card: '#323235',
+    bubbleSentAlt: '#009966',
+    greenForest: '#064E3B', // Richer deep green for dark mode
+    greenSage: '#4F6F52',   // Muted sage for dark mode
+    greenTeal: '#115E59',   // Deep teal for dark mode
+    bubbleBlue: '#1D88B5',  // Muted electric blue
+    bubblePurple: '#7C44D1', // Deep tech purple
+    bubbleSlate: '#323235',  // Dark slate surface
+    shadow: '#000000',
+    errorBackground: '#2A0A0A',
+    errorBorder: '#5C1C1C',
+    errorText: '#F56565',
   },
-
 };
-
 
 // 45,45,45 #18191b
 // #111113

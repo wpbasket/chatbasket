@@ -7,17 +7,16 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { modalActions } from '@/state/modals/state.modals';
 import {
-    $contactRequestsState,
-    $contactsState,
+  $contactRequestsState,
+  $contactsState,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { utilGoBack } from '@/utils/commonUtils/util.router';
 import {
-    PersonalUtilFetchContactRequests,
-    PersonalUtilFetchContacts,
+  PersonalUtilFetchContactRequests,
+  PersonalUtilFetchContacts,
 } from '@/utils/personalUtils/personal.util.contacts';
 import { LegendList } from '@legendapp/list';
 import { useValue } from '@legendapp/state/react';
-import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect } from 'react';
 import { Platform, RefreshControl } from 'react-native';
 import PendingRequestRow from './components/PendingRequestRow';
@@ -48,16 +47,12 @@ export default function ContactRequests() {
     ]);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (lastFetchedAt == null) {
-        void fetchRequests();
-      }
-      return () => {
-        modalActions.close();
-      };
-    }, [fetchRequests, lastFetchedAt])
-  );
+  useEffect(() => {
+    void fetchRequests();
+    return () => {
+      modalActions.close();
+    };
+  }, []);
   const { openPendingActions, openSentActions, handleAccept, handleReject, handleUndo } = CreateRequestsFlows({
     contactRequestsState: $contactRequestsState,
     contactsState: $contactsState,
