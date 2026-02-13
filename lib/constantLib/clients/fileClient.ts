@@ -6,7 +6,7 @@ import { ApiError } from '../models/model.api';
 const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/verify-otp'];
 
 export class FileUploadClient {
-  private baseURL = Url.BASE_URL;
+  private baseURL = Url.BASE_API_URL;
 
   // constructor() {
   //   console.log("📂 Using fileClient.ts (native)");
