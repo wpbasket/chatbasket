@@ -110,14 +110,32 @@ export default PersonalChatScreen;
 
 const MessageItemWrapper = React.memo(({ messageId, chatId }: { messageId: string, chatId: string }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
+
+    // We need to know when the OTHER user last read the chat to mark specific messages as Read.
+    // This data is in $chatListState.chatsById[chatId]
+    const chatMetadata = useValue(() => $chatListState.chatsById[chatId]?.get());
+
     if (!message) return null;
+
+    let status = message.status;
+
+    // Logic: If message is older than other user's last read time, it IS read.
+    // This allows granular "Green Ticks" even if we don't store "read" on every message row.
+    if (message.is_from_me && chatMetadata?.other_user_last_read_at) {
+        const msgTime = new Date(message.created_at).getTime();
+        const readTime = new Date(chatMetadata.other_user_last_read_at).getTime();
+        if (msgTime <= readTime) {
+            status = 'read';
+        }
+    }
 
     return (
         <MessageBubble
             text={message.content}
             type={message.is_from_me ? 'me' : 'other'}
             messageType={message.message_type}
-            status={message.status}
+            status={status}
+            delivered={message.delivered_to_recipient}
         />
     );
 });
@@ -163,10 +181,13 @@ const ChatContentContainer = React.memo(({
                 offset: 0,
             });
 
-            const messagesWithStatus = (response.messages ?? []).map(m => ({
-                ...m,
-                status: m.delivered_to_recipient ? 'read' : 'sent'
-            } as MessageEntry));
+            const messagesWithStatus = (response.messages ?? []).map(m => {
+                // Delivered does NOT mean Read. It means Sent (Yellow).
+                return {
+                    ...m,
+                    status: 'sent'
+                } as MessageEntry;
+            });
 
             batch(() => {
                 $chatMessagesState.setMessages(chatId, messagesWithStatus);
@@ -200,6 +221,7 @@ const ChatContentContainer = React.memo(({
             created_at: now,
             expires_at: now,
             status: 'pending',
+            delivered_to_recipient: false, // Added Phase 8b/9
         };
 
         const existingChat = $chatListState.chatsById[chat_id]?.peek();
@@ -213,6 +235,7 @@ const ChatContentContainer = React.memo(({
             last_message_status: 'pending',
             last_message_is_from_me: true,
             unread_count: existingChat?.unread_count || 0,
+            other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(), // Added Phase 9
             updated_at: now,
         } as ChatEntry;
 
@@ -233,14 +256,14 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.removeMessage(chat_id, tempId);
                 $chatMessagesState.addMessage(chat_id, {
                     ...response,
-                    status: response.delivered_to_recipient ? 'read' : 'sent'
+                    status: 'sent'
                 });
 
                 $chatListState.upsertChat({
                     ...optimisticChat,
                     last_message_content: response.content,
                     last_message_created_at: response.created_at,
-                    last_message_status: response.delivered_to_recipient ? 'read' : 'sent',
+                    last_message_status: 'sent',
                     last_message_is_from_me: response.is_from_me,
                     created_at: optimisticChat?.created_at || response.created_at,
                 });
@@ -277,10 +300,14 @@ const ChatContentContainer = React.memo(({
                 if (messages.length < 50) {
                     currentChat.hasMore.set(false);
                 }
-                const messagesWithStatus = messages.map(m => ({
-                    ...m,
-                    status: m.delivered_to_recipient ? 'read' : 'sent'
-                } as MessageEntry));
+                const messagesWithStatus = messages.map(m => {
+                    // Delivered does NOT mean Read. It means Sent (Yellow).
+                    // Read status is calculated dynamically in MessageItemWrapper via timestamps.
+                    return {
+                        ...m,
+                        status: 'sent'
+                    } as MessageEntry;
+                });
                 $chatMessagesState.prependMessages(chat_id, messagesWithStatus);
             });
         } catch {

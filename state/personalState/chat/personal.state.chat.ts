@@ -1,7 +1,40 @@
 import { observable, batch, computed, type Observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
+import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
 import { $personalStateUser } from '../user/personal.state.user';
+
+// Helper to auto-ack incoming messages
+const ackIncomingMessages = (messages: MessageEntry[]) => {
+    const user = $personalStateUser.user.peek();
+    const myId = user?.id;
+    if (!myId) return;
+
+    // Filter for incoming messages that are NOT yet marked as delivered
+    const unacked = messages.filter(m => !m.is_from_me && !m.delivered_to_recipient);
+
+    if (unacked.length === 0) return;
+
+    // Find the latest message (by created_at)
+    // Arrays are usually sorted new -> old, so we might need to check.
+    // The state code sorts: new Date(b.created_at) - new Date(a.created_at) -> Descending (Newest first).
+    // So the first element in 'unacked' (if sorted) is the newest.
+    // Let's safe-guard by sorting just in case 'messages' passed in isn't sorted perfectly.
+    unacked.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const latestMessage = unacked[0];
+
+    // Fire ONE ack for the latest message. Backend handles "Ack All Previous".
+    PersonalChatApi.acknowledgeDelivery({
+        message_id: latestMessage.message_id,
+        acknowledged_by: 'recipient',
+        success: true,
+    }).then(() => {
+        console.log(`[Auto-Ack] Bulk acknowledged up to message ${latestMessage.message_id}`);
+    }).catch(err => {
+        console.error(`[Auto-Ack] Failed to bulk ack message ${latestMessage.message_id}`, err);
+    });
+};
 
 // ============================================================================
 // Chat List State (Inbox — shown on Home screen)
@@ -196,7 +229,11 @@ const chatActions = {
             }
             chat.messagesById.set(byId);
             chat.messageIds.set(sorted.map((e) => e.message_id));
+            chat.messageIds.set(sorted.map((e) => e.message_id));
             chat.offset.set(sorted.length);
+
+            // Auto-Ack
+            ackIncomingMessages(sorted);
         });
     },
 
@@ -223,7 +260,11 @@ const chatActions = {
             }
             chat.messagesById.set(byId);
             chat.messageIds.set(merged.map((e) => e.message_id));
+            chat.messageIds.set(merged.map((e) => e.message_id));
             chat.offset.set(merged.length);
+
+            // Auto-Ack
+            ackIncomingMessages(newEntries);
         });
     },
 
@@ -238,7 +279,11 @@ const chatActions = {
 
             chat.messages.set(updated);
             chat.messagesById[entry.message_id].set(entry);
+            chat.messagesById[entry.message_id].set(entry);
             chat.messageIds.set(updated.map((e) => e.message_id));
+
+            // Auto-Ack
+            ackIncomingMessages([entry]);
         });
     },
 

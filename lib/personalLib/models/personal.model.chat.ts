@@ -20,12 +20,13 @@ export interface ChatEntry {
     avatar_url: string | null;        // Go *string
     created_at: string;               // Go time.Time → JSON string
     updated_at: string;
+    other_user_last_read_at: string;  // Go time.Time → JSON string (Added Phase 9)
     last_message_content: string | null;     // Go *string
     last_message_created_at: string | null;  // Go *time.Time → JSON string | null
     last_message_type: string | null;        // Go *string
     last_message_is_from_me: boolean;        // Calculated by backend
-    last_message_status?: 'pending' | 'sent' | 'read';
-    last_message_delivered?: boolean;
+    last_message_status: string;             // Go string (Required now)
+    last_message_sender_id: string | null;   // Go *string
     unread_count: number;
 }
 
@@ -40,7 +41,7 @@ export interface MessageEntry {
     recipient_id: string;
     content: string;
     message_type: string;    // Go string (text|image|video|audio|file)
-    delivered_to_recipient?: boolean;
+    delivered_to_recipient: boolean; // Go bool (Added in Phase 8b)
     status?: 'pending' | 'sent' | 'read';
     created_at: string;      // Go time.Time → JSON string
     expires_at: string;

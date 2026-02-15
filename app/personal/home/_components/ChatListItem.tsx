@@ -88,20 +88,22 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                             if (!isMe || !chat.last_message_content) return null;
 
                             let iconName: any = 'checkmark';
-                            let color = '#FFD700'; // Sent (Yellow) Default
+                            let color = '#FFD700'; // Sent/Delivered (Yellow)
                             const status = chat.last_message_status;
 
                             if (status === 'pending') {
                                 iconName = 'clock';
                                 color = theme.colors.icon;
-                            } else if (status === 'read' || chat.last_message_delivered) {
+                            } else if (status === 'read') {
+                                iconName = 'checkmark'; // Single tick
                                 color = '#4CAF50'; // Read (Green)
                             }
+                            // 'sent' & 'delivered' -> Single Yellow Checkmark
 
                             return (
                                 <IconSymbol
                                     name={iconName}
-                                    size={14}
+                                    size={16}
                                     color={color}
                                     style={styles.statusIcon}
                                 />

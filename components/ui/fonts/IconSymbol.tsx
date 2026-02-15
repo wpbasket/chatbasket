@@ -21,6 +21,7 @@ const MAPPING = {
   'account.unlock': 'lock-open',
   'check': 'checkmark-sharp',
   'checkmark': 'checkmark',
+  'checkmark.double': 'checkmark-done', // Added for Read Status
   'checkmark.circle': 'checkmark-circle-outline',
   'theme': 'sunny-sharp',
   'magnifyingglass': 'search',

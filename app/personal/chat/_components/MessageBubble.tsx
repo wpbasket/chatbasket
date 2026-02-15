@@ -8,29 +8,35 @@ type MessageBubbleProps = {
     type: 'me' | 'other';
     messageType?: string;
     status?: 'pending' | 'sent' | 'read';
+    delivered?: boolean;
 };
 
 const MessageBubble = memo(
-    ({ text, type, messageType = 'text', status }: MessageBubbleProps) => {
+    ({ text, type, messageType = 'text', status, delivered }: MessageBubbleProps) => {
         const isMe = type === 'me';
         const isText = messageType === 'text';
 
         const renderStatusIcon = () => {
-            if (!isMe || !status) return null;
+            if (!isMe) return null;
 
             let iconName: any = 'checkmark';
             let color = '#FFD700'; // Sent (Yellow) Default
 
             if (status === 'pending') {
                 iconName = 'clock';
-                color = 'rgba(255,255,255,0.5)';
+                color = 'rgba(255,255,255,0.7)';
             } else if (status === 'read') {
+                iconName = 'checkmark'; // Single Tick
                 color = '#4CAF50'; // Read (Green)
+            } else if (delivered) {
+                // Treated as Sent (Yellow) in UI
+                iconName = 'checkmark';
+                color = '#FFD700';
             }
 
             return (
                 <ThemedView style={styles.statusContainer}>
-                    <IconSymbol name={iconName} size={12} color={color} />
+                    <IconSymbol name={iconName} size={16} color={color} />
                 </ThemedView>
             );
         };

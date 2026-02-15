@@ -40,6 +40,8 @@ We have documented the complex engineering patterns used in this app in detailed
     *   *Legend-State "Observable Store" philosophy.*
 10. **[Zero-Render Architecture](./docs/KEYBOARD_VIEW.md)**
     *   *How we achieved O(1) rendering for Chat & Keyboard interactions.*
+11. **[Chat System Architecture](./app/personal/chat/README_CHAT.md)**
+    *   *3-Icon Status System and Ephemeral Relay logic.*
 
 ---
 
