@@ -25,7 +25,7 @@ export default function ChatInputBar({
     const sending = useValue(() => sendingObs?.get() || false);
 
     const onChangeText = (val: string) => {
-        $chatMessagesState.chats[chatId].inputText.set(val);
+        $chatMessagesState.updateInputText(chatId, val);
     };
 
     const canSend = text.trim().length > 0 && !sending;

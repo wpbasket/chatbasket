@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
+import { batch } from '@legendapp/state';
 import { FlatList, Pressable } from 'react-native';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
@@ -46,16 +47,19 @@ const PersonalHome = React.memo(() => {
   }, [router]);
 
   const fetchChats = useCallback(async () => {
+    $chatListState.setLoading(true);
     try {
-      $chatListState.setLoading(true);
-      $chatListState.setError(null);
       const response = await PersonalChatApi.getUserChats();
-      $chatListState.setChats(response.chats ?? []);
-      $chatListState.markFetched();
-    } catch (err: unknown) {
-      $chatListState.setError(getChatErrorMessage(err, 'Could not load conversations.'));
-    } finally {
-      $chatListState.setLoading(false);
+      batch(() => {
+        $chatListState.setChats(response?.chats ?? []);
+        $chatListState.markFetched();
+        $chatListState.setLoading(false);
+      });
+    } catch (err: any) {
+      batch(() => {
+        $chatListState.setError(getChatErrorMessage(err, 'Could not load conversations.'));
+        $chatListState.setLoading(false);
+      });
     }
   }, []);
 

@@ -16,7 +16,6 @@ interface ChatListState {
     chatIds: string[];
     totalUnreadCount: number;
     hasChats: boolean;
-    getCurrentUserId: () => string;
     setLoading: (value: boolean) => void;
     setError: (value: string | null) => void;
     setChats: (entries: ChatEntry[]) => void;
@@ -27,59 +26,78 @@ interface ChatListState {
     reset: () => void;
 }
 
-const state$: any = observable({
-    chats: [] as ChatEntry[],
+const state$ = observable({
+    chatsById: {} as Record<string, ChatEntry>,
     loading: false,
     error: null as string | null,
     lastFetchedAt: null as number | null,
 
-    getCurrentUserId(): string {
-        return $personalStateUser.user?.id?.peek() || '';
+    // Computeds (Functions in 3.0 observables are lazy computeds)
+    chats() {
+        const byId = state$.chatsById.get();
+        return Object.values(byId)
+            .filter(c => c && c.chat_id)
+            .sort((a, b) => {
+                const aTime = a.last_message_created_at ?? a.created_at;
+                const bTime = b.last_message_created_at ?? b.created_at;
+                if (!aTime || !bTime) return 0;
+                return new Date(bTime).getTime() - new Date(aTime).getTime();
+            });
+    },
+    chatIds() {
+        return state$.chats.get().map((c: ChatEntry) => c.chat_id);
+    },
+    totalUnreadCount() {
+        const byId = state$.chatsById.get();
+        return Object.values(byId).reduce((sum, c) => sum + (c.unread_count || 0), 0);
+    },
+    hasChats() {
+        return state$.chatIds.get().length > 0;
     },
 
+    // Actions
     setLoading(value: boolean) {
         state$.loading.set(value);
     },
     setError(value: string | null) {
         state$.error.set(value);
     },
-
     setChats(entries: ChatEntry[]) {
-        const sorted = [...entries].sort((a, b) => {
-            const aTime = a.last_message_created_at ?? a.created_at;
-            const bTime = b.last_message_created_at ?? b.created_at;
-            return new Date(bTime).getTime() - new Date(aTime).getTime();
+        batch(() => {
+            if (!Array.isArray(entries)) {
+                state$.chatsById.set({});
+                return;
+            }
+            const byId: Record<string, ChatEntry> = {};
+            for (const entry of entries) {
+                if (entry?.chat_id) {
+                    byId[entry.chat_id] = entry;
+                }
+            }
+            state$.chatsById.set(byId);
+            state$.error.set(null);
         });
-
-        state$.chats.set(sorted);
     },
-
     upsertChat(entry: ChatEntry) {
-        const current = state$.chats.get();
-        const filtered = current.filter((c: ChatEntry) => c.chat_id !== entry.chat_id);
-        state$.setChats([entry, ...filtered]);
+        state$.chatsById[entry.chat_id].set(entry);
     },
-
     updateUnreadCount(chatId: string, count: number) {
-        const currentChats = state$.chats.peek();
-        const index = currentChats.findIndex((c: ChatEntry) => c?.chat_id === chatId);
-        if (index !== -1) {
-            const updatedChat = { ...currentChats[index], unread_count: count };
-            state$.chats[index].set(updatedChat);
-        }
+        batch(() => {
+            const chat$ = state$.chatsById[chatId];
+            if (chat$.peek()) {
+                chat$.unread_count.set(count);
+            }
+        });
     },
-
     markChatRead(chatId: string) {
         state$.updateUnreadCount(chatId, 0);
     },
-
     markFetched() {
         state$.lastFetchedAt.set(Date.now());
     },
-
     reset() {
         batch(() => {
-            state$.chats.set([]);
+            state$.chatsById.set({});
             state$.loading.set(false);
             state$.error.set(null);
             state$.lastFetchedAt.set(null);
@@ -87,32 +105,7 @@ const state$: any = observable({
     },
 });
 
-state$.assign({
-    chatsById: computed((): Record<string, ChatEntry> => {
-        const chats = state$.chats.get();
-        const byId: Record<string, ChatEntry> = {};
-        for (const entry of chats) {
-            if (entry?.chat_id) {
-                byId[entry.chat_id] = entry;
-            }
-        }
-        return byId;
-    }),
-
-    chatIds: computed((): string[] => {
-        return state$.chats.get().map((e: ChatEntry) => e.chat_id);
-    }),
-
-    totalUnreadCount: computed((): number => {
-        return state$.chats.get().reduce((sum: number, c: ChatEntry) => sum + (c.unread_count || 0), 0);
-    }),
-
-    hasChats: computed((): boolean => {
-        return state$.chats.get().length > 0;
-    }),
-});
-
-export const $chatListState: Observable<ChatListState> = state$;
+export const $chatListState = state$ as unknown as Observable<ChatListState>;
 
 export { useValue };
 
@@ -120,6 +113,23 @@ export { useValue };
 // ============================================================================
 // Chat Messages State (Active Conversation — [chat_id].tsx)
 // ============================================================================
+
+interface ChatMessagesState {
+    setLoading: (chatId: string, value: boolean) => void;
+    setError: (chatId: string, value: string | null) => void;
+    setSending: (chatId: string, value: boolean) => void;
+    setMessages: (chatId: string, entries: MessageEntry[]) => void;
+    prependMessages: (chatId: string, entries: MessageEntry[]) => void;
+    addMessage: (chatId: string, entry: MessageEntry) => void;
+    updateMessageStatus: (chatId: string, messageId: string, updates: Partial<MessageEntry>) => void;
+    removeMessage: (chatId: string, messageId: string) => void;
+    setActiveChatId: (chatId: string | null) => void;
+    updateInputText: (chatId: string, text: string) => void;
+    reset: (chatId?: string) => void;
+    activeChatId: Observable<string | null>;
+    isChatOpen: Observable<boolean>;
+    chats: Observable<Record<string, ChatData>>;
+}
 
 interface ChatData {
     recipientId: string | null;
@@ -147,27 +157,34 @@ const createDefaultChatData = (): ChatData => ({
     inputText: '',
 });
 
-export const $chatMessagesState = observable({
+const chatMessages$ = observable({
     activeChatId: null as string | null,
     isChatOpen: false,
     chats: {} as Record<string, ChatData>,
+});
 
+/** Helper to ensure a chat entry exists in the map */
+function ensureChatInternal(chatId: string) {
+    if (!chatMessages$.chats[chatId].peek()) {
+        chatMessages$.chats[chatId].set(createDefaultChatData());
+    }
+    return chatMessages$.chats[chatId];
+}
+
+const chatActions = {
     setLoading(chatId: string, value: boolean) {
-        ensureChat(chatId).loading.set(value);
+        ensureChatInternal(chatId).loading.set(value);
     },
     setError(chatId: string, value: string | null) {
-        ensureChat(chatId).error.set(value);
+        ensureChatInternal(chatId).error.set(value);
     },
     setSending(chatId: string, value: boolean) {
-        ensureChat(chatId).sending.set(value);
+        ensureChatInternal(chatId).sending.set(value);
     },
 
-    /**
-     * Replaces the message list entirely for a specific chat.
-     */
     setMessages(chatId: string, entries: MessageEntry[]) {
         batch(() => {
-            const chat = ensureChat(chatId);
+            const chat = ensureChatInternal(chatId);
             const sorted = [...entries].sort(
                 (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             );
@@ -183,12 +200,9 @@ export const $chatMessagesState = observable({
         });
     },
 
-    /**
-     * Prepends older messages (pagination) for a specific chat.
-     */
     prependMessages(chatId: string, entries: MessageEntry[]) {
         batch(() => {
-            const chat = ensureChat(chatId);
+            const chat = ensureChatInternal(chatId);
             const existing = chat.messagesById.get();
             const newEntries = entries.filter((e) => !existing[e.message_id]);
 
@@ -213,12 +227,9 @@ export const $chatMessagesState = observable({
         });
     },
 
-    /**
-     * Adds a new message to the top for a specific chat.
-     */
     addMessage(chatId: string, entry: MessageEntry) {
         batch(() => {
-            const chat = ensureChat(chatId);
+            const chat = ensureChatInternal(chatId);
             const existing = chat.messagesById.peek();
             if (existing[entry.message_id]) return;
 
@@ -231,57 +242,61 @@ export const $chatMessagesState = observable({
         });
     },
 
-    /**
-     * Updates message status for a specific chat.
-     */
     updateMessageStatus(chatId: string, messageId: string, updates: Partial<MessageEntry>) {
-        const chat = ensureChat(chatId);
-        const message$ = chat.messagesById[messageId];
-        if (message$.peek()) {
-            message$.assign(updates);
+        batch(() => {
+            const chat = ensureChatInternal(chatId);
+            const message$ = chat.messagesById[messageId];
+            if (message$.peek()) {
+                message$.assign(updates);
 
-            const currentMessages = chat.messages.peek();
-            const index = currentMessages.findIndex((m: MessageEntry) => m.message_id === messageId);
-            if (index !== -1) {
-                chat.messages[index].assign(updates);
+                const currentMessages = chat.messages.peek();
+                const index = currentMessages.findIndex((m: MessageEntry) => m.message_id === messageId);
+                if (index !== -1) {
+                    chat.messages[index].assign(updates);
+                }
             }
-        }
+        });
     },
 
-    /**
-     * Removes a message for a specific chat.
-     */
     removeMessage(chatId: string, messageId: string) {
-        const chat = ensureChat(chatId);
-        const currentMessages = chat.messages.peek();
-        const filtered = currentMessages.filter((m: MessageEntry) => m.message_id !== messageId);
+        batch(() => {
+            const chat = ensureChatInternal(chatId);
+            const currentMessages = chat.messages.peek();
+            const filtered = currentMessages.filter((m: MessageEntry) => m.message_id !== messageId);
 
-        chat.messages.set(filtered);
-        chat.messagesById[messageId].delete();
-        chat.messageIds.set(filtered.map((m: MessageEntry) => m.message_id));
+            chat.messages.set(filtered);
+            chat.messagesById[messageId].delete();
+            chat.messageIds.set(filtered.map((m: MessageEntry) => m.message_id));
+        });
     },
 
     setActiveChatId(chatId: string | null) {
-        $chatMessagesState.activeChatId.set(chatId);
+        chatMessages$.activeChatId.set(chatId);
         if (chatId) {
-            ensureChat(chatId);
+            ensureChatInternal(chatId);
         }
+    },
+
+    updateInputText(chatId: string, text: string) {
+        ensureChatInternal(chatId).inputText.set(text);
     },
 
     reset(chatId?: string) {
-        if (chatId) {
-            $chatMessagesState.chats[chatId].set(createDefaultChatData());
-        } else {
-            $chatMessagesState.activeChatId.set(null);
-            $chatMessagesState.chats.set({});
-        }
+        batch(() => {
+            if (chatId) {
+                chatMessages$.chats[chatId].set(createDefaultChatData());
+            } else {
+                chatMessages$.activeChatId.set(null);
+                chatMessages$.chats.set({});
+                chatMessages$.isChatOpen.set(false);
+            }
+        });
     },
-});
+};
 
-/** Helper to ensure a chat entry exists in the map */
-function ensureChat(chatId: string) {
-    if (!$chatMessagesState.chats[chatId].peek()) {
-        $chatMessagesState.chats[chatId].set(createDefaultChatData());
-    }
-    return $chatMessagesState.chats[chatId];
-}
+export const $chatMessagesState = {
+    ...chatActions,
+    activeChatId: chatMessages$.activeChatId,
+    isChatOpen: chatMessages$.isChatOpen,
+    chats: chatMessages$.chats,
+} as unknown as ChatMessagesState;

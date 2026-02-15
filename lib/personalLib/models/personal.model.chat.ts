@@ -23,7 +23,7 @@ export interface ChatEntry {
     last_message_content: string | null;     // Go *string
     last_message_created_at: string | null;  // Go *time.Time → JSON string | null
     last_message_type: string | null;        // Go *string
-    last_message_sender_id: string | null;   // Go *string
+    last_message_is_from_me: boolean;        // Calculated by backend
     last_message_status?: 'pending' | 'sent' | 'read';
     last_message_delivered?: boolean;
     unread_count: number;
@@ -36,7 +36,7 @@ export interface ChatEntry {
 export interface MessageEntry {
     message_id: string;
     chat_id: string;
-    sender_id: string;
+    is_from_me: boolean;
     recipient_id: string;
     content: string;
     message_type: string;    // Go string (text|image|video|audio|file)

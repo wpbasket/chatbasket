@@ -47,7 +47,6 @@ const PersonalChatScreen = React.memo(() => {
         recipient_name: string;
     }>();
 
-    const currentUserId = React.useMemo(() => $chatListState.getCurrentUserId(), []);
     const displayName = recipient_name || 'Chat';
 
     return (
@@ -85,7 +84,6 @@ const PersonalChatScreen = React.memo(() => {
                 chat_id={chat_id}
                 recipient_id={recipient_id}
                 recipient_name={recipient_name}
-                currentUserId={currentUserId}
                 displayName={displayName}
             />
 
@@ -110,14 +108,14 @@ export default PersonalChatScreen;
 
 // -------- Sub-components to isolate re-renders --------
 
-const MessageItemWrapper = React.memo(({ messageId, chatId, currentUserId }: { messageId: string, chatId: string, currentUserId: string }) => {
+const MessageItemWrapper = React.memo(({ messageId, chatId }: { messageId: string, chatId: string }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
     if (!message) return null;
 
     return (
         <MessageBubble
             text={message.content}
-            type={message.sender_id === currentUserId ? 'me' : 'other'}
+            type={message.is_from_me ? 'me' : 'other'}
             messageType={message.message_type}
             status={message.status}
         />
@@ -128,7 +126,6 @@ const ChatContentContainer = React.memo(({
     chat_id,
     recipient_id,
     recipient_name,
-    currentUserId,
     displayName
 }: any) => {
     // -------- Initialize chat on mount --------
@@ -189,14 +186,14 @@ const ChatContentContainer = React.memo(({
         const chatData = currentChat.peek();
         const trimmed = chatData.inputText.trim();
         const recipId = chatData.recipientId;
-        if (!trimmed || !recipId || !chat_id || !currentUserId) return;
+        if (!trimmed || !recipId || !chat_id) return;
 
         const tempId = `temp-${Date.now()}`;
         const now = new Date().toISOString();
         const optimisticMsg: MessageEntry = {
             message_id: tempId,
             chat_id: chat_id as string,
-            sender_id: currentUserId,
+            is_from_me: true,
             recipient_id: recipId,
             content: trimmed,
             message_type: 'text',
@@ -214,7 +211,7 @@ const ChatContentContainer = React.memo(({
             last_message_content: trimmed,
             last_message_created_at: now,
             last_message_status: 'pending',
-            last_message_sender_id: currentUserId,
+            last_message_is_from_me: true,
             unread_count: existingChat?.unread_count || 0,
             updated_at: now,
         } as ChatEntry;
@@ -244,7 +241,7 @@ const ChatContentContainer = React.memo(({
                     last_message_content: response.content,
                     last_message_created_at: response.created_at,
                     last_message_status: response.delivered_to_recipient ? 'read' : 'sent',
-                    last_message_sender_id: response.sender_id,
+                    last_message_is_from_me: response.is_from_me,
                     created_at: optimisticChat?.created_at || response.created_at,
                 });
             });
@@ -256,18 +253,19 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Message could not be sent.', { name: recipient_name }));
             });
         }
-    }, [chat_id, currentUserId, recipient_name]);
+    }, [chat_id, recipient_name]);
 
     const loadMore = useCallback(async () => {
         if (!chat_id) return;
-        const chatData = $chatMessagesState.chats[chat_id].peek();
+        const currentChat = $chatMessagesState.chats[chat_id];
+        const chatData = currentChat.peek();
         const hasMore = chatData.hasMore;
         const isLoading = chatData.loading;
         if (!hasMore || isLoading) return;
 
         try {
-            $chatMessagesState.setLoading(chat_id, true);
-            const offset = $chatMessagesState.chats[chat_id].offset.peek();
+            currentChat.loading.set(true);
+            const offset = currentChat.offset.peek();
             const response = await PersonalChatApi.getMessages({
                 chat_id,
                 limit: 50,
@@ -275,18 +273,20 @@ const ChatContentContainer = React.memo(({
             });
 
             batch(() => {
-                if ((response.messages ?? []).length < 50) {
-                    $chatMessagesState.chats[chat_id].hasMore.set(false);
+                const messages = response.messages ?? [];
+                if (messages.length < 50) {
+                    currentChat.hasMore.set(false);
                 }
-                const messagesWithStatus = (response.messages ?? []).map(m => ({
+                const messagesWithStatus = messages.map(m => ({
                     ...m,
                     status: m.delivered_to_recipient ? 'read' : 'sent'
                 } as MessageEntry));
                 $chatMessagesState.prependMessages(chat_id, messagesWithStatus);
             });
         } catch {
+            // Silently fail for pagination
         } finally {
-            $chatMessagesState.setLoading(chat_id, false);
+            currentChat.loading.set(false);
         }
     }, [chat_id]);
 
@@ -295,10 +295,9 @@ const ChatContentContainer = React.memo(({
             <MessageItemWrapper
                 messageId={messageId}
                 chatId={chat_id}
-                currentUserId={currentUserId}
             />
         ),
-        [chat_id, currentUserId]
+        [chat_id]
     );
 
     const keyExtractor = useCallback((id: string) => id, []);
@@ -360,7 +359,6 @@ const ChatContentContainer = React.memo(({
         prev.chat_id === next.chat_id &&
         prev.recipient_id === next.recipient_id &&
         prev.recipient_name === next.recipient_name &&
-        prev.currentUserId === next.currentUserId &&
         prev.displayName === next.displayName
     );
 });

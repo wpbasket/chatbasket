@@ -84,7 +84,7 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                 <ThemedView style={styles.bottomRow}>
                     <ThemedView style={styles.previewContainer}>
                         {(() => {
-                            const isMe = chat.last_message_sender_id === $chatListState.getCurrentUserId();
+                            const isMe = chat.last_message_is_from_me;
                             if (!isMe || !chat.last_message_content) return null;
 
                             let iconName: any = 'checkmark';
