@@ -13,6 +13,7 @@ const MAPPING = {
   'contacts.fill': 'contacts',
   'contacts.outline': 'contacts-outline',
   'keyboard.backspace': 'keyboard-backspace',
+  'checkmark.all': 'check-all',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

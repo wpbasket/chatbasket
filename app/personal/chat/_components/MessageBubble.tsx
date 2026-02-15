@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
 import { ThemedText, ThemedView } from '@/components/ui/basic';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 
 type MessageBubbleProps = {
     text: string;
@@ -9,36 +10,39 @@ type MessageBubbleProps = {
     messageType?: string;
     status?: 'pending' | 'sent' | 'read';
     delivered?: boolean;
+    createdAt: string;
 };
 
 const MessageBubble = memo(
-    ({ text, type, messageType = 'text', status, delivered }: MessageBubbleProps) => {
+    ({ text, type, messageType = 'text', status, delivered, createdAt }: MessageBubbleProps) => {
+        const { theme } = useUnistyles();
         const isMe = type === 'me';
         const isText = messageType === 'text';
 
         const renderStatusIcon = () => {
             if (!isMe) return null;
 
-            let iconName: any = 'checkmark';
-            let color = '#FFD700'; // Sent (Yellow) Default
-
             if (status === 'pending') {
-                iconName = 'clock';
-                color = 'rgba(255,255,255,0.7)';
+                return (
+                    <ThemedView style={styles.statusContainer}>
+                        <IconSymbol name="clock" size={16} color="rgba(255,255,255,0.7)" />
+                    </ThemedView>
+                );
             } else if (status === 'read') {
-                iconName = 'checkmark'; // Single Tick
-                color = '#4CAF50'; // Read (Green)
-            } else if (delivered) {
-                // Treated as Sent (Yellow) in UI
-                iconName = 'checkmark';
-                color = '#FFD700';
+                return (
+                    <ThemedView style={styles.statusContainer}>
+                        <MaterialCommunityIcon name="checkmark.all" size={18} color={theme.colors.primary} />
+                    </ThemedView>
+                );
+            } else if (delivered || status === 'sent') {
+                return (
+                    <ThemedView style={styles.statusContainer}>
+                        <IconSymbol name="checkmark" size={16} color="#FFD700" />
+                    </ThemedView>
+                );
             }
 
-            return (
-                <ThemedView style={styles.statusContainer}>
-                    <IconSymbol name={iconName} size={16} color={color} />
-                </ThemedView>
-            );
+            return null;
         };
 
         const renderTypeIcon = () => {
@@ -57,6 +61,15 @@ const MessageBubble = memo(
             );
         };
 
+        const formatTime = (dateStr: string) => {
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch {
+                return '';
+            }
+        };
+
         return (
             <ThemedView
                 accessibilityRole="text"
@@ -68,7 +81,13 @@ const MessageBubble = memo(
             >
                 {renderTypeIcon()}
                 <ThemedText style={isMe ? styles.myText : undefined}>{text}</ThemedText>
-                {renderStatusIcon()}
+
+                <ThemedView style={styles.footer}>
+                    <ThemedText style={[styles.timeText, isMe && styles.myTimeText]}>
+                        {formatTime(createdAt)}
+                    </ThemedText>
+                    {renderStatusIcon()}
+                </ThemedView>
             </ThemedView>
         );
     },
@@ -82,19 +101,23 @@ export default MessageBubble;
 
 const styles = StyleSheet.create((theme) => ({
     bubble: {
-        padding: 10,
+        paddingVertical: 6,
+        paddingHorizontal: 14,
         marginBottom: 8,
-        borderRadius: 14,
-        backgroundColor: theme.colors.surface,
-        maxWidth: '75%',
-        alignSelf: 'flex-start',
+        borderRadius: 20,
+        borderBottomRightRadius: 4,
+        backgroundColor: theme.colors.card,
+        maxWidth: '80%',
+        alignSelf: 'flex-end',
     },
     myBubble: {
-        alignSelf: 'flex-end',
-        backgroundColor: theme.colors.primary,
+        alignSelf: 'flex-start',
+        backgroundColor: theme.colors.bubblePurple,
+        borderBottomLeftRadius: 4,
+        borderBottomRightRadius: 20,
     },
     myText: {
-        color: theme.colors.reverseText,
+        color: theme.colors.white,
     },
     typeLabel: {
         fontSize: 12,
@@ -103,8 +126,23 @@ const styles = StyleSheet.create((theme) => ({
         fontWeight: '600',
     },
     statusContainer: {
+        marginLeft: 4,
+        backgroundColor: 'transparent',
+    },
+    footer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
         alignSelf: 'flex-end',
         marginTop: 2,
         backgroundColor: 'transparent',
+    },
+    timeText: {
+        fontSize: 10,
+        opacity: 0.6,
+        color: theme.colors.textSecondary,
+    },
+    myTimeText: {
+        color: 'rgba(255,255,255,0.7)',
     },
 }));

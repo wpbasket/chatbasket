@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { TextInput, Pressable, NativeSyntheticEvent, TextInputContentSizeChangeEventData } from 'react-native';
 import { ThemedText, ThemedView } from '@/components/ui/basic';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { $chatMessagesState, useValue } from '@/state/personalState/chat/personal.state.chat';
 
@@ -18,6 +19,7 @@ export default function ChatInputBar({
     onSend,
     sendingObs,
 }: ChatInputBarProps) {
+    const { theme } = useUnistyles();
     const { handlePressIn } = pressableAnimation();
     const [inputHeight, setInputHeight] = useState(48);
 
@@ -30,6 +32,11 @@ export default function ChatInputBar({
 
     const canSend = text.trim().length > 0 && !sending;
 
+    const handleSend = () => {
+        onSend();
+        setInputHeight(48);
+    };
+
     return (
         <ThemedView style={styles.inputBar}>
             <TextInput
@@ -37,7 +44,7 @@ export default function ChatInputBar({
                 onChangeText={onChangeText}
                 multiline
                 placeholder="Type message..."
-                placeholderTextColor="#999"
+                placeholderTextColor={theme.colors.textSecondary}
                 returnKeyType="send"
                 submitBehavior="newline"
                 accessibilityLabel="Message input"
@@ -52,7 +59,7 @@ export default function ChatInputBar({
             />
 
             <Pressable
-                onPress={onSend}
+                onPress={handleSend}
                 onPressIn={handlePressIn}
                 disabled={!canSend}
                 accessibilityRole="button"
@@ -61,10 +68,14 @@ export default function ChatInputBar({
                 style={({ pressed }) => [
                     styles.sendBtn,
                     !canSend && styles.sendBtnDisabled,
-                    pressed && { opacity: 0.1 }
+                    pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] }
                 ]}
             >
-                <ThemedText>Send</ThemedText>
+                <IconSymbol
+                    name="paperplane.fill"
+                    size={20}
+                    color={canSend ? theme.colors.reverseText : theme.colors.textSecondary}
+                />
             </Pressable>
         </ThemedView>
     );
@@ -83,19 +94,25 @@ const styles = StyleSheet.create((theme, rt) => ({
     },
     input: {
         flex: 1,
-        paddingHorizontal: 12,
+        paddingHorizontal: 16,
         paddingVertical: 10,
-        borderRadius: 20,
-        backgroundColor: theme.colors.surface,
+        borderRadius: 24,
+        backgroundColor: theme.colors.card,
+        color: theme.colors.text,
         maxHeight: 120,
+        fontSize: 16,
     },
     sendBtn: {
-        marginLeft: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
+        marginLeft: 12,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: theme.colors.primary,
         justifyContent: 'center',
+        alignItems: 'center',
     },
     sendBtnDisabled: {
-        opacity: 0.4,
+        backgroundColor: theme.colors.border,
+        opacity: 0.6,
     },
 }));

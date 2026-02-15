@@ -108,19 +108,14 @@ export default PersonalChatScreen;
 
 // -------- Sub-components to isolate re-renders --------
 
-const MessageItemWrapper = React.memo(({ messageId, chatId }: { messageId: string, chatId: string }) => {
+const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId: string, chatId: string, index: number }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
-
-    // We need to know when the OTHER user last read the chat to mark specific messages as Read.
-    // This data is in $chatListState.chatsById[chatId]
     const chatMetadata = useValue(() => $chatListState.chatsById[chatId]?.get());
+    const messageIds = useValue(() => $chatMessagesState.chats[chatId]?.messageIds.get() || []);
 
     if (!message) return null;
 
     let status = message.status;
-
-    // Logic: If message is older than other user's last read time, it IS read.
-    // This allows granular "Green Ticks" even if we don't store "read" on every message row.
     if (message.is_from_me && chatMetadata?.other_user_last_read_at) {
         const msgTime = new Date(message.created_at).getTime();
         const readTime = new Date(chatMetadata.other_user_last_read_at).getTime();
@@ -129,14 +124,60 @@ const MessageItemWrapper = React.memo(({ messageId, chatId }: { messageId: strin
         }
     }
 
+    // Date Header Logic: 
+    // Since list is inverted, index N is older than index N-1.
+    // We show a header if this message is the first of its date (compared to message at index + 1).
+    const renderDateHeader = () => {
+        const prevMessageId = messageIds[index + 1];
+        const currentMsgDate = new Date(message.created_at).toDateString();
+
+        // If it's the oldest message (last in array), or date changed from older message
+        let showHeader = false;
+        if (!prevMessageId) {
+            showHeader = true;
+        } else {
+            const prevMessage = $chatMessagesState.chats[chatId]?.messagesById[prevMessageId]?.peek();
+            if (prevMessage) {
+                const prevMsgDate = new Date(prevMessage.created_at).toDateString();
+                if (currentMsgDate !== prevMsgDate) {
+                    showHeader = true;
+                }
+            }
+        }
+
+        if (!showHeader) return null;
+
+        const formatDateHeader = (dateStr: string) => {
+            const date = new Date(dateStr);
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(today.getDate() - 1);
+
+            if (date.toDateString() === today.toDateString()) return 'Today';
+            if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+        };
+
+        return (
+            <ThemedView style={styles.dateHeader}>
+                <ThemedText style={styles.dateHeaderText}>{formatDateHeader(message.created_at)}</ThemedText>
+            </ThemedView>
+        );
+    };
+
     return (
-        <MessageBubble
-            text={message.content}
-            type={message.is_from_me ? 'me' : 'other'}
-            messageType={message.message_type}
-            status={status}
-            delivered={message.delivered_to_recipient}
-        />
+        <ThemedView style={{ backgroundColor: 'transparent' }}>
+            {renderDateHeader()}
+            <MessageBubble
+                text={message.content}
+                type={message.is_from_me ? 'me' : 'other'}
+                messageType={message.message_type}
+                status={status}
+                delivered={message.delivered_to_recipient}
+                createdAt={message.created_at}
+            />
+        </ThemedView>
     );
 });
 
@@ -318,10 +359,11 @@ const ChatContentContainer = React.memo(({
     }, [chat_id]);
 
     const renderItem = useCallback(
-        ({ item: messageId }: { item: string }) => (
+        ({ item: messageId, index }: { item: string, index: number }) => (
             <MessageItemWrapper
                 messageId={messageId}
                 chatId={chat_id}
+                index={index}
             />
         ),
         [chat_id]
@@ -410,5 +452,17 @@ const styles = StyleSheet.create((theme, rt) => ({
         justifyContent: 'center',
         paddingVertical: 48,
         gap: 8,
+    },
+    dateHeader: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 16,
+        backgroundColor: 'transparent',
+    },
+    dateHeaderText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        backgroundColor: 'transparent',
     },
 }));
