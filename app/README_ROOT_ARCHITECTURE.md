@@ -3,7 +3,7 @@
 **Core Pattern**: "Smart Layout, dumb Screens"
 
 ## `app/_layout.tsx` (The Brain)
-This file is the most critical engineering component in the Frontend. It orchestrates user flow, initialization, and global guards.
+This file is the most critical engineering component in the Frontend. It orchestrates user flow, initialization, global guards, and **Keyboard Synchronization**.
 
 ### Responsibilities
 

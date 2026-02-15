@@ -4,8 +4,8 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import {
-    $contactRequestsState,
-    type SentRequestEntry,
+  $contactRequestsState,
+  type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { formatRelativeTimeShort } from '@/utils/commonUtils/util.date';
 import { useValue } from '@legendapp/state/react';
@@ -48,7 +48,7 @@ export default function SentRequestRow({ id, onOpenActions, onUndo }: SentRowPro
         onPressIn={handlePressIn}
         onPress={(event) => onOpenActions(item, event)}
       >
-        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
+        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} colorKey={item.id} />
         <ThemedView style={styles.rowContent}>
           <ThemedText type='semibold' style={styles.rowName} selectable>
             {displayName}

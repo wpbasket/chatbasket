@@ -1,11 +1,9 @@
 import Header from '@/components/header/Header';
 import { commonAuthApi } from '@/lib/commonLib/authApi/common.api.auth';
 import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { useNotificationPermission } from '@/hooks/commonHooks/hooks.notificationPermission';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
@@ -19,10 +17,10 @@ import { setting$ } from '@/state/settings/state.setting';
 import { hideModal, runWithLoading, showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useValue } from '@legendapp/state/react';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
-import { UnistylesRuntime } from 'react-native-unistyles';
+import { UnistylesRuntime, useUnistyles } from 'react-native-unistyles';
 import SettingsEmailRow from './components/SettingsEmailRow';
 import SettingsPasswordRow from './components/SettingsPasswordRow';
 import CreateSettingsFlows from './settings.flows';
@@ -31,6 +29,7 @@ import { settingApi } from '@/lib/commonLib/settingApi/common.api.setting';
 import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.setting';
 
 export default function Settings() {
+  const { rt } = useUnistyles();
   const MAX_RESENDS = 3;
   const COOLDOWN_MS = 120_000;
   useEffect(() => {
@@ -215,107 +214,93 @@ export default function Settings() {
   };
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-
-        <ThemedView style={styles.mainContainer}>
-          <Header
-            leftButton={{
-              child: <IconSymbol name='arrow.left' />,
-              onPress: goBack,
-            }}
-            centerIcon={true}
-            Icon={<ThemedText type='subtitle'>Settings</ThemedText>}
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Settings</ThemedText>}
+        />
+      </ThemedView>
+      <View style={styles.container}>
+        <View style={[styles.flex1, { marginTop: -20 }]}>
+          <ThemedText style={styles.sectionHeader}>Security</ThemedText>
+          <SettingsEmailRow
+            email={email}
+            onPress={editEmail}
+            onPressIn={handlePressIn}
           />
-          <View style={styles.container}>
-            <View style={[styles.flex1, { marginTop: -20 }]}>
-              <ThemedText style={styles.sectionHeader}>Security</ThemedText>
-              <SettingsEmailRow
-                email={email}
-                onPress={editEmail}
-                onPressIn={handlePressIn}
+          <SettingsPasswordRow
+            onPress={editPassword}
+            onPressIn={handlePressIn}
+          />
+
+          <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
+
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Mode :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Choose mode'
+                value={selectedModeValue}
+                options={modeOptions}
+                onSelect={handleSelectMode}
+                style={styles.dropdownBorder}
               />
-              <SettingsPasswordRow
-                onPress={editPassword}
-                onPressIn={handlePressIn}
-              />
-
-              <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Mode :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Choose mode'
-                    value={selectedModeValue}
-                    options={modeOptions}
-                    onSelect={handleSelectMode}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Notifications'
-                    value={selectedNotificationValue}
-                    options={notificationDisplayOptions}
-                    modalOptions={notificationActionOptions}
-                    onSelect={handleSelectNotifications}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Theme :</ThemedText>
-                </View>
-                {/* <View style={styles.itemContainer}>
-                  <IconSymbol name='theme' size={25}/>
-                </View> */}
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Choose theme'
-                    value={selectedThemeValue}
-                    options={themeOptions}
-                    onSelect={handleSelectTheme}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              {Platform.OS !== 'web' && (
-                <View style={styles.section}>
-                  <View style={styles.itemTitleContainer}>
-                    <ThemedText style={styles.itemTitle}>Device Type :</ThemedText>
-                  </View>
-                  <View style={styles.themePickerContainer}>
-                    <Pressable onPress={handleSetCentralDevice} style={[styles.dropdownBorder, { justifyContent: 'center' }]}>
-                      <ThemedText type='default'>{deviceType}</ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-
-
             </View>
           </View>
 
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Notifications'
+                value={selectedNotificationValue}
+                options={notificationDisplayOptions}
+                modalOptions={notificationActionOptions}
+                onSelect={handleSelectNotifications}
+                style={styles.dropdownBorder}
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Theme :</ThemedText>
+            </View>
+            {/* <View style={styles.itemContainer}>
+                  <IconSymbol name='theme' size={25}/>
+                </View> */}
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Choose theme'
+                value={selectedThemeValue}
+                options={themeOptions}
+                onSelect={handleSelectTheme}
+                style={styles.dropdownBorder}
+              />
+            </View>
+          </View>
+
+          {Platform.OS !== 'web' && (
+            <View style={styles.section}>
+              <View style={styles.itemTitleContainer}>
+                <ThemedText style={styles.itemTitle}>Device Type :</ThemedText>
+              </View>
+              <View style={styles.themePickerContainer}>
+                <Pressable onPress={handleSetCentralDevice} style={[styles.dropdownBorder, { justifyContent: 'center' }]}>
+                  <ThemedText type='default'>{deviceType}</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          )}
 
 
-        </ThemedView>
-        {/* mainContainer */}
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
-  )
+        </View>
+      </View>
+    </ThemedView>
+  );
 }

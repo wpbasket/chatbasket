@@ -37,7 +37,13 @@ This document captures the key patterns, conventions, and interdependencies used
 
 ## Modal System
 - **Imperative promise modals** via `showConfirmDialog`, `showAlert`, etc.; rendered centrally in `AppModal` and wired in `_layout.tsx`.
+// ...
 - Do not instantiate modals per-screen; use the utilities.
+
+## Performance & Re-renders
+- **Zero-Render Animations**: Use `KeyboardSync` + `$uiState` + `Memo` components for keyboard/layout animations. avoiding React renders entirely.
+- **Prop Firewall**: Use `React.memo` with strict custom comparison for heavy containers (like Chat) to block unstable Router prop changes.
+- **ID-Driven Lists**: Pass IDs, not objects, to FlatLists. Let items observe their own data.
 
 ## Platform Nuances
 - **Web**: prefer sync storage for mode/theme to avoid hydration white flash; cookies carry session token.

@@ -38,6 +38,8 @@ We have documented the complex engineering patterns used in this app in detailed
     *   *Semantic Theming using `react-native-unistyles`.*
 9.  **[State Management patterns](./state/README_STATE_PATTERNS.md)**
     *   *Legend-State "Observable Store" philosophy.*
+10. **[Zero-Render Architecture](./docs/KEYBOARD_VIEW.md)**
+    *   *How we achieved O(1) rendering for Chat & Keyboard interactions.*
 
 ---
 

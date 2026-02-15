@@ -1,14 +1,11 @@
+import Header from '@/components/header/Header';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { router } from 'expo-router';
-import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
-// import { authState } from '@/state/auth/auth';
-import Header from '@/components/header/Header';
+import { router, Stack } from 'expo-router';
+import { StyleSheet, UnistylesRuntime, useUnistyles } from 'react-native-unistyles';
 import type { DropdownPickerItem } from '@/components/modals/types/modal.types';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { Dropdown } from '@/components/ui/common/DropDown';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { useNotificationPermission } from '@/hooks/commonHooks/hooks.notificationPermission';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
@@ -28,6 +25,8 @@ import CreateSettingsFlows from './settings.flows';
 export default function Settings() {
   const MAX_RESENDS = 3;
   const COOLDOWN_MS = 120_000;
+  const { theme, rt } = useUnistyles();
+
   useEffect(() => {
     // Clean up when component unmounts
     return () => {
@@ -137,149 +136,117 @@ export default function Settings() {
   }
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Settings</ThemedText>}
+        />
+      </ThemedView>
+      <View style={styles.container}>
+        <View style={[styles.flex1, { marginTop: 20 }]}>
+          <ThemedText style={styles.sectionHeader}>Security</ThemedText>
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Email :</ThemedText>
+            </View>
+            <View style={styles.itemContainer}>
+              <ThemedText style={styles.item}>{email}</ThemedText>
+            </View>
+            <Pressable
+              onPress={editEmail}
+              onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.changeContainer
+              ]}
 
-        <ThemedView style={styles.mainContainer}>
-          <Header
-            leftButton={{
-              child: <IconSymbol name='arrow.left' />,
-              onPress: goBack,
-            }}
-            centerIcon={true}
-            Icon={<ThemedText type='subtitle'>Settings</ThemedText>}
-          />
-          <View style={styles.container}>
-            <View style={[styles.flex1, { marginTop: -20 }]}>
-              <ThemedText style={styles.sectionHeader}>Security</ThemedText>
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Email :</ThemedText>
-                </View>
-                <View style={styles.itemContainer}>
-                  <ThemedText style={styles.item}>{email}</ThemedText>
-                </View>
-                <Pressable
-                  onPress={editEmail}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.changeContainer
-                  ]}
+            >
+              <MaterialCommunityIcon size={25} name={'account.emailEdit'} />
+            </Pressable>
+          </View>
 
-                >
-                  <MaterialCommunityIcon size={25} name={'account.emailEdit'} />
-                  {/* <ThemedText type='small' style={styles.changeText} color='red' >Change</ThemedText> */}
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Password :</ThemedText>
+            </View>
+            <View style={styles.itemContainer}>
+              <ThemedText style={styles.item}>******</ThemedText>
+            </View>
+            <Pressable
+              onPress={editPassword}
+              onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.changeContainer
+              ]}
+            >
+              <MaterialCommunityIcon size={25} name={'edit'} />
+            </Pressable>
+          </View>
 
-                </Pressable>
+          <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
 
-
-
-              </View>
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Password :</ThemedText>
-                </View>
-                <View style={styles.itemContainer}>
-                  <ThemedText style={styles.item}>******</ThemedText>
-                </View>
-                <Pressable
-                  onPress={editPassword}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.changeContainer
-                  ]}
-
-                >
-                  <MaterialCommunityIcon size={25} name={'edit'} />
-                  {/* <ThemedText type='small' style={styles.changeText} color='red' >Change</ThemedText> */}
-
-                </Pressable>
-
-
-
-              </View>
-
-              <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Mode :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Choose mode'
-                    value={selectedModeValue}
-                    options={modeOptions}
-                    onSelect={handleSelectMode}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Notifications'
-                    value={selectedNotificationValue}
-                    options={notificationDisplayOptions}
-                    modalOptions={notificationActionOptions}
-                    onSelect={handleSelectNotifications}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Theme :</ThemedText>
-                </View>
-                {/* <View style={styles.itemContainer}>
-                  <IconSymbol name='theme' size={25}/>
-                </View> */}
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Choose theme'
-                    value={selectedThemeValue}
-                    options={themeOptions}
-                    onSelect={handleSelectTheme}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Mode :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Choose mode'
+                value={selectedModeValue}
+                options={modeOptions}
+                onSelect={handleSelectMode}
+                style={styles.dropdownBorder}
+              />
             </View>
           </View>
 
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Notifications'
+                value={selectedNotificationValue}
+                options={notificationDisplayOptions}
+                modalOptions={notificationActionOptions}
+                onSelect={handleSelectNotifications}
+                style={styles.dropdownBorder}
+              />
+            </View>
+          </View>
 
-
-        </ThemedView>
-        {/* mainContainer */}
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Theme :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Choose theme'
+                value={selectedThemeValue}
+                options={themeOptions}
+                onSelect={handleSelectTheme}
+                style={styles.dropdownBorder}
+              />
+            </View>
+          </View>
+        </View>
+      </View>
+    </ThemedView>
   )
 }
 
-const styles = StyleSheet.create((theme, rt) => (({
+const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
-    paddingTop: rt.insets.top,
     gap: 20,
-
   },
   container: {
     flex: 1,
     gap: 20,
     paddingHorizontal: 20,
-    // backgroundColor: theme.colors.yellow,
   },
   flex1: {
     flex: 1,
@@ -287,28 +254,24 @@ const styles = StyleSheet.create((theme, rt) => (({
   },
   section: {
     flexDirection: 'row',
-    // backgroundColor:'red',
-    width: 367
+    width: 367,
+    justifyContent: 'space-between',
   },
   sectionHeader: {
     fontSize: 18,
     marginBottom: -5,
-    color: theme.colors.primary
+    color: theme.colors.primary,
   },
   itemTitleContainer: {
-    // flex: 1,
     width: 100,
-    // backgroundColor: 'yellow'
   },
   itemTitle: {
     fontSize: 15,
     color: theme.colors.whiteOrBlack,
-    // fontWeight: 'bold',
   },
   itemContainer: {
     width: 241,
     paddingRight: 10,
-    // backgroundColor: 'pink',
   },
   item: {
     fontSize: 15,
@@ -318,8 +281,6 @@ const styles = StyleSheet.create((theme, rt) => (({
     height: 25,
     gap: 2,
     alignItems: 'center',
-    // flexDirection: 'row',
-    // backgroundColor: 'blue'
   },
   themePickerContainer: {
     width: 267,
@@ -390,5 +351,4 @@ const styles = StyleSheet.create((theme, rt) => (({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-})));
+}));

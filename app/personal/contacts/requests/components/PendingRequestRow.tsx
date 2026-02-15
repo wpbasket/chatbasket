@@ -44,7 +44,7 @@ export default function PendingRequestRow({ id, onOpenActions, onAccept, onRejec
         onPressIn={handlePressIn}
         onPress={(event) => onOpenActions(item, event)}
       >
-        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
+        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} colorKey={item.id} />
         <ThemedView style={styles.rowContent}>
           <ThemedText type='semibold' style={styles.rowName} selectable>
             {displayName}

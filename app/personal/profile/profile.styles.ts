@@ -3,7 +3,6 @@ import { StyleSheet } from 'react-native-unistyles';
 const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
-    paddingTop: rt.insets.top,
   },
   container: {
     height: 290,
@@ -24,11 +23,15 @@ const styles = StyleSheet.create((theme, rt) => ({
     height: 80,
     width: 80,
     backgroundColor: theme.colors.icon,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     borderRadius: 9999,
   },
   profilePictureImage: {
     width: '100%',
     height: '100%',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     pointerEvents: 'none',
     borderRadius: 9999,
   },

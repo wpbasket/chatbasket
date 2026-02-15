@@ -15,7 +15,7 @@ export default function ProfileScreenLayout() {
         <LoginPrompt>
           <ThemedView style={styles.outerContainer}>
             <Stack>
-              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="index" />
               <Stack.Protected guard={isInTheProfileUpdateMode}>
                 <Stack.Screen name='create-profile' options={{ headerShown: false }} />
                 <Stack.Screen name='update-profile' options={{ headerShown: false }} />

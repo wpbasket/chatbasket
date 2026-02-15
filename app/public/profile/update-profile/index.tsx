@@ -1,9 +1,7 @@
 import Header from '@/components/header/Header';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { Dropdown } from '@/components/ui/common/DropDown';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
@@ -16,7 +14,7 @@ import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonU
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 import { useValue } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { Image, Platform, Pressable, TextInput } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -36,7 +34,7 @@ export default function UpdateProfile() {
   const goBack = () => {
     router.back();
   };
-  
+
   const user = useValue(authState.user)
   const avatarUri = useValue(authState.user.avatarUri)
   const username = useValue(updateProfile$.username)
@@ -47,7 +45,7 @@ export default function UpdateProfile() {
   const avatarFile = useValue(updateProfile$.avatarFile)
   const avatarTokens = useValue(updateProfile$.avatarTokens)
   const isAvatarSubmitted = useValue(updateProfile$.avatarSubmitted)
-  const isAvatarChecked = useValue(updateProfile$.isAvatarChecked)
+  const isAvatarChecked = useValue(updateProfile$.avatarChecked)
   const isAvatarValid = useValue(updateProfile$.isAvatarValid)
   const isSubmitted = useValue(updateProfile$.submitted)
   const isUsernameSubmitted = useValue(updateProfile$.usernameSubmitted)
@@ -60,8 +58,8 @@ export default function UpdateProfile() {
   const isValid = useValue(updateProfile$.isValid)
   const isNull = useValue(updateProfile$.isNull)
   const isAvatarRemoved = useValue(updateProfile$.removeAvatarDone)
-  
-  const { theme } = useUnistyles();
+
+  const { theme, rt } = useUnistyles();
   const { handlePressIn } = pressableAnimation();
 
 
@@ -139,7 +137,7 @@ export default function UpdateProfile() {
           modalActions.update({ confirmDisabled: false })
           showAlert('Profile picture removed')
           // After a successful removal, disable Apply; nothing left to apply here
-          
+
           // return;
         }
       } catch (error) {
@@ -152,7 +150,7 @@ export default function UpdateProfile() {
             showAlert('Something went wrong try again')
           }
         }
-        else{
+        else {
           showAlert('An unexpected error occurred. Please try again.');
         }
       }
@@ -263,14 +261,14 @@ export default function UpdateProfile() {
     try {
       const response = await runWithLoading(
         () => profileApi.updateProfile({
-        name: name,
-        username: username,
-        bio: bio,
-        profileVisibleTo: profileVisibleTo,
-        avatarFileId: avatar,
-        avatarFileTokens: avatarTokens
-      }),
-      { message: 'Updating profile' }
+          name: name,
+          username: username,
+          bio: bio,
+          profileVisibleTo: profileVisibleTo,
+          avatarFileId: avatar,
+          avatarFileTokens: avatarTokens
+        }),
+        { message: 'Updating profile' }
       )
       if (response) {
         // authState.user.set(response)
@@ -280,7 +278,6 @@ export default function UpdateProfile() {
     } catch (error) {
       if (error instanceof ApiError) {
         showAlert(error.message || 'Something went wrong try again');
-        console.log(error)
       } else {
         console.error('Update profile error:', error);
         showAlert('An unexpected error occurred. Please try again.');
@@ -289,149 +286,138 @@ export default function UpdateProfile() {
   }
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.mainContainer}>
-          <Header
-            leftButton={{
-              child: <IconSymbol name='arrow.left' />,
-              onPress: goBack,
-            }}
-            Icon={<ThemedText type='subtitle'>Update Profile</ThemedText>}
-          />
-          <ThemedView style={styles.container}>
-            <ThemedView style={styles.profilePictureContainer}>
-              <Pressable style={({ pressed }) => [
-                { opacity: pressed ? 0.1 : 1 },
-                styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
-              ]} >
-                {(avatarFile || (user?.avatarUri && user.avatarUri.length > 1)) && (
-                  <Image
-                    source={{ uri: avatarFile?.uri || avatarUri! }}
-                    style={styles.profilePictureImage}
-                  />
-                )}
-              </Pressable>
-              <ThemedView style={styles.outerEditIcon}>
-                <Pressable
-                  onPress={handleAvatarChange}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.editIcon
-                  ]}
-                >
-                  <MaterialCommunityIcon name='image.edit' size={25} />
-                  <ThemedText style={[styles.bucketText,]} selectable={false}>Change avatar</ThemedText>
-                </Pressable>
-              </ThemedView>
-            </ThemedView>
-            <TextInput
-              placeholder="Name"
-              inputMode='text'
-              maxLength={70}
-              value={name ?? user?.name}
-              onChangeText={(text) => updateProfile$.name.set(text)}
-              textContentType='name'
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
-            />
-
-
-            <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameCheckedWhileNull) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
-              <TextInput
-                placeholder="Username"
-                maxLength={30}
-                inputMode='text'
-                value={username ?? user?.username}
-                onChangeText={(text) => { updateProfile$.username.set(text); updateProfile$.usernameChecked.set(false) }}
-                textContentType='username'
-                placeholderTextColor="gray"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.inputField, { outline:'none' }]}
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Update Profile</ThemedText>}
+        />
+      </ThemedView>
+      <ThemedView style={styles.container}>
+        <ThemedView style={styles.profilePictureContainer}>
+          <Pressable style={({ pressed }) => [
+            { opacity: pressed ? 0.1 : 1 },
+            styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
+          ]} >
+            {(avatarFile || (user?.avatarUri && user.avatarUri.length > 1)) && (
+              <Image
+                source={{ uri: avatarFile?.uri || avatarUri! }}
+                style={styles.profilePictureImage}
               />
-              <Pressable
-                onPress={checkUsername}
-                onPressIn={handlePressIn}
-                style={({ pressed }) => [
-                  styles.inputButton,
-                  { opacity: pressed ? 0.1 : 1 }
-                ]}>
-                {isUsernameChecked ? (
-                  <IconSymbol name="check" size={25} />
-                ) : username && username !== user?.username && (
-                  <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
-                )}
-              </Pressable>
-            </ThemedView>
-
-
-            <TextInput
-              placeholder="Bio"
-              inputMode='text'
-              value={bio ?? user?.bio}
-              onChangeText={(text) => updateProfile$.bio.set(text)}
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={200}
-              multiline={true}
-              style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
-            />
-
-            <ThemedView style={[styles.profileVisibleToContainer]} >
-              <Dropdown
-                options={[
-                  { label: 'Public', value: 'public' },
-                  { label: 'Private', value: 'private' },
-                  { label: 'Follower', value: 'follower' },
-                ]}
-                value={profileVisibleTo ?? user?.profileVisibleTo}
-                placeholder="Select profile visibility"
-                style={styles.dropdownBorder}
-                error={!isProfileVisibleToValid && isSubmitted}
-                searchable={false}
-                onSelect={(value) => updateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
-              />
-
-            </ThemedView>
-
+            )}
+          </Pressable>
+          <ThemedView style={styles.outerEditIcon}>
             <Pressable
-              onPress={handleUpdateProfile}
-              style={({ pressed }) => [
-                styles.submit,
-                { opacity: pressed ? 0.1 : 1 }
-              ]}
-
+              onPress={handleAvatarChange}
               onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.editIcon
+              ]}
             >
-              <ThemedText style={styles.submitText} selectable={false}>Save</ThemedText>
+              <MaterialCommunityIcon name='image.edit' size={25} />
+              <ThemedText style={[styles.bucketText,]} selectable={false}>Change avatar</ThemedText>
             </Pressable>
           </ThemedView>
         </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
+        <TextInput
+          placeholder="Name"
+          inputMode='text'
+          maxLength={70}
+          value={name ?? user?.name}
+          onChangeText={(text) => updateProfile$.name.set(text)}
+          textContentType='name'
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
+        />
+
+
+        <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameCheckedWhileNull) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
+          <TextInput
+            placeholder="Username"
+            maxLength={30}
+            inputMode='text'
+            value={username ?? user?.username}
+            onChangeText={(text) => { updateProfile$.username.set(text); updateProfile$.usernameChecked.set(false) }}
+            textContentType='username'
+            placeholderTextColor="gray"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.inputField, { outline: 'none' }]}
+          />
+          <Pressable
+            onPress={checkUsername}
+            onPressIn={handlePressIn}
+            style={({ pressed }) => [
+              styles.inputButton,
+              { opacity: pressed ? 0.1 : 1 }
+            ]}>
+            {isUsernameChecked ? (
+              <IconSymbol name="check" size={25} />
+            ) : username && username !== user?.username && (
+              <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
+            )}
+          </Pressable>
+        </ThemedView>
+
+
+        <TextInput
+          placeholder="Bio"
+          inputMode='text'
+          value={bio ?? user?.bio}
+          onChangeText={(text) => updateProfile$.bio.set(text)}
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={200}
+          multiline={true}
+          style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
+        />
+
+        <ThemedView style={[styles.profileVisibleToContainer]} >
+          <Dropdown
+            options={[
+              { label: 'Public', value: 'public' },
+              { label: 'Private', value: 'private' },
+              { label: 'Follower', value: 'follower' },
+            ]}
+            value={profileVisibleTo ?? user?.profileVisibleTo}
+            placeholder="Select profile visibility"
+            style={styles.dropdownBorder}
+            error={!isProfileVisibleToValid && isSubmitted}
+            searchable={false}
+            onSelect={(value) => updateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+          />
+
+        </ThemedView>
+
+        <Pressable
+          onPress={handleUpdateProfile}
+          style={({ pressed }) => [
+            styles.submit,
+            { opacity: pressed ? 0.1 : 1 }
+          ]}
+
+          onPressIn={handlePressIn}
+        >
+          <ThemedText style={styles.submitText} selectable={false}>Save</ThemedText>
+        </Pressable>
+      </ThemedView>
+    </ThemedView>
   )
 }
 
 const styles = StyleSheet.create((theme, rt) => (({
   mainContainer: {
     flex: 1,
-    paddingTop: rt.insets.top,
   },
   container: {
     paddingTop: 20,
     width: '100%',
     paddingHorizontal: 20,
     gap: 20,
-    // justifyContent: 'center',
-    // alignItems: 'center',
     height: '100%',
   },
   input: {
@@ -515,11 +501,6 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderBottomRightRadius: 8,
   },
   profilePictureContainer: {
-    // height: 240,
-    // width: Platform.OS === 'web' ? '20%' : 80,
-    // backgroundColor: theme.colors.yellow,
-    // gap: 5
-
     paddingBottom: 20
   },
   profilePicture: {
@@ -535,15 +516,8 @@ const styles = StyleSheet.create((theme, rt) => (({
     borderRadius: 9999,
   },
   outerEditIcon: {
-    // marginTop: 10,
-    // backgroundColor: theme.colors.yellow,
-    // marginBottom: 20,
-    // paddingLeft: 25,
   },
   editIcon: {
-
-    // width: 125,
-    // backgroundColor: theme.colors.background,
     flexDirection: 'row',
     gap: 10,
     alignItems: 'center',
@@ -551,7 +525,6 @@ const styles = StyleSheet.create((theme, rt) => (({
   bucketText: {
     color: theme.colors.text,
     fontSize: 13
-    // fontWeight: 'bold',
   },
   dropdownBorder: {
     height: 38,

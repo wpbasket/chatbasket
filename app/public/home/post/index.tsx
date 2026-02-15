@@ -1,20 +1,19 @@
 import Header from '@/components/header/Header';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import currentPostStore from '@/state/publicState/public.state.activePost';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { useValue } from '@legendapp/state/react';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { Pressable, View } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 export default function PostDetailsPage() {
     const post = useValue(currentPostStore.post);
     const user = useValue(currentUserStore.user);
+    const { rt } = useUnistyles();
     const { handlePressIn } = pressableAnimation();
 
 
@@ -36,75 +35,60 @@ export default function PostDetailsPage() {
     }
 
     return (
-        <ThemedViewWithSidebar>
-            <ThemedViewWithSidebar.Sidebar>
-                <Sidebar />
-            </ThemedViewWithSidebar.Sidebar>
-            <ThemedViewWithSidebar.Main>
+        <ThemedView style={styles.container}>
+            <ThemedView style={styles.mainContainer}>
+                <Header
+                    onBackPress={goBack}
+                    centerSection={<ThemedText type='subtitle'>Post</ThemedText>}
+                />
                 <ThemedView style={styles.container}>
-                    <ThemedView style={styles.mainContainer}>
-                        <Header
-                            leftButton={{
-                                child: <IconSymbol name='arrow.left' />,
-                                onPress: goBack,
-                            }}
-                            Icon={<ThemedText type='subtitle'>Post</ThemedText>}
-                        />
-                        <ThemedView style={styles.container}>
-                            {/* User Info container */}
-                            <ThemedView style={styles.userInfoContainer}>
-                                <ThemedView style={styles.profilePictureContainer}>
-                                    {/* Placeholder for profile picture */}
-                                    <ThemedView style={styles.profilePicture}></ThemedView>
-                                </ThemedView>
-                                {/* User Info */}
-                                <ThemedView style={styles.userDetailsContainer}>
-                                    <ThemedText type='semibold' style={{ lineHeight: 16 }}>
-                                        {user?.name}{'Dummy' + user?.username[0].toUpperCase()}
-                                    </ThemedText>
-                                    <Pressable
-                                        onPress={goToUserProfile}
-                                        onPressIn={handlePressIn}
-                                        // android_ripple={styles.ripple}
-                                        style={({ pressed }) => [
-                                            { opacity: pressed ? 0.1 : 1 },
-                                        ]}
+                    {/* User Info container */}
+                    <ThemedView style={styles.userInfoContainer}>
+                        <ThemedView style={styles.profilePictureContainer}>
+                            {/* Placeholder for profile picture */}
+                            <ThemedView style={styles.profilePicture}></ThemedView>
+                        </ThemedView>
+                        {/* User Info */}
+                        <ThemedView style={styles.userDetailsContainer}>
+                            <ThemedText type='semibold' style={{ lineHeight: 16 }}>
+                                {user?.name}{'Dummy' + user?.username[0].toUpperCase()}
+                            </ThemedText>
+                            <Pressable
+                                onPress={goToUserProfile}
+                                onPressIn={handlePressIn}
+                                // android_ripple={styles.ripple}
+                                style={({ pressed }) => [
+                                    { opacity: pressed ? 0.1 : 1 },
+                                ]}
+                            >
+                                <ThemedText type='small'>
+                                    @{user?.username}
+                                </ThemedText>
+                            </Pressable>
+                        </ThemedView>
+                    </ThemedView>
 
-                                    >
-                                        <ThemedText type='small'>
-                                            @{user?.username}
-                                        </ThemedText>
-                                    </Pressable>
-                                </ThemedView>
-                            </ThemedView>
-
-                            {/* Post Content */}
-                            <View style={styles.postContainer}>
-
-                                <ThemedText>{post.content}</ThemedText>
-                            </View>
-                            {/* Bottom Container */}
-                            <ThemedView style={styles.bottomContainer}>
-                                <ThemedView style={styles.likeContainer}>
-                                    <Pressable onPress={undefined}>
-                                        <ThemedView style={styles.likeIcon}></ThemedView>
-                                    </Pressable>
-                                    <Pressable onPress={undefined}>
-                                        <ThemedView style={styles.commentIcon}></ThemedView>
-                                    </Pressable>
-                                    <Pressable onPress={undefined}>
-                                        <ThemedView style={styles.shareIcon}></ThemedView>
-                                    </Pressable>
-                                </ThemedView>
-                            </ThemedView>
-
-
-
+                    {/* Post Content */}
+                    <View style={styles.postContainer}>
+                        <ThemedText>{post.content}</ThemedText>
+                    </View>
+                    {/* Bottom Container */}
+                    <ThemedView style={styles.bottomContainer}>
+                        <ThemedView style={styles.likeContainer}>
+                            <Pressable onPress={undefined}>
+                                <ThemedView style={styles.likeIcon}></ThemedView>
+                            </Pressable>
+                            <Pressable onPress={undefined}>
+                                <ThemedView style={styles.commentIcon}></ThemedView>
+                            </Pressable>
+                            <Pressable onPress={undefined}>
+                                <ThemedView style={styles.shareIcon}></ThemedView>
+                            </Pressable>
                         </ThemedView>
                     </ThemedView>
                 </ThemedView>
-            </ThemedViewWithSidebar.Main>
-        </ThemedViewWithSidebar>
+            </ThemedView>
+        </ThemedView>
     );
 }
 
@@ -121,7 +105,7 @@ const styles = StyleSheet.create((theme, rt) => ({
             xl: 200,
             xl2: 400,
             superLarge: 500
-          },
+        },
         paddingLeft: {
             xs: 0,
             sm: 0,

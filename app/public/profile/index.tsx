@@ -1,8 +1,6 @@
 import Header from '@/components/header/Header';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { EntypoIcon } from '@/components/ui/fonts/entypoIcons';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
@@ -16,10 +14,10 @@ import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
 import { getUser } from '@/utils/publicUtils/public.util.profile';
 import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useCallback } from 'react';
-import { Image, Pressable } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { Image, Pressable, ScrollView } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 // Empty State Component
 function ProfileEmptyState() {
@@ -30,35 +28,27 @@ function ProfileEmptyState() {
   };
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.emptyStateContainer}>
-          <ThemedView style={styles.emptyContent}>
-            {/* <IconSymbol name="person.circle" size={80} /> */}
-            <ThemedText type="title">Welcome!</ThemedText>
-            <ThemedText style={styles.emptyDescription}>
-              Create your profile to connect with others and personalize your experience
-            </ThemedText>
+    <ThemedView style={styles.emptyStateContainer}>
+      <ThemedView style={styles.emptyContent}>
+        <ThemedText type="title">Welcome!</ThemedText>
+        <ThemedText style={styles.emptyDescription}>
+          Create your profile to connect with others and personalize your experience
+        </ThemedText>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.createProfileButton,
-                { opacity: pressed ? 0.7 : 1 }
-              ]}
-              onPress={goToCreateProfile}
-              onPressIn={handlePressIn}
-            >
-              <ThemedText style={styles.createProfileButtonText}>
-                Create Profile
-              </ThemedText>
-            </Pressable>
-          </ThemedView>
-        </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
+        <Pressable
+          style={({ pressed }) => [
+            styles.createProfileButton,
+            { opacity: pressed ? 0.7 : 1 }
+          ]}
+          onPress={goToCreateProfile}
+          onPressIn={handlePressIn}
+        >
+          <ThemedText style={styles.createProfileButtonText}>
+            Create Profile
+          </ThemedText>
+        </Pressable>
+      </ThemedView>
+    </ThemedView>
   );
 }
 
@@ -66,10 +56,9 @@ export default function ProfileScreen() {
   const user = useValue(authState.user);
   const userNotFound = useValue(createProfile$.userNotFound);
   const avatarUrl = useValue(authState.user.avatarUri);
+  const { theme, rt } = useUnistyles();
 
   const { handlePressIn } = pressableAnimation();
-
-
 
   // Refresh user in background every time profile screen gains focus
   useFocusEffect(
@@ -130,174 +119,164 @@ export default function ProfileScreen() {
 
   return (
     <>
+      <Stack.Screen
+        options={{
+          header: () => (
+            <ThemedView style={{ paddingTop: rt.insets.top }}>
+              <Header
+                onBackPress={goBack}
+                centerSection={<ThemedText type='subtitle'>{user?.name}</ThemedText>}
+              />
+            </ThemedView>
+          )
+        }}
+      />
+      <ThemedView style={styles.mainContainer}>
+        <ScrollView>
+          {/* Edit Icon Section */}
+          <ThemedView style={styles.outerEditIcon}>
+            <Pressable
+              onPress={editProfile}
+              onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.editIcon
+              ]}
+            >
+              <MaterialCommunityIcon name='account.edit' size={32} />
+              <ThemedText style={[styles.bucketText, styles.bio]} selectable={false}>
+                Update Profile
+              </ThemedText>
+            </Pressable>
+          </ThemedView>
+          {/* Edit Icon Section End */}
 
-      <ThemedViewWithSidebar>
-        <ThemedViewWithSidebar.Sidebar>
-          <Sidebar />
-        </ThemedViewWithSidebar.Sidebar>
-        <ThemedViewWithSidebar.Main>
-          <ThemedView style={styles.mainContainer}>
+          {/* Profile Section: flex:row */}
+          <ThemedView style={styles.container}>
 
-            {/* Header Section */}
-            <Header
-              Icon={
-                <ThemedText type='subtitle'>{user?.name}</ThemedText>
-              }
-              leftButton={{
-                child: <IconSymbol name='arrow.left' />,
-                onPress: goBack,
-              }}
-              centerIcon={true}
-            />
-            {/* Header Section End */}
+            {/* Profile Picture Section */}
+            <ThemedView style={styles.profilePictureContainer}>
 
-            {/* Edit Icon Section */}
-            <ThemedView style={styles.outerEditIcon}>
-              <Pressable
-                onPress={editProfile}
-                onPressIn={handlePressIn}
-                style={({ pressed }) => [
-                  { opacity: pressed ? 0.1 : 1 },
-                  styles.editIcon
-                ]}
-              >
-                <MaterialCommunityIcon name='account.edit' size={32} />
-                <ThemedText style={[styles.bucketText, styles.bio]} selectable={false}>
-                  Update Profile
-                </ThemedText>
+              {/* Profile Picture */}
+              <Pressable style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.profilePicture
+              ]}>
+                <Image
+                  source={{ uri: avatarUrl || '' }}
+                  style={styles.profilePictureImage}
+                />
               </Pressable>
-            </ThemedView>
-            {/* Edit Icon Section End */}
+              {/* Profile Picture End */}
 
-            {/* Profile Section: flex:row */}
-            <ThemedView style={styles.container}>
+              {/* Outer Bucket Section */}
+              <ThemedView style={styles.outerBucketContainer}>
 
-              {/* Profile Picture Section */}
-              <ThemedView style={styles.profilePictureContainer}>
-
-                {/* Profile Picture */}
-                <Pressable style={({ pressed }) => [
-                  { opacity: pressed ? 0.1 : 1 },
-                  styles.profilePicture
-                ]}>
-                  <Image
-                    source={{ uri: avatarUrl || '' }}
-                    style={styles.profilePictureImage}
+                {/* Profile Mode */}
+                <ThemedView style={styles.bucketContainer}>
+                  <FontAwesome5Icon
+                    name={profileVisibleTo === 'private' ? 'account.lock' : 'account.unlock'}
+                    size={20}
+                    color={bucketColor}
                   />
-                </Pressable>
-                {/* Profile Picture End */}
-
-                {/* Outer Bucket Section */}
-                <ThemedView style={styles.outerBucketContainer}>
-
-                  {/* Profile Mode */}
-                  <ThemedView style={styles.bucketContainer}>
-                    <FontAwesome5Icon
-                      name={profileVisibleTo === 'private' ? 'account.lock' : 'account.unlock'}
-                      size={20}
-                      color={bucketColor}
-                    />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {profileVisibleTo}
-                    </ThemedText>
-                  </ThemedView>
-                  {/* Profile Mode End */}
-
-                  {/* Followers */}
-                  <Pressable
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer, { marginLeft: -4 }
-                    ]}>
-                    <EntypoIcon name="bucket" size={20} color={bucketColor} />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {user?.followers}
-                    </ThemedText>
-                  </Pressable>
-                  {/* Followers End */}
-
-                  {/* Following */}
-                  <Pressable
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer
-                    ]}>
-                    <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      {user?.following}
-                    </ThemedText>
-                  </Pressable>
-                  {/* Following End */}
-
-                  {/* Posts  */}
-                  <Pressable
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer
-                    ]}>
-                    <FontAwesome5Icon name="list" size={22} color={bucketColor} />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      Posts
-                    </ThemedText>
-                  </Pressable>
-                  {/* Posts End */}
-
-                  {/* Settings  */}
-                  <Pressable
-                    onPress={settings}
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer, { marginLeft: -4.1 }
-                    ]}>
-                    <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      Settings
-                    </ThemedText>
-                  </Pressable>
-                  {/* Settings End */}
-
-
-                  {/* Logout */}
-                  <Pressable
-                    onPress={logoutButton}
-                    onPressIn={handlePressIn}
-                    style={({ pressed }) => [
-                      { opacity: pressed ? 0.1 : 1 },
-                      styles.bucketContainer
-                    ]}>
-                    <EntypoIcon name="account.logout" size={20} color='red' />
-                    <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                      Logout
-                    </ThemedText>
-                  </Pressable>
-                  {/* Logout End */}
-
-
+                  <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                    {profileVisibleTo}
+                  </ThemedText>
                 </ThemedView>
-                {/* Outer Bucket Section End */}
+                {/* Profile Mode End */}
+
+                {/* Followers */}
+                <Pressable
+                  onPressIn={handlePressIn}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.1 : 1 },
+                    styles.bucketContainer, { marginLeft: -4 }
+                  ]}>
+                  <EntypoIcon name="bucket" size={20} color={bucketColor} />
+                  <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                    {user?.followers}
+                  </ThemedText>
+                </Pressable>
+                {/* Followers End */}
+
+                {/* Following */}
+                <Pressable
+                  onPressIn={handlePressIn}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.1 : 1 },
+                    styles.bucketContainer
+                  ]}>
+                  <FontAwesome5Icon name="account.friends" size={20} color={bucketColor} />
+                  <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                    {user?.following}
+                  </ThemedText>
+                </Pressable>
+                {/* Following End */}
+
+                {/* Posts  */}
+                <Pressable
+                  onPressIn={handlePressIn}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.1 : 1 },
+                    styles.bucketContainer
+                  ]}>
+                  <FontAwesome5Icon name="list" size={22} color={bucketColor} />
+                  <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                    Posts
+                  </ThemedText>
+                </Pressable>
+                {/* Posts End */}
+
+                {/* Settings  */}
+                <Pressable
+                  onPress={settings}
+                  onPressIn={handlePressIn}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.1 : 1 },
+                    styles.bucketContainer, { marginLeft: -4.1 }
+                  ]}>
+                  <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
+                  <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                    Settings
+                  </ThemedText>
+                </Pressable>
+                {/* Settings End */}
+
+
+                {/* Logout */}
+                <Pressable
+                  onPress={logoutButton}
+                  onPressIn={handlePressIn}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.1 : 1 },
+                    styles.bucketContainer
+                  ]}>
+                  <EntypoIcon name="account.logout" size={20} color='red' />
+                  <ThemedText type='small' style={styles.bucketText} selectable={false}>
+                    Logout
+                  </ThemedText>
+                </Pressable>
+                {/* Logout End */}
+
 
               </ThemedView>
-              {/* Profile Picture Section End */}
-
-              {/* User Info Section */}
-              <ThemedView style={styles.userInfoContainer}>
-                <ThemedText type='semibold'>@{user?.username}</ThemedText>
-                <ThemedText style={styles.bio}>{user?.bio}</ThemedText>
-              </ThemedView>
-              {/* User Info Section End */}
+              {/* Outer Bucket Section End */}
 
             </ThemedView>
-            {/* Profile Section flex:row End */}
+            {/* Profile Picture Section End */}
+
+            {/* User Info Section */}
+            <ThemedView style={styles.userInfoContainer}>
+              <ThemedText type='semibold'>@{user?.username}</ThemedText>
+              <ThemedText style={styles.bio}>{user?.bio}</ThemedText>
+            </ThemedView>
+            {/* User Info Section End */}
 
           </ThemedView>
-          {/* Main Container End */}
-        </ThemedViewWithSidebar.Main>
-      </ThemedViewWithSidebar>
+          {/* Profile Section flex:row End */}
 
+        </ScrollView>
+      </ThemedView>
     </>
   );
 }
@@ -305,7 +284,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
-    paddingTop: rt.insets.top,
   },
   container: {
     height: 290,

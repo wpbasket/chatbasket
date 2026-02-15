@@ -28,14 +28,10 @@ const UserInfoSection = React.memo(({ user }: UserInfoSectionProps) => {
   return (
     <ThemedView style={styles.outerContainer}>
       <Header
-        leftButton={{
-          child: <IconSymbol name='arrow.left' />,
-          onPress: goBack,
-        }}
-        Icon={
+        onBackPress={goBack}
+        centerSection={
           <ThemedText type='subtitle'>{'DummyUser' + user?.username[0].toUpperCase()}</ThemedText>
         }
-        centerIcon={true}
       />
       <ThemedView style={styles.container}>
         {/* Photo column */}

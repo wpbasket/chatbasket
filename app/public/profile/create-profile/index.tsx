@@ -1,9 +1,7 @@
-import Header from "@/components/header/Header"
-import Sidebar from "@/components/sidebar/Sidebar"
+import Header from '@/components/header/Header'
 import { Dropdown } from "@/components/ui/common/DropDown"
 import { ThemedText } from "@/components/ui/common/ThemedText"
 import { ThemedView } from "@/components/ui/common/ThemedView"
-import { ThemedViewWithSidebar } from "@/components/ui/common/ThemedViewWithSidebar"
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
 import { ApiError } from "@/lib/constantLib"
@@ -13,7 +11,7 @@ import { createProfile$ } from "@/state/publicState/profile/public.state.profile
 import { runWithLoading, showAlert } from "@/utils/commonUtils/util.modal"
 import { getUser } from "@/utils/publicUtils/public.util.profile"
 import { useValue } from "@legendapp/state/react"
-import { router } from "expo-router"
+import { router, Stack } from "expo-router"
 import { useEffect } from "react"
 import { Platform, Pressable, TextInput } from "react-native"
 import { StyleSheet, useUnistyles } from "react-native-unistyles"
@@ -32,7 +30,7 @@ export default function CreateProfile() {
   };
 
   // All hooks must be called at the top level
-  const userId= useValue(authState.userId)
+  const userId = useValue(authState.userId)
   const name = useValue(createProfile$.name)
   const payloadUsername = useValue(createProfile$.username)
   const profileVisibleTo = useValue(createProfile$.profileVisibleTo)
@@ -46,7 +44,7 @@ export default function CreateProfile() {
   const isBioValid = useValue(createProfile$.isBioValid)
   const isValid = useValue(createProfile$.isValid)
   const { handlePressIn } = pressableAnimation();
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
 
   useEffect(() => {
     // Clean up when component unmounts
@@ -69,7 +67,6 @@ export default function CreateProfile() {
         { message: 'Checking username' }
       );
       if (response.status) {
-        console.log('Username is available');
         createProfile$.usernameChecked.set(true);
       }
     } catch (error) {
@@ -86,12 +83,12 @@ export default function CreateProfile() {
     try {
       const response: any = await runWithLoading(
         () => profileApi.createProfile({
-        name: name!,
-        username: payloadUsername!,
-        profileVisibleTo: profileVisibleTo!,
-        bio: bio!
-      }),
-      { message: 'Creating profile' }
+          name: name!,
+          username: payloadUsername!,
+          profileVisibleTo: profileVisibleTo!,
+          bio: bio!
+        }),
+        { message: 'Creating profile' }
       );
 
       if (response) {
@@ -104,27 +101,20 @@ export default function CreateProfile() {
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.type === 'conflict') {
-          // Profile already exists but user is still on create profile screen
-          // Force refresh user data and navigate to profile
           try {
-            // getUser returns void, so we'll just refresh the page to sync state
             await getUser();
           } catch (e) {
             console.error('Failed to refresh user data:', e);
-            // Even if refresh fails, still navigate to profile to avoid being stuck
           }
           router.back();
           return;
         }
         if (error.type === 'conflict_username') {
-          // Username is already taken
           showAlert('Username is already taken. Please choose another one.');
           return;
         }
-        // Handle other API errors
         showAlert(error.message || 'Something went wrong. Please try again.');
       } else {
-        // Handle non-API errors
         console.error('Profile creation error:', error);
         showAlert('An unexpected error occurred. Please try again.');
       }
@@ -132,115 +122,101 @@ export default function CreateProfile() {
   }
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.mainContainer}>
-          <Header
-          leftButton={{
-            child: <IconSymbol name='arrow.left' />,
-            onPress: goBack,
-          }}
-          Icon={<ThemedText type='subtitle'>Create Profile</ThemedText>}
-          />
-          
-        <ThemedView style={styles.container}>
-          <ThemedText type="title">Create Profile</ThemedText>
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Create Profile</ThemedText>}
+        />
+      </ThemedView>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title">Create Profile</ThemedText>
 
+        <TextInput
+          placeholder="Name"
+          inputMode='text'
+          maxLength={70}
+          value={name ?? ""}
+          onChangeText={(text) => createProfile$.name.set(text)}
+          textContentType='name'
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
+        />
 
+        <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameChecked) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
           <TextInput
-            placeholder="Name"
+            placeholder="Username"
+            maxLength={30}
             inputMode='text'
-            maxLength={70}
-            value={name ?? ""}
-            onChangeText={(text) => createProfile$.name.set(text)}
-            textContentType='name'
+            value={payloadUsername ?? ""}
+            onChangeText={(text) => { createProfile$.username.set(text); createProfile$.usernameChecked.set(false) }}
+            textContentType='username'
             placeholderTextColor="gray"
             autoCapitalize="none"
             autoCorrect={false}
-            style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
+            style={[styles.inputField, { outline: 'none' }]}
           />
-
-
-          <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameChecked) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
-            <TextInput
-              placeholder="Username"
-              maxLength={30}
-              inputMode='text'
-              value={payloadUsername ?? ""}
-              onChangeText={(text) => { createProfile$.username.set(text); createProfile$.usernameChecked.set(false) }}
-              textContentType='username'
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.inputField, { outline:'none' }]}
-            />
-            <Pressable onPress={checkUsername} style={({ pressed }) => [
-              styles.inputButton,
-              { opacity: pressed ? 0.1 : 1 }
-            ]}>
-              {isUsernameChecked ? (
-                <IconSymbol name="check" size={25} />
-              ) : (
-                <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
-              )}
-            </Pressable>
-          </ThemedView>
-
-
-          <TextInput
-            placeholder="Bio"
-            inputMode='text'
-            value={bio ?? ""}
-            onChangeText={(text) => createProfile$.bio.set(text)}
-            placeholderTextColor="gray"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={200}
-            multiline={true}
-            style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
-          />
-
-          <ThemedView style={[styles.profileVisibleToContainer]} >
-            <Dropdown
-              options={[
-                { label: 'Public', value: 'public' },
-                { label: 'Private', value: 'private' },
-                { label: 'Follower', value: 'follower' },
-              ]}
-              value={profileVisibleTo}
-              placeholder="Select profile visibility"
-              error={!isProfileVisibleToValid && isSubmitted}
-              searchable={false}
-              style={styles.reverseModalBackground}
-              onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
-            />
-
-          </ThemedView>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.submit,
-              { opacity: pressed ? 0.1 : 1 }
-            ]}
-            onPress={handleProfileCreation}
-            onPressIn={handlePressIn}
-          >
-            <ThemedText style={styles.submitText} selectable={false}>Create</ThemedText>
+          <Pressable onPress={checkUsername} style={({ pressed }) => [
+            styles.inputButton,
+            { opacity: pressed ? 0.1 : 1 }
+          ]}>
+            {isUsernameChecked ? (
+              <IconSymbol name="check" size={25} />
+            ) : (
+              <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
+            )}
           </Pressable>
         </ThemedView>
+
+        <TextInput
+          placeholder="Bio"
+          inputMode='text'
+          value={bio ?? ""}
+          onChangeText={(text) => createProfile$.bio.set(text)}
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={200}
+          multiline={true}
+          style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
+        />
+
+        <ThemedView style={[styles.profileVisibleToContainer]} >
+          <Dropdown
+            options={[
+              { label: 'Public', value: 'public' },
+              { label: 'Private', value: 'private' },
+              { label: 'Follower', value: 'follower' },
+            ]}
+            value={profileVisibleTo}
+            placeholder="Select profile visibility"
+            error={!isProfileVisibleToValid && isSubmitted}
+            searchable={false}
+            style={styles.reverseModalBackground}
+            onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+          />
         </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.submit,
+            { opacity: pressed ? 0.1 : 1 }
+          ]}
+          onPress={handleProfileCreation}
+          onPressIn={handlePressIn}
+        >
+          <ThemedText style={styles.submitText} selectable={false}>Create</ThemedText>
+        </Pressable>
+      </ThemedView>
+    </ThemedView>
   )
 }
 
 const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
-    paddingTop: rt.insets.top,
   },
   container: {
     height: 500,

@@ -12,6 +12,7 @@ const MAPPING = {
   'edit': 'pencil-circle',
   'contacts.fill': 'contacts',
   'contacts.outline': 'contacts-outline',
+  'keyboard.backspace': 'keyboard-backspace',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

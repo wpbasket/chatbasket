@@ -25,11 +25,14 @@ We do not write "Actions" or "Reducers". We simply export an Observable Object.
 ```typescript
 // definition
 export const userPostsStore = observable({
-  posts: []
+  posts: [],
+  // Computed (v3)
+  postCount: () => userPostsStore.posts.length
 });
 
 // usage (Component)
 const posts = useValue(userPostsStore.posts); // Re-renders only when 'posts' changes
+const count = useValue(userPostsStore.postCount); // Re-renders only when count changes
 ```
 
 ## Persistence

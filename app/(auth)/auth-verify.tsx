@@ -78,7 +78,6 @@ export default function AuthVerification() {
                 showAlert(error.message || 'Verification failed');
             } else {
                 showAlert('Unexpected error occurred try again');
-                console.log(error);
             }
             return;
         }

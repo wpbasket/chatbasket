@@ -11,12 +11,12 @@ export interface PrivacyAvatarProps {
 }
 
 const AVATAR_COLORS = [
-  '#00bb77',  
-  '#8200fcd0', 
-  '#F89B29', 
+  '#00bb77',
+  '#8200fcd0',
+  '#F89B29',
   '#eb5757',
-  '#ff0f7be0', 
-  '#50c9c3', 
+  '#ff0f7be0',
+  '#50c9c3',
   '#083b7d',
 
 ] as const;
@@ -31,9 +31,10 @@ const getInitials = (name: string) => {
 
 const getAvatarColor = (name: string) => {
   if (!name) return AVATAR_COLORS[0];
+  const normalized = name.toLowerCase();
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < normalized.length; i++) {
+    hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
   }
   const index = Math.abs(hash) % AVATAR_COLORS.length;
   return AVATAR_COLORS[index];
@@ -47,7 +48,7 @@ export function PrivacyAvatar({ uri, name, size = 48, colorKey }: PrivacyAvatarP
   } as const;
 
   if (uri) {
-    return <Image source={{ uri }} style={[styles.image, dimensionStyle]} />;
+    return <Image source={{ uri }} style={[styles.image, dimensionStyle]} {...({ pointerEvents: 'none' } as any)} />;
   }
 
   const backgroundColor = getAvatarColor(colorKey || name);
@@ -69,13 +70,17 @@ export function PrivacyAvatar({ uri, name, size = 48, colorKey }: PrivacyAvatarP
 
 const styles = StyleSheet.create((theme) => ({
   image: {
-    borderRadius: 999,
+    borderRadius: 9999,
     resizeMode: 'cover',
+    pointerEvents: 'none',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   placeholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 0, // Removed border for cleaner gradient look
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   initials: {
     color: '#FFFFFF', // White text for gradients

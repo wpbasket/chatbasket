@@ -1,8 +1,6 @@
-import Header from "@/components/header/Header"
-import Sidebar from "@/components/sidebar/Sidebar"
+import Header from '@/components/header/Header';
 import { ThemedText } from "@/components/ui/common/ThemedText"
 import { ThemedView } from "@/components/ui/common/ThemedView"
-import { ThemedViewWithSidebar } from "@/components/ui/common/ThemedViewWithSidebar"
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
 import { ApiError } from "@/lib/constantLib"
@@ -13,12 +11,15 @@ import { $personalStateUser } from "@/state/personalState/user/personal.state.us
 import { runWithLoading, showAlert } from "@/utils/commonUtils/util.modal"
 import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile"
 import { useValue } from "@legendapp/state/react"
-import { router } from "expo-router"
+import { router, Stack } from "expo-router"
 import { useEffect } from "react"
+import { Pressable } from "react-native"
 import CreateProfileForm from "./components/CreateProfileForm"
 import styles from "./create-profile.styles"
+import { useUnistyles } from "react-native-unistyles"
 
 export default function PersonalCreateProfile() {
+  const { rt } = useUnistyles();
   // Redirect to profile if user already has a profile
   useEffect(() => {
     if ($personalStateUser.user.get()) {
@@ -58,10 +59,10 @@ export default function PersonalCreateProfile() {
     try {
       const response: any = await runWithLoading(
         () => PersonalProfileApi.createProfile({
-        name: name!,
-        profile_type: profileType!,
-      }),
-      { message: 'Creating profile' }
+          name: name!,
+          profile_type: profileType!,
+        }),
+        { message: 'Creating profile' }
       );
 
       if (response) {
@@ -88,36 +89,32 @@ export default function PersonalCreateProfile() {
   }
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.mainContainer}>
-          <Header
-          leftButton={{
-            child: <IconSymbol name='arrow.left' />,
-            onPress: goBack,
-          }}
-          Icon={<ThemedText type='subtitle'>Create Profile</ThemedText>}
-          />
-          
-        <ThemedView style={styles.container}>
-          <ThemedText type="title">Create Profile</ThemedText>
+    <ThemedView style={styles.mainContainer}>
+      <Stack.Screen
+        options={{
+          // The header prop was removed as per instructions
+        }}
+      />
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Create Profile</ThemedText>}
+        />
+      </ThemedView>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title">Create Profile</ThemedText>
 
-          <CreateProfileForm
-            nameValue={name ?? ""}
-            profileTypeValue={profileType}
-            showNameError={!isNameValid && isSubmitted}
-            showProfileTypeError={!isProfileTypeValid && isSubmitted}
-            onChangeName={(text) => $personalStateCreateProfile.name.set(text)}
-            onSelectProfileType={(value) => $personalStateCreateProfile.profile_type.set(value)}
-            onSubmit={handleProfileCreation}
-            onPressInSubmit={handlePressIn}
-          />
-        </ThemedView>
-        </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
-  )
+        <CreateProfileForm
+          nameValue={name ?? ""}
+          profileTypeValue={profileType}
+          showNameError={!isNameValid && isSubmitted}
+          showProfileTypeError={!isProfileTypeValid && isSubmitted}
+          onChangeName={(text) => $personalStateCreateProfile.name.set(text)}
+          onSelectProfileType={(value) => $personalStateCreateProfile.profile_type.set(value)}
+          onSubmit={handleProfileCreation}
+          onPressInSubmit={handlePressIn}
+        />
+      </ThemedView>
+    </ThemedView>
+  );
 }

@@ -40,7 +40,6 @@ export async function redirectSystemPath({
         } catch {
             // Do not crash inside this function! Instead redirect users to home or handle gracefully
             // Following Expo's recommendation to never throw errors in redirectSystemPath
-            console.log('[+native-intent] Failed to parse URL:', path);
             // Return the path as-is and let Expo Router handle it (will likely go to not-found)
             return path;
         }

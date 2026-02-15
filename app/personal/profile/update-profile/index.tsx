@@ -1,8 +1,6 @@
 import Header from '@/components/header/Header';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { ApiError } from '@/lib/constantLib';
@@ -17,15 +15,17 @@ import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import { useValue } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Pressable } from 'react-native';
 import UpdateProfileAvatarSection from './components/UpdateProfileAvatarSection';
 import UpdateProfileForm from './components/UpdateProfileForm';
 import styles from './update-profile.styles';
+import { useUnistyles } from 'react-native-unistyles';
 
 
 export default function PersonalUpdateProfile() {
+  const { rt } = useUnistyles();
 
   useEffect(() => {
     // Clean up when component unmounts
@@ -35,7 +35,7 @@ export default function PersonalUpdateProfile() {
       void PersonalUtilGetUser();
     };
   }, []);
-  
+
   const user = useValue($personalStateUser.user)
   const avatarUri = useValue($personalStateUser.user.avatar_url)
   const name = useValue($personalStateUpdateProfile.name)
@@ -52,7 +52,7 @@ export default function PersonalUpdateProfile() {
   const isValid = useValue($personalStateUpdateProfile.isValid)
   const isNull = useValue($personalStateUpdateProfile.isNull)
   const isAvatarRemoved = useValue($personalStateUpdateProfile.removeAvatarDone)
-  
+
 
   const { handlePressIn } = pressableAnimation();
 
@@ -131,7 +131,7 @@ export default function PersonalUpdateProfile() {
           modalActions.update({ confirmDisabled: false })
           showAlert('Profile picture removed')
           // After a successful removal, disable Apply; nothing left to apply here
-          
+
           // return;
         }
       } catch (error) {
@@ -144,7 +144,7 @@ export default function PersonalUpdateProfile() {
             showAlert('Something went wrong try again')
           }
         }
-        else{
+        else {
           showAlert('An unexpected error occurred. Please try again.');
         }
       }
@@ -232,11 +232,11 @@ export default function PersonalUpdateProfile() {
     try {
       const response = await runWithLoading(
         () => PersonalProfileApi.updateProfile({
-        name: name ?? undefined,
-        bio: bio ?? undefined,
-        profile_type: profileVisibleTo ?? undefined,
-      }),
-      { message: 'Updating profile' }
+          name: name ?? undefined,
+          bio: bio ?? undefined,
+          profile_type: profileVisibleTo ?? undefined,
+        }),
+        { message: 'Updating profile' }
       )
       if (response) {
         // authState.user.set(response)
@@ -246,7 +246,6 @@ export default function PersonalUpdateProfile() {
     } catch (error) {
       if (error instanceof ApiError) {
         showAlert(error.message || 'Something went wrong try again');
-        console.log(error)
       } else {
         console.error('Update profile error:', error);
         showAlert('An unexpected error occurred. Please try again.');
@@ -255,44 +254,36 @@ export default function PersonalUpdateProfile() {
   }
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.mainContainer}>
-          <Header
-            leftButton={{
-              child: <IconSymbol name='arrow.left' />,
-              onPress: utilGoBack,
-            }}
-            Icon={<ThemedText type='subtitle'>Update Profile</ThemedText>}
-          />
-          <ThemedView style={styles.container}>
-            <UpdateProfileAvatarSection
-              avatarUri={avatarFile?.uri || avatarUri || null}
-              hasAvatar={!!(avatarFile || (user?.avatar_url && user?.avatar_url.length > 0))}
-              showAvatarError={(isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid)}
-              onChangeAvatar={handleAvatarChange}
-              onPressInChangeAvatar={handlePressIn}
-            />
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={utilGoBack}
+          centerSection={<ThemedText type='subtitle'>Update Profile</ThemedText>}
+        />
+      </ThemedView>
+      <ThemedView style={styles.container}>
+        <UpdateProfileAvatarSection
+          avatarUri={avatarFile?.uri || avatarUri || null}
+          hasAvatar={!!(avatarFile || (user?.avatar_url && user?.avatar_url.length > 0))}
+          showAvatarError={(isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid)}
+          onChangeAvatar={handleAvatarChange}
+          onPressInChangeAvatar={handlePressIn}
+        />
 
-            <UpdateProfileForm
-              nameValue={name ?? user?.name ?? ''}
-              bioValue={bio ?? user?.bio ?? ''}
-              profileVisibleToValue={profileVisibleTo ?? (user?.profile_type as 'public' | 'private' | 'personal' | null)}
-              showNameError={!isNameValid && isSubmitted}
-              showBioError={!isBioValid && isSubmitted}
-              showProfileVisibleToError={!isProfileVisibleToValid && isSubmitted}
-              onChangeName={(text) => $personalStateUpdateProfile.name.set(text)}
-              onChangeBio={(text) => $personalStateUpdateProfile.bio.set(text)}
-              onSelectProfileVisibleTo={(value) => $personalStateUpdateProfile.profileVisibleTo.set(value)}
-              onSubmit={handleUpdateProfile}
-              onPressInSubmit={handlePressIn}
-            />
-          </ThemedView>
-        </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
-  )
+        <UpdateProfileForm
+          nameValue={name ?? user?.name ?? ''}
+          bioValue={bio ?? user?.bio ?? ''}
+          profileVisibleToValue={profileVisibleTo ?? (user?.profile_type as 'public' | 'private' | 'personal' | null)}
+          showNameError={!isNameValid && isSubmitted}
+          showBioError={!isBioValid && isSubmitted}
+          showProfileVisibleToError={!isProfileVisibleToValid && isSubmitted}
+          onChangeName={(text) => $personalStateUpdateProfile.name.set(text)}
+          onChangeBio={(text) => $personalStateUpdateProfile.bio.set(text)}
+          onSelectProfileVisibleTo={(value) => $personalStateUpdateProfile.profileVisibleTo.set(value)}
+          onSubmit={handleUpdateProfile}
+          onPressInSubmit={handlePressIn}
+        />
+      </ThemedView>
+    </ThemedView>
+  );
 }

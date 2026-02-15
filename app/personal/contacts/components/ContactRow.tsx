@@ -5,8 +5,8 @@ import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import {
-    $contactsState,
-    type ContactEntry,
+  $contactsState,
+  type ContactEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { useValue } from '@legendapp/state/react';
 import { Pressable } from 'react-native';
@@ -53,7 +53,7 @@ export default function ContactRow({ id, kind, onOpenActions, onMessage }: Conta
           }
         }}
       >
-        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} />
+        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} colorKey={item.id} />
         <ThemedView style={styles.rowContent}>
           <ThemedText type='semibold' style={styles.rowName} selectable>
             {displayName}

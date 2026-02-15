@@ -1,7 +1,5 @@
-import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 // import userPostsStore from '@/state/publicState/public.state.userPostsStore';
 // import { LegendList } from "@legendapp/list";
@@ -21,28 +19,22 @@ export default function Home() {
     router.push(next === 'public' ? '/public/home' : '/personal/home');
   };
   return (
-    <>
-      <ThemedViewWithSidebar>
-        <ThemedViewWithSidebar.Sidebar>
-          <Sidebar />
-        </ThemedViewWithSidebar.Sidebar>
-        <ThemedViewWithSidebar.Main>
-          <ThemedView style={styles.container} >
-            <ThemedView style={styles.titleContainer} >
-              <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
-              <Pressable
-                onPress={toggleMode}
-                style={({ pressed }) => [
-                  { opacity: pressed ? 0.1 : 1 },
-                  styles.modeToggle
-                ]}
-              >
-                <ThemedText type="default" style={styles.modeText} selectable={false}>
-                  {currentMode === 'public' ? 'Public' : 'Personal'}
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
-            {/* <LegendList
+    <ThemedView style={styles.container} >
+      <ThemedView style={styles.titleContainer} >
+        <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
+        <Pressable
+          onPress={toggleMode}
+          style={({ pressed }) => [
+            { opacity: pressed ? 0.1 : 1 },
+            styles.modeToggle
+          ]}
+        >
+          <ThemedText type="default" style={styles.modeText} selectable={false}>
+            {currentMode === 'public' ? 'Public' : 'Personal'}
+          </ThemedText>
+        </Pressable>
+      </ThemedView>
+      {/* <LegendList
               data={posts_for_user}
               keyExtractor={(item) => item.id.toString()}
               renderItem={({ item }) => (
@@ -54,13 +46,10 @@ export default function Home() {
               recycleItems={true}
               maintainVisibleContentPosition={true}
             /> */}
-            <ThemedView style={styles.temp_container}>
-              <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
-            </ThemedView>
-          </ThemedView>
-        </ThemedViewWithSidebar.Main>
-      </ThemedViewWithSidebar>
-    </>
+      <ThemedView style={styles.temp_container}>
+        <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
+      </ThemedView>
+    </ThemedView>
   );
 }
 

@@ -7,6 +7,7 @@ const MAPPING = {
   'bucket': 'bucket',
   'account.logout': 'aircraft-take-off',
   'circle-with-plus': 'circle-with-plus',
+  'chevron.left': 'chevron-small-left',
 } as const;
 
 export type EntypoIconName = keyof typeof MAPPING;

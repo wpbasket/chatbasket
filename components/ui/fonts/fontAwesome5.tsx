@@ -8,8 +8,9 @@ const MAPPING = {
   'account.unlock': 'unlock',
   'account.friends': 'user-friends',
   'hashtag': 'hashtag',
-  'list':'list-ul',
+  'list': 'list-ul',
   'plus': 'plus',
+  'arrow.long.left': 'long-arrow-alt-left',
 } as const;
 
 export type FontAwesome5IconName = keyof typeof MAPPING;

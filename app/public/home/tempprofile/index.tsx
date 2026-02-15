@@ -1,16 +1,15 @@
 import ProfileList from '@/components/publicComponents/profile/ProfileList';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { useValue } from '@legendapp/state/react';
 import { useCallback, useState } from 'react';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import NotFoundScreen from '@/app/+not-found';
 
 type TABS = 'Posts' | 'Followers' | 'Following'
 
 export default function Profile() {
+    const { rt } = useUnistyles();
     const user = useValue(currentUserStore.user);
 
     const [activeTab, setActiveTab] = useState<TABS>('Posts');
@@ -26,21 +25,13 @@ export default function Profile() {
     }
 
     return (
-        <ThemedViewWithSidebar>
-            <ThemedViewWithSidebar.Sidebar>
-                <Sidebar />
-            </ThemedViewWithSidebar.Sidebar>
-            <ThemedViewWithSidebar.Main>
-                <ThemedView style={styles.container}>
-
-                    <ProfileList
-                        user={user}
-                        activeTab={activeTab}
-                        onTabPress={onTabPress}
-                    />
-                </ThemedView>
-            </ThemedViewWithSidebar.Main>
-        </ThemedViewWithSidebar>
+        <ThemedView style={styles.container}>
+            <ProfileList
+                user={user}
+                activeTab={activeTab}
+                onTabPress={onTabPress}
+            />
+        </ThemedView>
     );
 }
 
@@ -50,6 +41,5 @@ const styles = StyleSheet.create((theme, rt) => ({
     container: {
         flex: 1,
         paddingTop: rt.insets.top
-
     },
 }));

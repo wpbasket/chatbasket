@@ -1,9 +1,7 @@
 import Header from '@/components/header/Header';
-import Sidebar from '@/components/sidebar/Sidebar';
 import { EmptyState } from '@/components/ui/common/EmptyState';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 // import { chatApi } from '@/lib/personalLib';
@@ -18,17 +16,22 @@ import {
   PersonalUtilFetchContactRequests,
   PersonalUtilFetchContacts,
 } from '@/utils/personalUtils/personal.util.contacts';
+import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/personal.state.chat';
+import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
+import { getChatErrorMessage, getEligibilityMessage } from '@/utils/personalUtils/util.chatErrors';
 import { LegendList } from '@legendapp/list';
 import { useValue } from '@legendapp/state/react';
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, RefreshControl } from 'react-native';
+import { Platform, Pressable, RefreshControl } from 'react-native';
 import ContactRow from './components/ContactRow';
 import ContactsHeaderSection from './components/ContactsHeaderSection';
 import ContactsSegmentTabs from './components/ContactsSegmentTabs';
 import CreateContactsFlows from './contacts.flows';
 import styles from './contacts.styles';
+import { useUnistyles } from 'react-native-unistyles';
 
 type ContactsListItem =
   | { kind: 'error'; id: string }
@@ -47,7 +50,8 @@ type ContactsListItem =
     isLastInSection: boolean;
   };
 
-export default function Contacts() {
+export default function ContactsScreen() {
+  const { rt } = useUnistyles();
   const contactsIds = useValue($contactsState.contactsIds);
   const addedYouIds = useValue($contactsState.addedYouIds);
   const loading = useValue($contactsState.loading);
@@ -78,16 +82,16 @@ export default function Contacts() {
     return router.push('/personal/contacts/requests');
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      void fetchContacts();
-      void fetchRequests();
 
-      return () => {
-        modalActions.close();
-      };
-    }, [fetchContacts, fetchRequests])
-  );
+  useEffect(() => {
+
+    void fetchContacts();
+    void fetchRequests();
+    return () => {
+      modalActions.close();
+    };
+  }, []);
+
 
   const contactsItems = useMemo<ContactsListItem[]>(() => {
     return contactsIds.map((contactId, index) => ({
@@ -134,25 +138,49 @@ export default function Contacts() {
   const keyExtractor = useCallback((item: ContactsListItem) => item.id, []);
 
   const handleMessage = useCallback(async (entry: ContactEntry) => {
-    try {
-      // TODO: Implement chat functionality when chatApi is available
-      alert('Chat functionality coming soon!');
+    // 1. Check local state first for instant routing
+    const existingChat = $chatListState.chats.peek().find(c => c.other_user_id === entry.id);
+    if (existingChat) {
+      $chatMessagesState.isChatOpen.set(true);
+      router.push({
+        pathname: '/personal/chat/[chat_id]',
+        params: {
+          chat_id: existingChat.chat_id,
+          recipient_id: entry.id,
+          recipient_name: entry.nickname ?? entry.name,
+        },
+      });
       return;
-      
-      // Pre-flight eligibility
-      // const eligibility = await chatApi.checkEligibility({ recipient_id: entry.id });
-      // if (!eligibility.allowed) {
-      //   // simple feedback
-      //   alert(eligibility.reason || 'Messaging not allowed');
-      //   return;
-      // }
+    }
 
-      // Create or get chat
-      // const chat = await chatApi.createChat({ recipient_id: entry.id });
-      // TODO: Refresh chat state when chat state module is implemented
-      // router.push(`/personal/home/${chat.chat_id}` as any);
-    } catch (err: any) {
-      alert(err?.message ?? 'Failed to start chat');
+    try {
+      // 2. Not found locally, check eligibility
+      const eligibility = await runWithLoading(() =>
+        PersonalChatApi.checkEligibility({ recipient_id: entry.id })
+      );
+
+      if (!eligibility.allowed) {
+        showAlert(getEligibilityMessage(eligibility.reason ?? '', { name: entry.nickname ?? entry.name }));
+        return;
+      }
+
+      // 2. Create or get existing chat
+      const chat = await runWithLoading(() =>
+        PersonalChatApi.createChat({ recipient_id: entry.id })
+      );
+
+      // 3. Navigate to conversation
+      $chatMessagesState.isChatOpen.set(true);
+      router.push({
+        pathname: '/personal/chat/[chat_id]',
+        params: {
+          chat_id: chat.chat_id,
+          recipient_id: entry.id,
+          recipient_name: entry.nickname ?? entry.name,
+        },
+      });
+    } catch (err: unknown) {
+      showAlert(getChatErrorMessage(err, 'Could not start this conversation.', { name: entry.nickname ?? entry.name }));
     }
   }, []);
 
@@ -206,60 +234,57 @@ export default function Contacts() {
   );
 
   return (
-    <ThemedViewWithSidebar>
-      <ThemedViewWithSidebar.Sidebar>
-        <Sidebar />
-      </ThemedViewWithSidebar.Sidebar>
-      <ThemedViewWithSidebar.Main>
-        <ThemedView style={styles.mainContainer}>
-          <Header
-            leftButton={{
-              child: <IconSymbol name='arrow.left' />,
-              onPress: utilGoBack,
-            }}
-            centerIcon
-            Icon={<ThemedText type='subtitle'>Contacts</ThemedText>}
-          />
-          <ThemedView style={styles.container}>
-            <ContactsHeaderSection
-              pendingCount={pendingIds.length}
-              selectedTab={selectedTab}
-              contactsCount={contactsIds.length}
-              addedYouCount={addedYouIds.length}
-              error={error}
-              lastFetchedAt={lastFetchedAt}
-              onPressPending={openRequestsFromContacts}
-              onPressAddContact={openAddContact}
-            />
+    <ThemedView style={styles.mainContainer}>
+      <Stack.Screen
+        options={{
+          header: () => (
+            <ThemedView style={{ paddingTop: rt.insets.top }}>
+              <Header
+                onBackPress={utilGoBack}
+                centerSection={<ThemedText type='subtitle'>Contacts</ThemedText>}
+              />
+            </ThemedView>
+          )
+        }}
+      />
+      <ThemedView style={styles.container}>
+        <ContactsHeaderSection
+          pendingCount={pendingIds.length}
+          selectedTab={selectedTab}
+          contactsCount={contactsIds.length}
+          addedYouCount={addedYouIds.length}
+          error={error}
+          lastFetchedAt={lastFetchedAt}
+          onPressPending={openRequestsFromContacts}
+          onPressAddContact={openAddContact}
+        />
 
-            <ContactsSegmentTabs
-              selectedTab={selectedTab}
-              onChangeTab={(tab) => {
-                setSelectedTab(tab);
+        <ContactsSegmentTabs
+          selectedTab={selectedTab}
+          onChangeTab={(tab) => {
+            setSelectedTab(tab);
+          }}
+        />
+
+        <LegendList
+          data={listData}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          recycleItems={true}
+          maintainVisibleContentPosition={true}
+          showsVerticalScrollIndicator={Platform.OS === 'web' ? false : true}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={() => {
+                void fetchContacts();
+                void fetchRequests();
               }}
             />
-
-            <LegendList
-              data={listData}
-              keyExtractor={keyExtractor}
-              renderItem={renderItem}
-              contentContainerStyle={styles.listContent}
-              recycleItems={true}
-              maintainVisibleContentPosition={true}
-              showsVerticalScrollIndicator={Platform.OS === 'web' ? false : true}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={() => {
-                    void fetchContacts();
-                    void fetchRequests();
-                  }}
-                />
-              }
-            />
-          </ThemedView>
-        </ThemedView>
-      </ThemedViewWithSidebar.Main>
-    </ThemedViewWithSidebar>
+          }
+        />
+      </ThemedView>
+    </ThemedView>
   );
 }

@@ -4,7 +4,6 @@ import { StyleSheet } from 'react-native-unistyles';
 const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
-    paddingTop: rt.insets.top,
   },
   container: {
     height: 500,
