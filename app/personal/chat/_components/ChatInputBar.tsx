@@ -51,6 +51,7 @@ export default function ChatInputBar({
                 accessibilityHint="Type your message here"
                 style={[
                     styles.input,
+                    {outline: 'none'},
                     { height: Math.min(Math.max(48, inputHeight), 120) }
                 ]}
                 onContentSizeChange={(e) =>

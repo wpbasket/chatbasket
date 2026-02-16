@@ -42,7 +42,7 @@ export default function PersonalTabLayout() {
                 position: 'absolute',
               },
               web: {
-                display: width > 800 ? 'none' : 'flex'
+                display: width > 800 || segments.at(1) === 'chat' ? 'none' : 'flex'
               },
               // web:{
               //   backgroundColor: 'var(--app-bg)',    
