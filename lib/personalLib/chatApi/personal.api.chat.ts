@@ -13,6 +13,11 @@ import type {
     GetMessagesQuery,
     MarkChatReadPayload,
     GetFileURLQuery,
+    UnsendMessagePayload,
+    DeleteMessageForMePayload,
+    GetSyncActionsQuery,
+    GetSyncActionsResponse,
+    AcknowledgeSyncActionPayload,
     ChatEntry,
     MessageEntry,
 } from "@/lib/personalLib";
@@ -70,6 +75,36 @@ async function markChatRead(payload: MarkChatReadPayload): Promise<{ success: bo
     return apiClient.post<{ success: boolean }>('/personal/chat/mark-read', payload);
 }
 
+/** POST /personal/chat/unsend */
+async function unsendMessage(payload: UnsendMessagePayload): Promise<{ success: boolean }> {
+    return apiClient.post<{ success: boolean }>('/personal/chat/unsend', payload);
+}
+
+/** POST /personal/chat/delete-for-me */
+async function deleteMessageForMe(payload: DeleteMessageForMePayload): Promise<{ success: boolean }> {
+    return apiClient.post<{ success: boolean }>('/personal/chat/delete-for-me', payload);
+}
+
+/** GET /personal/chat/sync-actions */
+async function getSyncActions(query: GetSyncActionsQuery): Promise<GetSyncActionsResponse> {
+    const params = new URLSearchParams();
+    if (query.limit != null) params.set('limit', String(query.limit));
+    return apiClient.get<GetSyncActionsResponse>(`/personal/chat/sync-actions?${params.toString()}`);
+}
+
+/** POST /personal/chat/sync-actions/ack */
+async function acknowledgeSyncAction(payload: AcknowledgeSyncActionPayload): Promise<{ success: boolean }> {
+    return apiClient.post<{ success: boolean }>('/personal/chat/sync-actions/ack', payload);
+}
+
+
+/** GET /personal/chat/pending?limit= */
+async function getPendingMessages(query: { limit?: number }): Promise<GetMessagesResponse> {
+    const params = new URLSearchParams();
+    if (query.limit != null) params.set('limit', String(query.limit));
+    return apiClient.get<GetMessagesResponse>(`/personal/chat/pending?${params.toString()}`);
+}
+
 
 export const PersonalChatApi = {
     checkEligibility,
@@ -81,4 +116,9 @@ export const PersonalChatApi = {
     uploadFile,
     getFileURL,
     markChatRead,
+    unsendMessage,
+    deleteMessageForMe,
+    getSyncActions,
+    acknowledgeSyncAction,
+    getPendingMessages,
 };

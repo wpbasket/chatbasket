@@ -9,11 +9,19 @@ import { Platform, useWindowDimensions } from 'react-native';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSidebar';
 import { useUnistyles } from 'react-native-unistyles';
+import { useEffect } from 'react';
+import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
+import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 
 export default function PersonalTabLayout() {
   const { theme } = useUnistyles();
   const { width } = useWindowDimensions();
   const segments = useSegments();
+
+  useEffect(() => {
+    $syncEngine.catchUp();
+    PersonalUtilGetUser();
+  }, []);
 
   return (
     <ThemedViewWithSidebar>

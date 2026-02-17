@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { FlatList } from 'react-native';
+import { FlatList, Alert, Platform } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
     ThemedText,
@@ -11,11 +11,13 @@ import {
 import { StyleSheet } from 'react-native-unistyles';
 import MessageBubble from './_components/MessageBubble';
 import ChatInputBar from './_components/ChatInputBar';
+import { BulkActionBar } from './_components/BulkActionBar';
 import { $chatMessagesState, $chatListState } from '@/state/personalState/chat/personal.state.chat';
+import { authState } from '@/state/auth/state.auth';
 import { $uiState } from '@/state/ui/state.ui';
 import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
-import { showAlert } from '@/utils/commonUtils/util.modal';
+import { showAlert, showControllersModal, showConfirmDialog } from '@/utils/commonUtils/util.modal';
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
 import { batch } from '@legendapp/state';
@@ -166,6 +168,79 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         );
     };
 
+    const handleLongPress = useCallback((event: import('react-native').GestureResponderEvent) => {
+        // Prevent default browser context menu on web
+        if (event && 'preventDefault' in event) {
+            (event as any).preventDefault();
+        }
+
+        const position = {
+            x: event.nativeEvent.pageX,
+            y: event.nativeEvent.pageY
+        };
+
+        const controllers: any[] = [
+            {
+                id: 'select',
+                label: 'Select',
+                onPress: () => {
+                    $chatMessagesState.toggleSelectMode(chatId, true);
+                    $chatMessagesState.toggleMessageSelection(chatId, messageId);
+                }
+            },
+            {
+                id: 'delete',
+                label: 'Delete for Me',
+                onPress: () => {
+                    console.log('[UI] Single Delete initiated for:', messageId);
+                    $chatMessagesState.removeMessages(chatId, [messageId]);
+                    PersonalChatApi.deleteMessageForMe({
+                        message_ids: [messageId]
+                    }).then(() => console.log('[UI] Single Delete API success'))
+                        .catch(err => console.error('[UI] Delete failed', err));
+                }
+            }
+        ];
+
+        if (message.is_from_me && status !== 'read' && message.message_type !== 'unsent') {
+            controllers.unshift({
+                id: 'unsend',
+                label: 'Unsend',
+                onPress: () => {
+                    console.log('[UI] Single Unsend initiated for:', messageId);
+                    $chatMessagesState.unsendMessages(chatId, [messageId]);
+                    PersonalChatApi.unsendMessage({
+                        chat_id: chatId,
+                        message_ids: [messageId]
+                    }).then(() => console.log('[UI] Single Unsend API success'))
+                        .catch(err => {
+                            console.error('[UI] Unsend failed', err);
+                        });
+                }
+            });
+        }
+
+        showControllersModal(controllers, {
+            title: 'Message Options',
+            position,
+            showConfirmButton: false,
+            showCancelButton: true,
+            closeOnControllerPress: true,
+        });
+    }, [chatId, messageId, message.is_from_me, status]);
+
+    const handlePress = useCallback(() => {
+        const isSelectMode = $chatMessagesState.chats[chatId]?.isSelectMode.peek();
+        if (isSelectMode) {
+            $chatMessagesState.toggleMessageSelection(chatId, messageId);
+        }
+    }, [chatId, messageId]);
+
+    const isSelected = useValue(() => {
+        const selectedIds = $chatMessagesState.chats[chatId]?.selectedMessageIds.get() || [];
+        return selectedIds.includes(messageId);
+    });
+
     return (
         <ThemedView style={{ backgroundColor: 'transparent' }}>
             {renderDateHeader()}
@@ -176,6 +251,10 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 status={status}
                 delivered={message.delivered_to_recipient}
                 createdAt={message.created_at}
+                onLongPress={handleLongPress}
+                onContextMenu={handleLongPress}
+                onPress={handlePress}
+                isSelected={isSelected}
             />
         </ThemedView>
     );
@@ -187,27 +266,58 @@ const ChatContentContainer = React.memo(({
     recipient_name,
     displayName
 }: any) => {
-    // -------- Initialize chat on mount --------
+    // -------- Initialize chat on focus --------
+    useFocusEffect(
+        useCallback(() => {
+            if (!chat_id) return;
+
+            batch(() => {
+                $chatMessagesState.setActiveChatId(chat_id);
+                const currentChat = $chatMessagesState.chats[chat_id];
+                currentChat.recipientId.set(recipient_id ?? null);
+
+                currentChat.recipientId.set(recipient_id ?? null);
+
+                // 2. To avoid redundant '/ack' calls from ackIncomingMessages,
+                // we proactively mark all known messages in this chat as delivered (incoming)
+                // or synced-to-primary (outgoing) LOCALLY.
+                const msgs = currentChat.messages.peek();
+                if (msgs.length > 0) {
+                    msgs.forEach(m => {
+                        if (!m.is_from_me && !m.delivered_to_recipient) {
+                            currentChat.messagesById[m.message_id].delivered_to_recipient.set(true);
+                        }
+                        // [TESTING] Removed isPrimary check to allow secondary devices to see sync status update locally
+                        if (m.is_from_me && !m.synced_to_sender_primary) { // && authState.isPrimary.peek()) {
+                            currentChat.messagesById[m.message_id].synced_to_sender_primary.set(true);
+                        }
+                    });
+                }
+
+                // Always fetch latest messages on focus to ensure we don't ACK messages we haven't seen yet.
+                // setMessages uses a smart merge, so this is safe and preserves local state.
+                loadMessages(chat_id).then(() => {
+                    // Mark as read locally and on backend ONLY after we have the latest data
+                    void PersonalChatApi.markChatRead({ chat_id }).catch(() => { });
+                    $chatListState.markChatRead(chat_id);
+                });
+            });
+
+            return () => {
+                // Optional: cleanup if needed when losing focus
+                // $chatMessagesState.activeChatId.set(null); 
+                // Note: Clearing activeChatId here might cause flicker on simple background/foreground.
+                // kept strictly for unmount or specific logic if needed.
+            };
+        }, [chat_id, recipient_id])
+    );
+
+    // Cleanup on actual unmount
     useEffect(() => {
-        if (!chat_id) return;
-
-        batch(() => {
-            $chatMessagesState.setActiveChatId(chat_id);
-            const currentChat = $chatMessagesState.chats[chat_id];
-            currentChat.recipientId.set(recipient_id ?? null);
-
-            if (currentChat.messages.peek().length === 0) {
-                void loadMessages(chat_id);
-            }
-
-            void PersonalChatApi.markChatRead({ chat_id }).catch(() => { });
-            $chatListState.markChatRead(chat_id);
-        });
-
         return () => {
             $chatMessagesState.activeChatId.set(null);
         };
-    }, [chat_id, recipient_id]);
+    }, []);
 
 
     const loadMessages = async (chatId: string) => {
@@ -222,6 +332,26 @@ const ChatContentContainer = React.memo(({
                 offset: 0,
             });
 
+            // Update chat metadata (Read Receipts) from response to avoid extra API call
+            if (response.other_user_last_read_at) {
+                batch(() => {
+                    const chat$ = $chatListState.chatsById[chatId];
+                    const chat = chat$.peek();
+                    if (chat) {
+                        chat$.other_user_last_read_at.set(response.other_user_last_read_at);
+
+                        // Also update the preview status if the last message is now read
+                        if (chat.last_message_created_at && chat.last_message_is_from_me) {
+                            const lastMsgTime = new Date(chat.last_message_created_at).getTime();
+                            const readTime = new Date(response.other_user_last_read_at).getTime();
+                            if (lastMsgTime <= readTime) {
+                                chat$.last_message_status.set('read');
+                            }
+                        }
+                    }
+                });
+            }
+
             const messagesWithStatus = (response.messages ?? []).map(m => {
                 // Delivered does NOT mean Read. It means Sent (Yellow).
                 return {
@@ -234,6 +364,29 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.setMessages(chatId, messagesWithStatus);
                 if (messagesWithStatus.length < 50) {
                     $chatMessagesState.chats[chatId].hasMore.set(false);
+                }
+
+                // Sync Chat List Preview (Last Message) with latest fetched message
+                if (messagesWithStatus.length > 0) {
+                    // Sort to find the absolute latest message in this batch
+                    const sorted = [...messagesWithStatus].sort((a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    );
+                    const latestMsg = sorted[0];
+                    const chat$ = $chatListState.chatsById[chatId];
+                    const currentChat = chat$.peek();
+
+                    // Only update if this message is newer than what we currently have in preview
+                    if (currentChat && (!currentChat.last_message_created_at || new Date(latestMsg.created_at).getTime() > new Date(currentChat.last_message_created_at).getTime())) {
+                        chat$.assign({
+                            last_message_content: latestMsg.content,
+                            last_message_created_at: latestMsg.created_at,
+                            last_message_status: latestMsg.status ?? 'sent',
+                            last_message_is_from_me: latestMsg.is_from_me,
+                            last_message_type: latestMsg.message_type,
+                            last_message_id: latestMsg.message_id
+                        });
+                    }
                 }
             });
         } catch (err: unknown) {
@@ -263,6 +416,7 @@ const ChatContentContainer = React.memo(({
             expires_at: now,
             status: 'pending',
             delivered_to_recipient: false, // Added Phase 8b/9
+            synced_to_sender_primary: true, // Optimistically true as it's created locally
         };
 
         const existingChat = $chatListState.chatsById[chat_id]?.peek();
@@ -371,6 +525,60 @@ const ChatContentContainer = React.memo(({
 
     const keyExtractor = useCallback((id: string) => id, []);
 
+    const handleBulkUnsend = useCallback(async () => {
+        const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
+        if (selectedIds.length === 0) return;
+
+        console.log('[UI] Requesting Bulk Unsend confirmation');
+        const confirmed = await showConfirmDialog(
+            `Are you sure you want to unsend ${selectedIds.length} messages?`,
+            {
+                confirmText: 'Unsend All',
+                cancelText: 'Cancel',
+                confirmVariant: 'destructive'
+            }
+        );
+
+        if (confirmed) {
+            console.log('[UI] Bulk Unsend confirmed by user');
+            console.log('[UI] Bulk Unsend initiated for:', selectedIds);
+            $chatMessagesState.unsendMessages(chat_id, selectedIds);
+            $chatMessagesState.toggleSelectMode(chat_id, false);
+            try {
+                await PersonalChatApi.unsendMessage({
+                    chat_id: chat_id,
+                    message_ids: selectedIds
+                });
+                console.log('[UI] Bulk Unsend API success');
+            } catch (err) {
+                console.error('[UI] Bulk Unsend failed', err);
+            }
+        } else {
+            console.log('[UI] Bulk Unsend cancelled by user');
+        }
+    }, [chat_id]);
+
+    const handleBulkDelete = useCallback(async () => {
+        const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
+        if (selectedIds.length === 0) return;
+
+        console.log('[UI] Bulk Delete initiated for:', selectedIds);
+        $chatMessagesState.removeMessages(chat_id, selectedIds);
+        $chatMessagesState.toggleSelectMode(chat_id, false);
+        try {
+            await PersonalChatApi.deleteMessageForMe({
+                message_ids: selectedIds
+            });
+            console.log('[UI] Bulk Delete API success');
+        } catch (err) {
+            console.error('[UI] Bulk Delete failed', err);
+        }
+    }, [chat_id]);
+
+    const handleCancelSelection = useCallback(() => {
+        $chatMessagesState.toggleSelectMode(chat_id, false);
+    }, [chat_id]);
+
     return (
         <Memo>
             {() => (
@@ -414,11 +622,37 @@ const ChatContentContainer = React.memo(({
                         }}
                     </Memo>
 
-                    <ChatInputBar
-                        chatId={chat_id}
-                        onSend={sendMessage}
-                        sendingObs={$chatMessagesState.chats[chat_id]?.sending}
-                    />
+                    <Memo>
+                        {() => {
+                            const isSelectMode = $chatMessagesState.chats[chat_id]?.isSelectMode.get();
+                            const selectedCount = $chatMessagesState.chats[chat_id]?.selectedMessageIds.get()?.length || 0;
+
+                            // Check if ALL selected messages are from me (to show Unsend)
+                            const messagesById = $chatMessagesState.chats[chat_id]?.messagesById.peek() || {};
+                            const selectedIds = $chatMessagesState.chats[chat_id]?.selectedMessageIds.peek() || [];
+                            const allFromMe = selectedIds.every(id => messagesById[id]?.is_from_me);
+
+                            if (isSelectMode) {
+                                return (
+                                    <BulkActionBar
+                                        selectedCount={selectedCount}
+                                        onUnsend={handleBulkUnsend}
+                                        onDelete={handleBulkDelete}
+                                        onCancel={handleCancelSelection}
+                                        showUnsend={allFromMe && selectedCount > 0}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <ChatInputBar
+                                    chatId={chat_id}
+                                    onSend={sendMessage}
+                                    sendingObs={$chatMessagesState.chats[chat_id]?.sending}
+                                />
+                            );
+                        }}
+                    </Memo>
                 </ThemedView>
             )}
         </Memo>

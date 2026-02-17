@@ -8,7 +8,6 @@ import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { initUserPosts } from '@/state/publicState/public.state.initUserPosts';
 import { initializeGlobalNetworkTracking } from '@/state/tools/state.network';
-import { getUser } from '@/utils/publicUtils/public.util.profile';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -66,9 +65,10 @@ export default function RootLayout() {
         await initializeAppStorage();
 
         // Direct background fetch of user after restoring auth (only if logged in)
-        if (authState.isLoggedIn.get()) {
-          void getUser();
-        }
+        // Direct background fetch of user after restoring auth (only if logged in)
+        // if (authState.isLoggedIn.get()) {
+        //   void getUser();
+        // }
       } catch (e) {
         console.warn("Failed to initialize auth", e);
       } finally {

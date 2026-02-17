@@ -37,8 +37,9 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
     const { theme } = useUnistyles();
     const { handlePressIn } = pressableAnimation();
 
-    // Fine-grained observation: only re-render if THIS chat changes
+    // Fine-grained observation: observe specific fields to ensure updates trigger re-renders
     const chat = useValue(() => $chatListState.chatsById[chatId]?.get());
+    const unreadCount = useValue(() => $chatListState.chatsById[chatId]?.unread_count.get() ?? 0);
     const contact = useValue(() => $contactsState.contactsById[chat?.other_user_id]?.get());
 
     if (!chat) return null;
@@ -46,7 +47,7 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
     const displayName = (contact?.nickname ?? chat.other_user_name) || chat.other_user_username || 'User';
     const preview = chat.last_message_content ?? 'No messages yet';
     const time = formatTime(chat.last_message_created_at);
-    const unreadCount = chat.unread_count || 0;
+    // const unreadCount = chat.unread_count || 0; // Removed derived value relying on 'chat' object identity
     const hasUnread = unreadCount > 0;
 
     return (
@@ -86,6 +87,11 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                         {(() => {
                             const isMe = chat.last_message_is_from_me;
                             if (!isMe || !chat.last_message_content) return null;
+
+                            // If unsent, we don't want any icon (per user request)
+                            if (chat.last_message_is_unsent) {
+                                return null;
+                            }
 
                             let iconName: any = 'checkmark';
                             let color = '#FFD700'; // Sent/Delivered (Yellow)

@@ -7,8 +7,16 @@ import { StyleSheet } from "react-native-unistyles";
 import { useValue } from "@legendapp/state/react";
 import { authState } from "@/state/auth/state.auth";
 import { appMode$, setAppMode } from "@/state/appMode/state.appMode";
+import { useEffect } from "react";
+import { getUser } from "@/utils/publicUtils/public.util.profile";
 
 export default function HomeScreenLayout() {
+
+  useEffect(() => {
+    if (authState.isLoggedIn.peek()) {
+      void getUser();
+    }
+  }, []);
 
   return (
     <>

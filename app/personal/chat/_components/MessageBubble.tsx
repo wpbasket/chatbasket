@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { Pressable } from 'react-native';
 import { ThemedText, ThemedView } from '@/components/ui/basic';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
@@ -11,16 +12,20 @@ type MessageBubbleProps = {
     status?: 'pending' | 'sent' | 'read';
     delivered?: boolean;
     createdAt: string;
+    onLongPress?: (event: import('react-native').GestureResponderEvent) => void;
+    onContextMenu?: (event: import('react-native').GestureResponderEvent) => void;
+    onPress?: () => void;
+    isSelected?: boolean;
 };
 
 const MessageBubble = memo(
-    ({ text, type, messageType = 'text', status, delivered, createdAt }: MessageBubbleProps) => {
+    ({ text, type, messageType = 'text', status, delivered, createdAt, onLongPress, onContextMenu, onPress, isSelected }: MessageBubbleProps) => {
         const { theme } = useUnistyles();
         const isMe = type === 'me';
         const isText = messageType === 'text';
 
         const renderStatusIcon = () => {
-            if (!isMe) return null;
+            if (!isMe || messageType === 'unsent') return null;
 
             if (status === 'pending') {
                 return (
@@ -47,6 +52,16 @@ const MessageBubble = memo(
 
         const renderTypeIcon = () => {
             if (isText) return null;
+
+            // Special handling for unsent messages
+            if (messageType === 'unsent') {
+                return (
+                    <ThemedText style={[styles.unsentText, isMe && styles.myUnsentText]}>
+                        Message unsent
+                    </ThemedText>
+                );
+            }
+
             let icon = '📄';
             let label = messageType.charAt(0).toUpperCase() + messageType.slice(1);
 
@@ -71,24 +86,45 @@ const MessageBubble = memo(
         };
 
         return (
-            <ThemedView
-                accessibilityRole="text"
-                accessibilityLabel={`${isMe ? 'You' : 'Other'}: ${isText ? text : messageType}`}
-                style={[
-                    styles.bubble,
-                    isMe && styles.myBubble
+            <Pressable
+                onPress={onPress}
+                onLongPress={onLongPress}
+                // @ts-ignore - onContextMenu is supported on web
+                onContextMenu={onContextMenu}
+                delayLongPress={300}
+                style={({ pressed }) => [
+                    { opacity: pressed ? 0.7 : 1 },
+                    isMe ? styles.myBubbleContainer : styles.otherBubbleContainer
                 ]}
             >
-                {renderTypeIcon()}
-                <ThemedText style={isMe ? styles.myText : undefined}>{text}</ThemedText>
+                <ThemedView
+                    accessibilityRole="text"
+                    accessibilityLabel={`${isMe ? 'You' : 'Other'}: ${isText ? text : messageType}`}
+                    style={[
+                        styles.bubble,
+                        isMe && styles.myBubble,
+                        isSelected && styles.selectedBubble
+                    ]}
+                >
+                    {renderTypeIcon()}
+                    {messageType !== 'unsent' && (
+                        <ThemedText style={isMe ? styles.myText : undefined}>{text}</ThemedText>
+                    )}
 
-                <ThemedView style={styles.footer}>
-                    <ThemedText style={[styles.timeText, isMe && styles.myTimeText]}>
-                        {formatTime(createdAt)}
-                    </ThemedText>
-                    {renderStatusIcon()}
+                    <ThemedView style={styles.footer}>
+                        <ThemedText style={[styles.timeText, isMe && styles.myTimeText]}>
+                            {formatTime(createdAt)}
+                        </ThemedText>
+                        {renderStatusIcon()}
+                    </ThemedView>
+
+                    {isSelected && (
+                        <ThemedView style={styles.selectionOverlay}>
+                            <IconSymbol name="checkmark.circle" size={20} color={theme.colors.primary} />
+                        </ThemedView>
+                    )}
                 </ThemedView>
-            </ThemedView>
+            </Pressable>
         );
     },
     (prev, next) =>
@@ -108,10 +144,17 @@ const styles = StyleSheet.create((theme) => ({
         borderBottomRightRadius: 4,
         backgroundColor: theme.colors.card,
         maxWidth: '80%',
+    },
+    myBubbleContainer: {
+        alignSelf: 'flex-start',
+        maxWidth: '80%',
+    },
+    otherBubbleContainer: {
         alignSelf: 'flex-end',
+        maxWidth: '80%',
     },
     myBubble: {
-        alignSelf: 'flex-start',
+        alignSelf: 'stretch',
         backgroundColor: theme.colors.bubblePurple,
         borderBottomLeftRadius: 4,
         borderBottomRightRadius: 20,
@@ -124,6 +167,15 @@ const styles = StyleSheet.create((theme) => ({
         opacity: 0.7,
         marginBottom: 4,
         fontWeight: '600',
+    },
+    unsentText: {
+        fontSize: 14,
+        fontStyle: 'italic',
+        opacity: 0.6,
+        color: theme.colors.textSecondary,
+    },
+    myUnsentText: {
+        color: 'rgba(255, 255, 255, 0.9)',
     },
     statusContainer: {
         marginLeft: 4,
@@ -144,5 +196,22 @@ const styles = StyleSheet.create((theme) => ({
     },
     myTimeText: {
         color: 'rgba(255,255,255,0.7)',
+    },
+    selectedBubble: {
+        borderWidth: 2,
+        borderColor: theme.colors.primary,
+    },
+    selectionOverlay: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 2,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
 }));

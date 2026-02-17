@@ -27,6 +27,8 @@ export interface ChatEntry {
     last_message_is_from_me: boolean;        // Calculated by backend
     last_message_status: string;             // Go string (Required now)
     last_message_sender_id: string | null;   // Go *string
+    last_message_id: string | null;          // Added Phase 14
+    last_message_is_unsent?: boolean;        // Added Phase 5.3
     unread_count: number;
 }
 
@@ -42,6 +44,8 @@ export interface MessageEntry {
     content: string;
     message_type: string;    // Go string (text|image|video|audio|file)
     delivered_to_recipient: boolean; // Go bool (Added in Phase 8b)
+    synced_to_sender_primary: boolean; // Added in Phase 17
+    is_unsent?: boolean;             // Added Phase 5.3
     status?: 'pending' | 'sent' | 'read';
     created_at: string;      // Go time.Time → JSON string
     expires_at: string;
@@ -72,6 +76,7 @@ export interface GetChatsResponse {
 export interface GetMessagesResponse {
     messages: MessageEntry[];
     count: number;
+    other_user_last_read_at: string; // Go time.Time → JSON string (Added)
 }
 
 /**
@@ -97,10 +102,29 @@ export interface UploadFileResponse {
 
 /**
  * GetFileURLResponse wraps the file URL fetch response.
- * Maps to Go `GetFileURLResponse`.
  */
 export interface GetFileURLResponse {
     file_url: string;
+}
+
+/**
+ * SyncActionResponse represents a single synchronization command from the relay.
+ */
+export interface SyncActionEntry {
+    id: string;
+    user_id: string;
+    action_type: 'unsend' | 'delete_for_me';
+    payload: any; // Context-dependent (contains message_ids, chat_id, etc.)
+    delivered_to_primary: boolean;
+    created_at: string;
+}
+
+/**
+ * GetSyncActionsResponse wraps the sync actions list endpoint.
+ */
+export interface GetSyncActionsResponse {
+    actions: SyncActionEntry[];
+    count: number;
 }
 
 // ============================================================================
@@ -151,4 +175,25 @@ export interface MarkChatReadPayload {
 /** GET /personal/chat/file-url — query params */
 export interface GetFileURLQuery {
     message_id: string;
+}
+
+/** POST /personal/chat/unsend */
+export interface UnsendMessagePayload {
+    chat_id: string;
+    message_ids: string[];
+}
+
+/** POST /personal/chat/delete-for-me */
+export interface DeleteMessageForMePayload {
+    message_ids: string[];
+}
+
+/** GET /personal/chat/sync-actions — query params */
+export interface GetSyncActionsQuery {
+    limit?: number;
+}
+
+/** POST /personal/chat/sync-actions/ack */
+export interface AcknowledgeSyncActionPayload {
+    action_id: string;
 }
