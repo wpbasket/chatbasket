@@ -11,21 +11,29 @@ type PersonalDeviceSchema = {
 }
 
 // Instantiate with schema
-const deviceStorage = new AppStorage<PersonalDeviceSchema>('personal-device');
+let deviceStorage: AppStorage<PersonalDeviceSchema> | null = null;
+
+const getStorage = async (): Promise<AppStorage<PersonalDeviceSchema>> => {
+    if (!deviceStorage) {
+        deviceStorage = await AppStorage.createSecure<PersonalDeviceSchema>('personal-device');
+    }
+    return deviceStorage;
+}
 
 export const PersonalStorageSetDeviceStatus = async (status: { isPrimary: boolean | null, deviceName: string | null }): Promise<void> => {
     const { isPrimary, deviceName } = status;
+    const storage = await getStorage();
 
     if (isPrimary !== null) {
-        await deviceStorage.set(DevicePrimaryKey, isPrimary);
+        await storage.set(DevicePrimaryKey, isPrimary);
     } else {
-        await deviceStorage.remove(DevicePrimaryKey);
+        await storage.remove(DevicePrimaryKey);
     }
 
     if (deviceName) {
-        await deviceStorage.set(DeviceNameKey, deviceName);
+        await storage.set(DeviceNameKey, deviceName);
     } else {
-        await deviceStorage.remove(DeviceNameKey);
+        await storage.remove(DeviceNameKey);
     }
 
     // Update State
@@ -34,15 +42,17 @@ export const PersonalStorageSetDeviceStatus = async (status: { isPrimary: boolea
 }
 
 export const PersonalStorageGetDeviceStatus = async (): Promise<void> => {
-    const data = await deviceStorage.getMany([DevicePrimaryKey, DeviceNameKey]);
+    const storage = await getStorage();
+    const data = await storage.getMany([DevicePrimaryKey, DeviceNameKey]);
 
     authState.isPrimary.set(data[DevicePrimaryKey] ?? null as any);
     authState.primaryDeviceName.set(data[DeviceNameKey] || null);
 }
 
 export const PersonalStorageRemoveDeviceStatus = async (): Promise<void> => {
-    await deviceStorage.remove(DevicePrimaryKey);
-    await deviceStorage.remove(DeviceNameKey);
+    const storage = await getStorage();
+    await storage.remove(DevicePrimaryKey);
+    await storage.remove(DeviceNameKey);
 
     authState.isPrimary.set(null as any);
     authState.primaryDeviceName.set(null);

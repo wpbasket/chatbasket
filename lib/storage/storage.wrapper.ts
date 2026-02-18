@@ -4,6 +4,107 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 
+/**
+ * WebVault: Handles non-extractable cryptographic keys for the web.
+ * Uses IndexedDB to store CryptoKey objects directly (so they can't be read as strings).
+ */
+class WebVault {
+    private static DB_NAME = 'AppStorageVault';
+    private static STORE_NAME = 'Keys';
+    private static KEY_NAME = 'MasterKey';
+    private static cryptoKey: CryptoKey | null = null;
+
+    static async getOrCreateKey(): Promise<CryptoKey> {
+        if (this.cryptoKey) return this.cryptoKey;
+
+        return new Promise((resolve, reject) => {
+            if (typeof indexedDB === 'undefined') {
+                return reject(new Error('IndexedDB not supported'));
+            }
+
+            const request = indexedDB.open(this.DB_NAME, 1);
+
+            request.onupgradeneeded = () => {
+                request.result.createObjectStore(this.STORE_NAME);
+            };
+
+            request.onsuccess = () => {
+                const db = request.result;
+                const tx = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = tx.objectStore(this.STORE_NAME);
+                const getRequest = store.get(this.KEY_NAME);
+
+                getRequest.onsuccess = async () => {
+                    if (getRequest.result) {
+                        this.cryptoKey = getRequest.result;
+                        resolve(this.cryptoKey!);
+                    } else {
+                        try {
+                            // Generate non-extractable key
+                            const key = await window.crypto.subtle.generateKey(
+                                { name: 'AES-GCM', length: 256 },
+                                false, // extractable: false (CANNOT BE STOLEN BY SCRIPTS)
+                                ['encrypt', 'decrypt']
+                            );
+                            store.put(key, this.KEY_NAME);
+                            this.cryptoKey = key;
+                            resolve(key);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    }
+                };
+                getRequest.onerror = () => reject(getRequest.error);
+            };
+
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async encrypt(data: string): Promise<string> {
+        const key = await this.getOrCreateKey();
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const encodedData = new TextEncoder().encode(data);
+
+        const ciphertextBuffer = await window.crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            encodedData
+        );
+
+        // Package as a JSON string with a special flag
+        const payload = {
+            __cb_enc: true,
+            ct: btoa(String.fromCharCode(...new Uint8Array(ciphertextBuffer))),
+            iv: btoa(String.fromCharCode(...iv))
+        };
+
+        return JSON.stringify(payload);
+    }
+
+    static async decrypt(encryptedPayload: string): Promise<string> {
+        try {
+            const payload = JSON.parse(encryptedPayload);
+            if (!payload.__cb_enc || !payload.ct || !payload.iv) return encryptedPayload;
+
+            const key = await this.getOrCreateKey();
+            const ivArray = new Uint8Array(atob(payload.iv).split('').map(c => c.charCodeAt(0)));
+            const cipherArray = new Uint8Array(atob(payload.ct).split('').map(c => c.charCodeAt(0)));
+
+            const decryptedBuffer = await window.crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: ivArray },
+                key,
+                cipherArray
+            );
+
+            return new TextDecoder().decode(decryptedBuffer);
+        } catch (e) {
+            // If decryption fails or it's not JSON, return as-is (fallback)
+            return encryptedPayload;
+        }
+    }
+}
+
 type WebBackend = 'async' | 'sync';
 
 export class AppStorage<T extends Record<string, any>> {
@@ -11,11 +112,13 @@ export class AppStorage<T extends Record<string, any>> {
     private id: string;
     private disableWebPrefix: boolean;
     private webBackend: WebBackend;
+    private isSecure: boolean = false;
 
-    constructor(id: string, config?: any, options?: { disableWebPrefix?: boolean, webBackend?: WebBackend }) {
+    constructor(id: string, config?: any, options?: { disableWebPrefix?: boolean, webBackend?: WebBackend, isSecure?: boolean }) {
         this.id = id;
         this.disableWebPrefix = options?.disableWebPrefix ?? false;
         this.webBackend = options?.webBackend ?? 'async';
+        this.isSecure = options?.isSecure ?? false;
 
         if (Platform.OS !== 'web') {
             this.mmkv = new MMKV({ id, ...config });
@@ -45,7 +148,7 @@ export class AppStorage<T extends Record<string, any>> {
             }
         }
 
-        return new AppStorage<T>(id, { encryptionKey });
+        return new AppStorage<T>(id, { encryptionKey }, { isSecure: true });
     }
 
     private getWebKey(key: string): string {
@@ -72,12 +175,17 @@ export class AppStorage<T extends Record<string, any>> {
         if (Platform.OS === 'web') {
             const webKey = this.getWebKey(keyStr);
             try {
+                let finalVal = valStr;
+                if (this.isSecure) {
+                    finalVal = await WebVault.encrypt(valStr);
+                }
+
                 if (this.webBackend === 'sync') {
                     if (typeof window !== 'undefined') {
-                        window.localStorage.setItem(webKey, valStr);
+                        window.localStorage.setItem(webKey, finalVal);
                     }
                 } else {
-                    await AsyncStorage.setItem(webKey, valStr);
+                    await AsyncStorage.setItem(webKey, finalVal);
                 }
             } catch (e) {
                 console.error(`[AppStorage] Failed to set ${keyStr}`, e);
@@ -111,6 +219,10 @@ export class AppStorage<T extends Record<string, any>> {
                     }
                 } else {
                     valStr = await AsyncStorage.getItem(webKey);
+                }
+
+                if (this.isSecure && valStr) {
+                    valStr = await WebVault.decrypt(valStr);
                 }
             } catch (e) {
                 console.error(`[AppStorage] Failed to get ${keyStr}`, e);

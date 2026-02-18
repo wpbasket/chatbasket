@@ -8,7 +8,14 @@ type PersonalUserSchema = {
   [PersonalUserKey]: PersonalProfileResponse;
 };
 
-const mmkv = new AppStorage<PersonalUserSchema>('personal-user');
+let mmkv: AppStorage<PersonalUserSchema> | null = null;
+
+const getStorage = async (): Promise<AppStorage<PersonalUserSchema>> => {
+  if (!mmkv) {
+    mmkv = await AppStorage.createSecure<PersonalUserSchema>('personal-user');
+  }
+  return mmkv;
+};
 
 export const PersonalStorageSetUser = async (userData?: PersonalProfileResponse): Promise<void> => {
   const data = userData || $personalStateUser.user.get();
@@ -17,14 +24,17 @@ export const PersonalStorageSetUser = async (userData?: PersonalProfileResponse)
     return;
   }
 
-  await mmkv.set(PersonalUserKey, data);
+  const storage = await getStorage();
+  await storage.set(PersonalUserKey, data);
 };
 
 export const PersonalStorageGetUser = async (): Promise<void> => {
-  const user = await mmkv.get(PersonalUserKey);
+  const storage = await getStorage();
+  const user = await storage.get(PersonalUserKey);
   $personalStateUser.user.set(user);
 };
 
 export const PersonalStorageRemoveUser = async (): Promise<void> => {
-  await mmkv.remove(PersonalUserKey);
+  const storage = await getStorage();
+  await storage.remove(PersonalUserKey);
 };

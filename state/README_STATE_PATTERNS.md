@@ -36,6 +36,9 @@ const count = useValue(userPostsStore.postCount); // Re-renders only when count 
 ```
 
 ## Persistence
-Legend-State has built-in persistence. However, we strictly Separate:
-*   **Persisted State**: Auth Tokens (Encrypted), Settings (MMKV).
-*   **Transient State**: `modals`, `isInTheProfileUpdateMode` (Reset on reload).
+Legend-State has built-in persistence, but for **Personally Identifiable Information (PII)**, we use a custom **`AppStorage`** wrapper to ensure maximum security:
+*   **Encrypted PII**: Auth, Profile, and Contacts use `AppStorage.createSecure`.
+    *   **Native**: Hardware-backed keys via `expo-secure-store`.
+    *   **Web**: Non-extractable keys via Web Crypto API stored in **IndexedDB**.
+*   **Non-Sensitive Prefs**: Theme and Mode use unencrypted sync `AppStorage`.
+*   **Transient State**: `modals` and other temporary UI states are NOT persisted (In-memory only) to minimize attack surface.

@@ -1,7 +1,7 @@
 # Chat System Architecture
 
 ## Overview
-The chat system in ChatBasket is designed around an **Ephemeral Relay** architecture with a **3-Icon Status System**.
+The chat system in ChatBasket is designed around a **Relay** architecture with a **3-Icon Status System**.
 
 ## 1. The 3-Icon Status System
 We use a simplified visual language to represent message states. The explicit "Delivered" state (double tick) is **hidden** from the UI to reduce visual clutter.
@@ -15,10 +15,10 @@ We use a simplified visual language to represent message states. The explicit "D
 ### Why no "Delivered" icon?
 We track delivery internally for auto-deletion (server cleanup), but the user only sees "Sent" (Yellow). The icon only turns Green when the recipient actually reads the message.
 
-## 2. Ephemeral Relay & Read Status
-The backend acts as a temporary relay, not a permanent history store.
+## 2. Relay & Read Status
+The backend acts as a relay for message delivery and status updates.
 
--   **Sending**: Messages are stored in Postgres temporarily.
+-   **Sending**: Messages are sent to the backend and assigned a server-side delivery status.
 -   **Delivery**: When the recipient's app fetches the message, it auto-acks (`acknowledgeDelivery`). The backend marks it as delivered.
 -   **Read Status**:
     -   **Server**: Does NOT store a per-message "read" flag.

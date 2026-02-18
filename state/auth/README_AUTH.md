@@ -20,8 +20,10 @@
 * **Logic (current implementation)**:
   1. Pause Splash Screen.
   2. Initialize secure storage (`initializeSecureStorage`).
+     * **Web**: Uses `WebVault` with non-extractable keys in IndexedDB.
+     * **Native**: Uses hardware-backed keys via `expo-secure-store`.
   3. Read session from storage via `getSession()`:
-     * **Web**: only `sessionExpiry` (no sessionId persisted) plus optional cached user.
+     * **Web**: only `sessionExpiry` (no sessionId persisted) plus optional cached user (now encrypted).
      * **Native**: `sessionId`, `userId`, `sessionExpiry`, `user`.
   4. Validate expiry; if valid, set `authState` (and fetch device status). Otherwise, `clearSession()` resets storage and state.
   5. Resume rendering once guards run.
@@ -41,6 +43,8 @@
 * Server-side: call session invalidation endpoint (see service layer) to revoke the `sessionId`.
 
 ## Security & Storage Notes
-* Session tokens are not stored in observable state; they live in secure storage (native) or cookies (web). Observable state only mirrors what is needed for guards/UI.
+* Session tokens are not stored in observable state; they live in secure storage (native) or cookies (web).
+* **Cross-Platform Security**:
+    * **Web**: PII (User, Contacts, Expiry) is encrypted using AES-256-GCM. The encryption key is marked as **non-extractable** in IndexedDB, preventing theft via XSS.
+    * **Native**: Uses hardware-backed AES-128 via MMKV + Keychain/Keystore.
 * `sessionExpiry` gates hydration; expired sessions trigger `clearSession()` to avoid stale cookies/state.
-* Primary device metadata is preserved in state for UI prompts but not required for auth guard decisions.

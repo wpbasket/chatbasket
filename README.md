@@ -26,8 +26,8 @@ We have documented the complex engineering patterns used in this app in detailed
 ### Infrastructure
 4.  **[Notification System (Two-Token)](./notification/README_NOTIFICATIONS.md)**
     *   *Android FCM implementation, Share Intent conflicts, and Background Listeners.*
-5.  **[Storage Strategy (Hybrid Encryption)](./lib/storage/README_STORAGE.md)**
-    *   *Why we mix MMKV (Speed) with SecureStore (Key Management).*
+5.  **[Storage Strategy (Optimal Security)](./lib/storage/README_STORAGE.md)**
+    *   *Hardware-backed AES (Native) and Non-Extractable CryptoKey (Web) strategies.*
 6.  **[API Layer](./lib/README_API_ARCHITECTURE.md)**
     *   *Typed Singleton patterns for decoupling UI from Network logic.*
 
@@ -41,7 +41,7 @@ We have documented the complex engineering patterns used in this app in detailed
 10. **[Zero-Render Architecture](./docs/KEYBOARD_VIEW.md)**
     *   *How we achieved O(1) rendering for Chat & Keyboard interactions.*
 11. **[Chat System Architecture](./app/personal/chat/README_CHAT.md)**
-    *   *3-Icon Status System and Ephemeral Relay logic.*
+    *   *3-Icon Status System and Relay logic.*
 
 ---
 
@@ -99,7 +99,7 @@ For new developers, here is how the app boots up:
 | **State Management** | Legend State (reactive state) |
 | **Styling** | React Native Unistyles |
 | **Animations** | React Native Reanimated + Legend Motion |
-| **Storage** | MMKV + Async Storage + Secure Store |
+| **Storage** | MMKV + SecureStore (Native) / WebVault (Web) |
 | **Notifications** | Expo Notifications |
 | **Networking** | NetInfo for connectivity tracking |
 
