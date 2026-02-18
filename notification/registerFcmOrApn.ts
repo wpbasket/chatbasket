@@ -175,7 +175,9 @@ export async function registerTokenWithBackend(): Promise<boolean> {
 export function setupNotificationListeners(): () => void {
     // Listener for notifications received while app is in foreground
     const notificationListener = Notifications.addNotificationReceivedListener((notification) => {
-        console.log('📬 Notification received:', notification);
+        if (__DEV__) {
+            console.log('📬 Notification received:', notification);
+        }
         // Handle the notification as needed
     });
 
@@ -193,7 +195,9 @@ export function setupNotificationListeners(): () => void {
             return;
         }
 
-        console.log('👆 User interacted with notification:', response);
+        if (__DEV__) {
+            console.log('👆 User interacted with notification:', response);
+        }
         // Handle navigation or other actions based on notification data
 
         // You can navigate to specific screens based on notification data
@@ -205,7 +209,9 @@ export function setupNotificationListeners(): () => void {
                 console.log('❌ Error navigating to URL:', error);
             }
         }
-        console.log('Notification data:', data);
+        if (__DEV__) {
+            console.log('Notification data:', data);
+        }
     });
 
     // Return cleanup function
@@ -225,7 +231,9 @@ export async function checkInitialNotification() {
         if (response) {
             const data = response.notification.request.content.data;
             if (data?.url) {
-                console.log('🚀 Cold start notification with URL:', data.url);
+                if (__DEV__) {
+                    console.log('🚀 Cold start notification with URL:', data.url);
+                }
                 // Cast to any to bypass strict route typing since the URL comes from a dynamic payload
                 router.push(data.url as any);
             }

@@ -37,38 +37,30 @@ export default function RootLayout() {
   // NEW: State to track if the authentication status has been loaded from storage.
   const [authLoaded, setAuthLoaded] = useState(false);
 
-  // const lock = true;
   const lock = useValue(authState.isLoggedIn);
   const sentOtp = useValue(authState.isSentOtp);
   const mode = useValue(appMode$.mode);
+  const segments = useSegments();
 
   // Helper to process deep links (memoized to avoid recreation on every render)
   const handleDeepLink = useCallback((url: string) => {
     if (!url) return;
     const parsed = Linking.parse(url);
+    const currentMode = appMode$.mode.get();
 
     // OPTIMIZATION: Only set mode if it's different to avoid redundant state updates
-    if (parsed.path?.startsWith('public') && mode !== 'public') {
+    if (parsed.path?.startsWith('public') && currentMode !== 'public') {
       setAppMode('public');
-    } else if (parsed.path?.startsWith('personal') && mode !== 'personal') {
+    } else if (parsed.path?.startsWith('personal') && currentMode !== 'personal') {
       setAppMode('personal');
     }
-  }, [mode]); // Recreate only when mode changes
+  }, []); // Stable across app lifecycle
 
+  // One-time initialization of app storage and auth state restoration
   useEffect(() => {
     const init = async () => {
       try {
-        // Note: Cold start deep links are now handled by +native-intent.tsx
-        // This is the modern Expo Router pattern for initial URL handling
-
-        // Initialize all storage (Auth, User, Contacts, Device)
         await initializeAppStorage();
-
-        // Direct background fetch of user after restoring auth (only if logged in)
-        // Direct background fetch of user after restoring auth (only if logged in)
-        // if (authState.isLoggedIn.get()) {
-        //   void getUser();
-        // }
       } catch (e) {
         console.warn("Failed to initialize auth", e);
       } finally {
@@ -76,9 +68,10 @@ export default function RootLayout() {
       }
     };
     init();
+  }, []); // ONLY once per app mount
 
-    // Listen for incoming deep links (Warm Start / Background -> Foreground)
-    // Cold starts are handled by +native-intent.tsx
+  // Dedicated deep link listener (Stable lifecycle)
+  useEffect(() => {
     const subscription = Linking.addEventListener('url', (event) => {
       handleDeepLink(event.url);
     });
@@ -86,15 +79,15 @@ export default function RootLayout() {
     return () => {
       subscription.remove();
     };
-  }, [handleDeepLink]); // Depend on handleDeepLink
+  }, [handleDeepLink]);
 
   const themeName = UnistylesRuntime.themeName;
-  const segments = useSegments();
 
   // Sync app mode with route during navigation
   // On native: +native-intent.tsx handles cold starts, this handles subsequent navigations
   // On web: getInitialMode() reads window.location.pathname, this handles client-side navigation
   useEffect(() => {
+    // Sync mode with current route
     if (segments.length > 0) {
       const firstSegment = segments[0];
 

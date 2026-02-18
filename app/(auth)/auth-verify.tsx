@@ -4,17 +4,16 @@ import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal'
 import { Platform, Pressable, TextInput, View } from 'react-native'
 import { StyleSheet } from 'react-native-unistyles'
 
-import { ApiError, AuthVerificationPayload, SessionResponse } from '@/lib/constantLib'
+import { ApiError,SessionResponse } from '@/lib/constantLib'
 import { authApi } from '@/lib/constantLib/authApi/api.auth'
 import { setSession } from '@/lib/storage/commonStorage/storage.auth'
-import { setAppMode } from '@/state/appMode/state.appMode'
+import { appMode$, setAppMode } from '@/state/appMode/state.appMode'
 import { authState } from '@/state/auth/state.auth'
 import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup'
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown'
-import { getUser } from '@/utils/publicUtils/public.util.profile'
 import { useValue } from '@legendapp/state/react'
 import { router } from 'expo-router'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.setting'
 import { registerTokenWithBackend } from '../../notification/registerFcmOrApn'
 import { showConfirmDialog } from '@/utils/commonUtils/util.modal'
@@ -27,10 +26,12 @@ export default function AuthVerification() {
     const isSubmited = useValue(loginOrSignup$.submitted)
     const isSignup = useValue(loginOrSignup$.isSignup)
     const isSentOtp = useValue(authState.isSentOtp)
+    const mode = useValue(appMode$.mode)
     const resendCooldown = useValue(loginOrSignup$.resendCooldown)
     const resendAttempts = useValue(loginOrSignup$.resendAttempts)
     const resendExpiryAt = useValue(loginOrSignup$.resendExpiryAt)
     const MAX_RESENDS = 3
+    const [pendingSession, setPendingSession] = useState<SessionResponse | null>(null)
 
     useEffect(() => {
         // Reset isSentOtp, email, and password when this component unmounts (route change, back, etc)
@@ -50,6 +51,28 @@ export default function AuthVerification() {
 
     // Reuse shared cooldown ticker (expiry set in auth.tsx)
     useResendCooldown(loginOrSignup$)
+
+    // Finalize session only AFTER app mode has been confirmed to be switched to personal
+    useEffect(() => {
+        if (pendingSession && mode === 'personal') {
+            const finalize = async () => {
+                await setSession({
+                    sessionId: pendingSession.sessionId,
+                    userId: pendingSession.userId,
+                    sessionExpiry: pendingSession.sessionExpiry
+                });
+                void PersonalStorageSetDeviceStatus({
+                    isPrimary: pendingSession.isPrimary,
+                    deviceName: pendingSession.primaryDeviceName || ''
+                });
+
+                // Request notification permissions immediately after successful auth
+                void registerTokenWithBackend();
+            };
+            finalize();
+        }
+    }, [pendingSession, mode]);
+
 
     const handleOtp = async () => {
         loginOrSignup$.submitted.set(true)
@@ -119,21 +142,7 @@ export default function AuthVerification() {
         }
 
         setAppMode('personal');
-        // Final session set (re-confirms session if it was already set temporarily above, or sets it now)
-        await setSession({
-            sessionId: response.sessionId,
-            userId: response.userId,
-            sessionExpiry: response.sessionExpiry
-        });
-        await PersonalStorageSetDeviceStatus({
-            isPrimary: response.isPrimary,
-            deviceName: response.primaryDeviceName || ''
-        });
-
-        // Fire-and-forget user fetch so root layout can update when ready
-        void getUser()
-        // Request notification permissions immediately after successful auth
-        void registerTokenWithBackend()
+        setPendingSession(response);
     }
 
     const handleResendOtp = async () => {

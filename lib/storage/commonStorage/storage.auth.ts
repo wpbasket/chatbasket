@@ -168,6 +168,13 @@ export const isSessionExpired = async (): Promise<boolean> => {
 };
 
 export const restoreAuthState = async (): Promise<void> => {
+  // CRITICAL: If we are already logged in in-memory (e.g. just completed login handshake),
+  // DO NOT restore from storage and risk clearing the session due to race conditions.
+  if (authState.isLoggedIn.get()) {
+    console.log('[StorageAuth] Skipping restoreAuthState - already logged in');
+    return;
+  }
+
   try {
     const session = await getSession();
     const isExpired = !session.sessionExpiry || (new Date(session.sessionExpiry).getTime() <= Date.now());
@@ -201,6 +208,7 @@ export const restoreAuthState = async (): Promise<void> => {
     await clearSession();
   }
 };
+
 
 export const isUserAuthenticated = (): boolean => {
   const currentExpiry = authState.sessionExpiry.get();

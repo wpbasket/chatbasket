@@ -13,7 +13,7 @@ function getInitialMode(): AppMode {
       return 'personal'
     }
   }
-  return (PreferencesStorage.getMode?.() as AppMode | null) ?? 'public'
+  return (PreferencesStorage.getMode?.() as AppMode | null) ?? 'personal'
 }
 
 const initialMode: AppMode = getInitialMode()

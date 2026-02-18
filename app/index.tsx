@@ -7,8 +7,6 @@ export default function HomeScreen() {
   const segments = useSegments();
 
   // CRITICAL FIX: If we have segments (meaning we are deep linked or navigated somewhere),
-  // DO NOT redirect. This prevents index.tsx (which stays in stack) from hijacking
-  // deep links like /public/profile back to /public/home.
   if (segments.length > 0) {
     return null;
   }

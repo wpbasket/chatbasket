@@ -68,7 +68,9 @@ export class ApiClient {
 
       // 🚫 Handle session expiration or invalid session
       if (['session_invalid', 'missing_auth', 'unauthorized', 'invalid_user_id', 'user_not_found'].includes(type)) {
-        clearSession();
+        if (!AUTH_WHITELIST.includes(endpoint)) {
+          clearSession();
+        }
 
         // Toast can be shown if needed
         // Toast.show({
