@@ -26,6 +26,11 @@ const CHAT_ERROR_MAP: Record<string, string> = {
     // ── Access errors ──
     chat_access_denied: 'You don\'t have access to this conversation.',
     chat_not_found: 'This conversation could not be found.',
+
+    // ── File errors ──
+    file_too_large: 'The file is too large. Please select a smaller file.',
+    invalid_file_type: 'This file type is not supported.',
+    file_upload_failed: 'Failed to upload file. Please try again.',
 };
 
 /**

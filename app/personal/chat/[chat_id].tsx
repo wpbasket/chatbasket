@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { FlatList, Alert, Platform } from 'react-native';
+import { FlatList, Alert, Platform, Linking } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
     ThemedText,
@@ -22,21 +22,20 @@ import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
 import { batch } from '@legendapp/state';
 import { useValue, Memo } from '@legendapp/state/react';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 
 const PersonalChatScreen = React.memo(() => {
 
-    // -------- Route Guard Lifecycle --------
     useFocusEffect(
         useCallback(() => {
-            // Guard: If chat is entered without proper unlocking (e.g. deep link), redirect out
             if (!$chatMessagesState.isChatOpen.peek()) {
-                // Use replace to avoid adding history entry if invalid
                 router.replace('/personal/home');
                 return;
             }
 
             return () => {
-                // Runs when screen loses focus (e.g. back navigation or push to another screen)
                 $chatMessagesState.isChatOpen.set(false);
             };
         }, [])
@@ -103,12 +102,9 @@ const PersonalChatScreen = React.memo(() => {
             </Memo>
         </ThemedView>
     );
-}); // Note: No props passed here, so we rely on React.memo() with zero props being naturally stable.
-// However, we can also add a comparison if we had props.
+});
 
 export default PersonalChatScreen;
-
-// -------- Sub-components to isolate re-renders --------
 
 const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId: string, chatId: string, index: number }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
@@ -126,14 +122,10 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         }
     }
 
-    // Date Header Logic: 
-    // Since list is inverted, index N is older than index N-1.
-    // We show a header if this message is the first of its date (compared to message at index + 1).
     const renderDateHeader = () => {
         const prevMessageId = messageIds[index + 1];
         const currentMsgDate = new Date(message.created_at).toDateString();
 
-        // If it's the oldest message (last in array), or date changed from older message
         let showHeader = false;
         if (!prevMessageId) {
             showHeader = true;
@@ -169,7 +161,6 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
     };
 
     const handleLongPress = useCallback((event: import('react-native').GestureResponderEvent) => {
-        // Prevent default browser context menu on web
         if (event && 'preventDefault' in event) {
             (event as any).preventDefault();
         }
@@ -192,11 +183,8 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 id: 'delete',
                 label: 'Delete for Me',
                 onPress: () => {
-                    console.log('[UI] Single Delete initiated for:', messageId);
                     $chatMessagesState.removeMessages(chatId, [messageId]);
-                    PersonalChatApi.deleteMessageForMe({
-                        message_ids: [messageId]
-                    }).then(() => console.log('[UI] Single Delete API success'))
+                    PersonalChatApi.deleteMessageForMe({ message_ids: [messageId] })
                         .catch(err => console.error('[UI] Delete failed', err));
                 }
             }
@@ -207,15 +195,9 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 id: 'unsend',
                 label: 'Unsend',
                 onPress: () => {
-                    console.log('[UI] Single Unsend initiated for:', messageId);
                     $chatMessagesState.unsendMessages(chatId, [messageId]);
-                    PersonalChatApi.unsendMessage({
-                        chat_id: chatId,
-                        message_ids: [messageId]
-                    }).then(() => console.log('[UI] Single Unsend API success'))
-                        .catch(err => {
-                            console.error('[UI] Unsend failed', err);
-                        });
+                    PersonalChatApi.unsendMessage({ chat_id: chatId, message_ids: [messageId] })
+                        .catch(err => console.error('[UI] Unsend failed', err));
                 }
             });
         }
@@ -230,21 +212,57 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
     }, [chatId, messageId, message.is_from_me, status]);
 
     const handlePress = useCallback(() => {
+        // Always check select mode first, regardless of message type.
         const isSelectMode = $chatMessagesState.chats[chatId]?.isSelectMode.peek();
         if (isSelectMode) {
-            $chatMessagesState.toggleMessageSelection(chatId, messageId);
+            // Compute the next selectedMessageIds ourselves so we can check the
+            // resulting length synchronously — Legend State .peek() after
+            // toggleMessageSelection may not reflect the update in the same tick.
+            const current = $chatMessagesState.chats[chatId]?.selectedMessageIds.peek() ?? [];
+            const alreadySelected = current.includes(messageId);
+            const next = alreadySelected
+                ? current.filter(id => id !== messageId)
+                : [...current, messageId];
+
+            // Apply directly instead of calling toggleMessageSelection
+            $chatMessagesState.chats[chatId]?.selectedMessageIds.set(next);
+
+            // If nothing is selected, exit select mode entirely — closes the bar and resets previews
+            if (next.length === 0) {
+                $chatMessagesState.toggleSelectMode(chatId, false);
+            }
+            return;
         }
-    }, [chatId, messageId]);
+
+        // Not in select mode — handle file open
+        const activeUrl = message.download_url || message.file_url;
+        if (message.message_type === 'file' && activeUrl) {
+            if (Platform.OS === 'web') {
+                window.open(activeUrl, '_blank');
+            } else {
+                Linking.openURL(activeUrl).catch(err => {
+                    console.error('[UI] Failed to open URL:', err);
+                });
+            }
+        }
+    }, [chatId, messageId, message.message_type, message.file_url, message.download_url]);
 
     const isSelected = useValue(() => {
         const selectedIds = $chatMessagesState.chats[chatId]?.selectedMessageIds.get() || [];
         return selectedIds.includes(messageId);
     });
 
+    // FIX: Subscribe to isSelectMode so MessageBubble re-renders when
+    // select mode is toggled — allowing it to gate media actions correctly.
+    const isSelectMode = useValue(() => {
+        return $chatMessagesState.chats[chatId]?.isSelectMode.get() ?? false;
+    });
+
     return (
         <ThemedView style={{ backgroundColor: 'transparent' }}>
             {renderDateHeader()}
             <MessageBubble
+                message_id={messageId}
                 text={message.content}
                 type={message.is_from_me ? 'me' : 'other'}
                 messageType={message.message_type}
@@ -255,6 +273,13 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 onContextMenu={handleLongPress}
                 onPress={handlePress}
                 isSelected={isSelected}
+                isSelectMode={isSelectMode}
+                fileUrl={message.file_url}
+                viewUrl={message.view_url}
+                downloadUrl={message.download_url}
+                fileName={message.file_name}
+                fileSize={message.file_size}
+                fileMimeType={message.file_mime_type}
             />
         </ThemedView>
     );
@@ -266,7 +291,6 @@ const ChatContentContainer = React.memo(({
     recipient_name,
     displayName
 }: any) => {
-    // -------- Initialize chat on focus --------
     useFocusEffect(
         useCallback(() => {
             if (!chat_id) return;
@@ -276,43 +300,26 @@ const ChatContentContainer = React.memo(({
                 const currentChat = $chatMessagesState.chats[chat_id];
                 currentChat.recipientId.set(recipient_id ?? null);
 
-                currentChat.recipientId.set(recipient_id ?? null);
-
-                // 2. To avoid redundant '/ack' calls from ackIncomingMessages,
-                // we proactively mark all known messages in this chat as delivered (incoming)
-                // or synced-to-primary (outgoing) LOCALLY.
                 const msgs = currentChat.messages.peek();
                 if (msgs.length > 0) {
                     msgs.forEach(m => {
                         if (!m.is_from_me && !m.delivered_to_recipient) {
                             currentChat.messagesById[m.message_id].delivered_to_recipient.set(true);
                         }
-                        // [TESTING] Removed isPrimary check to allow secondary devices to see sync status update locally
-                        if (m.is_from_me && !m.synced_to_sender_primary) { // && authState.isPrimary.peek()) {
+                        if (m.is_from_me && !m.synced_to_sender_primary) {
                             currentChat.messagesById[m.message_id].synced_to_sender_primary.set(true);
                         }
                     });
                 }
 
-                // Always fetch latest messages on focus to ensure we don't ACK messages we haven't seen yet.
-                // setMessages uses a smart merge, so this is safe and preserves local state.
                 loadMessages(chat_id).then(() => {
-                    // Mark as read locally and on backend ONLY after we have the latest data
                     void PersonalChatApi.markChatRead({ chat_id }).catch(() => { });
                     $chatListState.markChatRead(chat_id);
                 });
             });
-
-            return () => {
-                // Optional: cleanup if needed when losing focus
-                // $chatMessagesState.activeChatId.set(null); 
-                // Note: Clearing activeChatId here might cause flicker on simple background/foreground.
-                // kept strictly for unmount or specific logic if needed.
-            };
         }, [chat_id, recipient_id])
     );
 
-    // Cleanup on actual unmount
     useEffect(() => {
         return () => {
             $chatMessagesState.activeChatId.set(null);
@@ -332,7 +339,6 @@ const ChatContentContainer = React.memo(({
                 offset: 0,
             });
 
-            // Update chat metadata (Read Receipts) from response to avoid extra API call
             if (response.other_user_last_read_at) {
                 batch(() => {
                     const chat$ = $chatListState.chatsById[chatId];
@@ -340,7 +346,6 @@ const ChatContentContainer = React.memo(({
                     if (chat) {
                         chat$.other_user_last_read_at.set(response.other_user_last_read_at);
 
-                        // Also update the preview status if the last message is now read
                         if (chat.last_message_created_at && chat.last_message_is_from_me) {
                             const lastMsgTime = new Date(chat.last_message_created_at).getTime();
                             const readTime = new Date(response.other_user_last_read_at).getTime();
@@ -352,13 +357,10 @@ const ChatContentContainer = React.memo(({
                 });
             }
 
-            const messagesWithStatus = (response.messages ?? []).map(m => {
-                // Delivered does NOT mean Read. It means Sent (Yellow).
-                return {
-                    ...m,
-                    status: 'sent'
-                } as MessageEntry;
-            });
+            const messagesWithStatus = (response.messages ?? []).map(m => ({
+                ...m,
+                status: 'sent'
+            } as MessageEntry));
 
             batch(() => {
                 $chatMessagesState.setMessages(chatId, messagesWithStatus);
@@ -366,9 +368,7 @@ const ChatContentContainer = React.memo(({
                     $chatMessagesState.chats[chatId].hasMore.set(false);
                 }
 
-                // Sync Chat List Preview (Last Message) with latest fetched message
                 if (messagesWithStatus.length > 0) {
-                    // Sort to find the absolute latest message in this batch
                     const sorted = [...messagesWithStatus].sort((a, b) =>
                         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                     );
@@ -376,7 +376,6 @@ const ChatContentContainer = React.memo(({
                     const chat$ = $chatListState.chatsById[chatId];
                     const currentChat = chat$.peek();
 
-                    // Only update if this message is newer than what we currently have in preview
                     if (currentChat && (!currentChat.last_message_created_at || new Date(latestMsg.created_at).getTime() > new Date(currentChat.last_message_created_at).getTime())) {
                         chat$.assign({
                             last_message_content: latestMsg.content,
@@ -415,8 +414,8 @@ const ChatContentContainer = React.memo(({
             created_at: now,
             expires_at: now,
             status: 'pending',
-            delivered_to_recipient: false, // Added Phase 8b/9
-            synced_to_sender_primary: true, // Optimistically true as it's created locally
+            delivered_to_recipient: false,
+            synced_to_sender_primary: true,
         };
 
         const existingChat = $chatListState.chatsById[chat_id]?.peek();
@@ -430,7 +429,7 @@ const ChatContentContainer = React.memo(({
             last_message_status: 'pending',
             last_message_is_from_me: true,
             unread_count: existingChat?.unread_count || 0,
-            other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(), // Added Phase 9
+            other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(),
             updated_at: now,
         } as ChatEntry;
 
@@ -449,10 +448,7 @@ const ChatContentContainer = React.memo(({
 
             batch(() => {
                 $chatMessagesState.removeMessage(chat_id, tempId);
-                $chatMessagesState.addMessage(chat_id, {
-                    ...response,
-                    status: 'sent'
-                });
+                $chatMessagesState.addMessage(chat_id, { ...response, status: 'sent' });
 
                 $chatListState.upsertChat({
                     ...optimisticChat,
@@ -473,36 +469,151 @@ const ChatContentContainer = React.memo(({
         }
     }, [chat_id, recipient_name]);
 
+    const sendFile = useCallback(async (asset: any, type: 'image' | 'video' | 'audio' | 'file') => {
+        const currentChat = $chatMessagesState.chats[chat_id];
+        const recipId = currentChat.recipientId.peek();
+        if (!recipId || !chat_id) return;
+
+        const fileSize = (asset as any).size || (asset as any).fileSize || 0;
+        const fileName = (asset as any).name || (asset as any).fileName || 'file';
+        const fileMimeType = (asset as any).mimeType || (asset as any).type || (type === 'image' ? 'image/jpeg' : type === 'video' ? 'video/mp4' : type === 'audio' ? 'audio/mpeg' : null);
+
+        if (fileSize > 100 * 1024 * 1024) {
+            showAlert(`File "${fileName}" is too large. Max 100MB allowed.`);
+            return;
+        }
+
+        const tempId = `temp-${Date.now()}`;
+        const now = new Date().toISOString();
+
+        const optimisticMsg: MessageEntry = {
+            message_id: tempId,
+            chat_id,
+            is_from_me: true,
+            recipient_id: recipId,
+            content: '',
+            message_type: type,
+            file_mime_type: fileMimeType,
+            created_at: now,
+            expires_at: now,
+            status: 'pending',
+            delivered_to_recipient: false,
+            synced_to_sender_primary: true,
+            // @ts-ignore
+            file_url: asset.uri,
+            file_name: fileName,
+            file_size: fileSize,
+            progress: 0,
+        };
+
+        batch(() => {
+            $chatMessagesState.addMessage(chat_id, optimisticMsg);
+        });
+
+        try {
+            const formData = await buildFormDataFromAsset(asset, { fieldName: 'file' });
+            formData.append('recipient_id', recipId);
+            formData.append('message_type', type);
+            formData.append('caption', '');
+
+            const response = await PersonalChatApi.uploadFileWithProgress(formData, (progress) => {
+                $chatMessagesState.updateMessageStatus(chat_id, tempId, { progress });
+            });
+
+            batch(() => {
+                $chatMessagesState.removeMessage(chat_id, tempId);
+                const finalMsg: MessageEntry = {
+                    ...response as any,
+                    view_url: response.view_url || asset.uri,
+                    download_url: response.download_url,
+                    file_mime_type: response.file_mime_type || fileMimeType,
+                    chat_id,
+                    recipient_id: recipId,
+                    is_from_me: true,
+                    message_type: type,
+                    content: '',
+                    status: 'sent',
+                    delivered_to_recipient: false,
+                    synced_to_sender_primary: true,
+                    progress: 100,
+                };
+                $chatMessagesState.addMessage(chat_id, finalMsg);
+
+                $chatListState.upsertChat({
+                    ...$chatListState.chatsById[chat_id].peek(),
+                    last_message_content: type === 'image' ? 'Sent an image' : `Sent a file: ${fileName}`,
+                    last_message_created_at: response.created_at,
+                    last_message_status: 'sent',
+                    last_message_is_from_me: true,
+                    last_message_type: type,
+                    last_message_id: response.message_id,
+                } as ChatEntry);
+            });
+        } catch (err: unknown) {
+            batch(() => {
+                $chatMessagesState.removeMessage(chat_id, tempId);
+                $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'File could not be sent.', { name: recipient_name }));
+            });
+        }
+    }, [chat_id, recipient_name]);
+
+    const handleAttach = useCallback((event: any) => {
+        const position = {
+            x: event?.nativeEvent?.pageX ?? 0,
+            y: event?.nativeEvent?.pageY ?? 0,
+        };
+
+        const pickMedia = async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images', 'videos'],
+                quality: 1,
+            });
+            if (!result.canceled && result.assets && result.assets[0]) {
+                const asset = result.assets[0];
+                const type = (asset.type === 'video' ? 'video' : 'image') as 'image' | 'video' | 'audio' | 'file';
+                sendFile(asset, type);
+            }
+        };
+
+        const pickDocument = async () => {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                copyToCacheDirectory: true,
+            });
+            if (!result.canceled && result.assets && result.assets[0]) {
+                sendFile(result.assets[0], 'file');
+            }
+        };
+
+        showControllersModal([
+            { id: 'media', label: 'Photo & Video', onPress: pickMedia },
+            { id: 'doc', label: 'Document', onPress: pickDocument },
+        ], {
+            title: 'Attach',
+            position,
+            showConfirmButton: false,
+            showCancelButton: true,
+            closeOnControllerPress: true,
+        });
+    }, [sendFile]);
+
     const loadMore = useCallback(async () => {
         if (!chat_id) return;
         const currentChat = $chatMessagesState.chats[chat_id];
         const chatData = currentChat.peek();
-        const hasMore = chatData.hasMore;
-        const isLoading = chatData.loading;
-        if (!hasMore || isLoading) return;
+        if (!chatData.hasMore || chatData.loading) return;
 
         try {
             currentChat.loading.set(true);
             const offset = currentChat.offset.peek();
-            const response = await PersonalChatApi.getMessages({
-                chat_id,
-                limit: 50,
-                offset,
-            });
+            const response = await PersonalChatApi.getMessages({ chat_id, limit: 50, offset });
+
+            const messagesWithStatus = (response.messages ?? []).map(m => ({
+                ...m, status: 'sent'
+            } as MessageEntry));
 
             batch(() => {
-                const messages = response.messages ?? [];
-                if (messages.length < 50) {
-                    currentChat.hasMore.set(false);
-                }
-                const messagesWithStatus = messages.map(m => {
-                    // Delivered does NOT mean Read. It means Sent (Yellow).
-                    // Read status is calculated dynamically in MessageItemWrapper via timestamps.
-                    return {
-                        ...m,
-                        status: 'sent'
-                    } as MessageEntry;
-                });
+                if (messagesWithStatus.length < 50) currentChat.hasMore.set(false);
                 $chatMessagesState.prependMessages(chat_id, messagesWithStatus);
             });
         } catch {
@@ -514,11 +625,7 @@ const ChatContentContainer = React.memo(({
 
     const renderItem = useCallback(
         ({ item: messageId, index }: { item: string, index: number }) => (
-            <MessageItemWrapper
-                messageId={messageId}
-                chatId={chat_id}
-                index={index}
-            />
+            <MessageItemWrapper messageId={messageId} chatId={chat_id} index={index} />
         ),
         [chat_id]
     );
@@ -529,32 +636,20 @@ const ChatContentContainer = React.memo(({
         const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
         if (selectedIds.length === 0) return;
 
-        console.log('[UI] Requesting Bulk Unsend confirmation');
         const confirmed = await showConfirmDialog(
             `Are you sure you want to unsend ${selectedIds.length} messages?`,
-            {
-                confirmText: 'Unsend All',
-                cancelText: 'Cancel',
-                confirmVariant: 'destructive'
-            }
+            { confirmText: 'Unsend All', cancelText: 'Cancel', confirmVariant: 'destructive' }
         );
 
         if (confirmed) {
-            console.log('[UI] Bulk Unsend confirmed by user');
-            console.log('[UI] Bulk Unsend initiated for:', selectedIds);
             $chatMessagesState.unsendMessages(chat_id, selectedIds);
             $chatMessagesState.toggleSelectMode(chat_id, false);
+            $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
             try {
-                await PersonalChatApi.unsendMessage({
-                    chat_id: chat_id,
-                    message_ids: selectedIds
-                });
-                console.log('[UI] Bulk Unsend API success');
+                await PersonalChatApi.unsendMessage({ chat_id, message_ids: selectedIds });
             } catch (err) {
                 console.error('[UI] Bulk Unsend failed', err);
             }
-        } else {
-            console.log('[UI] Bulk Unsend cancelled by user');
         }
     }, [chat_id]);
 
@@ -562,21 +657,22 @@ const ChatContentContainer = React.memo(({
         const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
         if (selectedIds.length === 0) return;
 
-        console.log('[UI] Bulk Delete initiated for:', selectedIds);
         $chatMessagesState.removeMessages(chat_id, selectedIds);
         $chatMessagesState.toggleSelectMode(chat_id, false);
+        $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
         try {
-            await PersonalChatApi.deleteMessageForMe({
-                message_ids: selectedIds
-            });
-            console.log('[UI] Bulk Delete API success');
+            await PersonalChatApi.deleteMessageForMe({ message_ids: selectedIds });
         } catch (err) {
             console.error('[UI] Bulk Delete failed', err);
         }
     }, [chat_id]);
 
     const handleCancelSelection = useCallback(() => {
+        // toggleSelectMode should clear selectedMessageIds internally,
+        // but explicitly clear them here too so the media preview state
+        // in MessageBubble (isSelectMode -> isSelected) fully resets.
         $chatMessagesState.toggleSelectMode(chat_id, false);
+        $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
     }, [chat_id]);
 
     return (
@@ -627,7 +723,6 @@ const ChatContentContainer = React.memo(({
                             const isSelectMode = $chatMessagesState.chats[chat_id]?.isSelectMode.get();
                             const selectedCount = $chatMessagesState.chats[chat_id]?.selectedMessageIds.get()?.length || 0;
 
-                            // Check if ALL selected messages are from me (to show Unsend)
                             const messagesById = $chatMessagesState.chats[chat_id]?.messagesById.peek() || {};
                             const selectedIds = $chatMessagesState.chats[chat_id]?.selectedMessageIds.peek() || [];
                             const allFromMe = selectedIds.every(id => messagesById[id]?.is_from_me);
@@ -648,6 +743,7 @@ const ChatContentContainer = React.memo(({
                                 <ChatInputBar
                                     chatId={chat_id}
                                     onSend={sendMessage}
+                                    onAttach={handleAttach}
                                     sendingObs={$chatMessagesState.chats[chat_id]?.sending}
                                 />
                             );

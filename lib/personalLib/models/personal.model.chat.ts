@@ -49,6 +49,14 @@ export interface MessageEntry {
     status?: 'pending' | 'sent' | 'read';
     created_at: string;      // Go time.Time → JSON string
     expires_at: string;
+    file_url?: string;
+    file_name?: string | null;
+    file_size?: number | null;
+    file_mime_type?: string | null;
+    view_url?: string;
+    download_url?: string;
+    progress?: number;
+    file_id?: string | null;
 }
 
 /**
@@ -93,9 +101,13 @@ export interface AckDeliveryResponse {
  */
 export interface UploadFileResponse {
     message_id: string;
-    file_url: string;
-    file_name: string | null;   // Go *string
-    file_size: number | null;   // Go *int64
+    file_id: string;
+    message_type: string;
+    file_mime_type?: string | null;
+    view_url?: string;
+    download_url: string;
+    file_name: string | null;
+    file_size: number | null;
     created_at: string;
     expires_at: string;
 }
@@ -104,7 +116,8 @@ export interface UploadFileResponse {
  * GetFileURLResponse wraps the file URL fetch response.
  */
 export interface GetFileURLResponse {
-    file_url: string;
+    view_url?: string;
+    download_url: string;
 }
 
 /**

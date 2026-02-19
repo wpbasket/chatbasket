@@ -100,7 +100,9 @@
           ]
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

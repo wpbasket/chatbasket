@@ -2,6 +2,7 @@ import { observable, batch, computed, type Observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
 import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { $personalStateUser } from '../user/personal.state.user';
 import { authState } from '../../auth/state.auth';
 
@@ -109,6 +110,8 @@ const syncPendingMessages = async () => {
         const response = await PersonalChatApi.getPendingMessages({ limit: 100 });
         const messages = response.messages || [];
         if (messages.length === 0) return;
+
+        // Proactive URL resolution removed - handled by backend in Phase 11
 
         console.log(`[Background-Sync] Found ${messages.length} undelivered messages. Storing before ACK.`);
 

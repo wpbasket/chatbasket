@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
 import { StyleProp, TextStyle } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
+
 // Map SFSymbol-like names to Ionicons names (industry standard)
 const MAPPING = {
   'house.fill': 'home',
@@ -21,15 +22,54 @@ const MAPPING = {
   'account.unlock': 'lock-open',
   'check': 'checkmark-sharp',
   'checkmark': 'checkmark',
-  'checkmark.double': 'checkmark-done', // Added for Read Status
+  'checkmark.double': 'checkmark-done',
   'checkmark.circle': 'checkmark-circle-outline',
   'theme': 'sunny-sharp',
   'magnifyingglass': 'search',
   'clock': 'time-outline',
   'alert': 'alert-circle-outline',
+  'plus.circle.fill': 'add-circle',
+  'doc.fill': 'document',
+  'photo.fill': 'image',
+  'play.fill': 'play',
+  'pause.fill': 'pause',
+  'video.fill': 'videocam',
+  'waveform': 'mic',
+  'xmark': 'close',
 } as const;
 
-export type IconSymbolName = keyof typeof MAPPING;
+export type IconSymbolName =
+  | 'house.fill'
+  | 'house.line'
+  | 'paperplane.fill'
+  | 'paperplane.line'
+  | 'chevron.left.forwardslash.chevron.right'
+  | 'chevron.right'
+  | 'chevron.left'
+  | 'arrow.left'
+  | 'arrow.right'
+  | 'person.fill'
+  | 'person.line'
+  | 'account.add'
+  | 'account.login'
+  | 'account.lock'
+  | 'account.unlock'
+  | 'check'
+  | 'checkmark'
+  | 'checkmark.double'
+  | 'checkmark.circle'
+  | 'theme'
+  | 'magnifyingglass'
+  | 'clock'
+  | 'alert'
+  | 'plus.circle.fill'
+  | 'doc.fill'
+  | 'photo.fill'
+  | 'play.fill'
+  | 'pause.fill'
+  | 'video.fill'
+  | 'waveform'
+  | 'xmark';
 
 /**
  * An icon component that uses Ionicons.
@@ -46,18 +86,19 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   color?: string;
 }) {
-  // Use the color prop if provided, otherwise fall back to the theme text color
   const { theme } = useUnistyles();
   const color = propColor || theme.colors.text;
 
-  if (!MAPPING[name]) {
+  const iconName = MAPPING[name as keyof typeof MAPPING];
+
+  if (!iconName) {
     console.warn(`Icon "${name}" is not mapped to Ionicons.`);
     return null;
   }
 
   return (
     <Ionicons
-      name={MAPPING[name]}
+      name={iconName as any}
       size={size}
       color={color}
       style={style}

@@ -11,12 +11,14 @@ import type { ObservablePrimitive } from '@legendapp/state';
 type ChatInputBarProps = {
     chatId: string;
     onSend: () => void;
+    onAttach?: (event: import('react-native').GestureResponderEvent) => void;
     sendingObs?: ObservablePrimitive<boolean>;
 };
 
 export default function ChatInputBar({
     chatId,
     onSend,
+    onAttach,
     sendingObs,
 }: ChatInputBarProps) {
     const { theme } = useUnistyles();
@@ -39,6 +41,23 @@ export default function ChatInputBar({
 
     return (
         <ThemedView style={styles.inputBar}>
+            <Pressable
+                onPress={onAttach}
+                onPressIn={handlePressIn}
+                accessibilityRole="button"
+                accessibilityLabel="Attach file"
+                style={({ pressed }) => [
+                    styles.attachBtn,
+                    pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }
+                ]}
+            >
+                <IconSymbol
+                    name="plus.circle.fill"
+                    size={28}
+                    color={theme.colors.primary}
+                />
+            </Pressable>
+
             <TextInput
                 value={text}
                 onChangeText={onChangeText}
@@ -92,6 +111,12 @@ const styles = StyleSheet.create((theme, rt) => ({
         borderTopWidth: 1,
         borderColor: theme.colors.border,
         backgroundColor: theme.colors.background,
+    },
+    attachBtn: {
+        marginRight: 8,
+        marginBottom: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     input: {
         flex: 1,

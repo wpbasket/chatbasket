@@ -39,8 +39,10 @@ export class FileUploadClient {
             }
 
             const { message = '', type = 'unknown_error', code = response.status } = errorData;
-            if (code === 401 && ['session_invalid', 'missing_auth'].includes(type)) {
-                clearSession();
+            if (['session_invalid', 'missing_auth', 'invalid_user_id', 'user_not_found'].includes(type)) {
+                if (!AUTH_WHITELIST.includes(endpoint)) {
+                    clearSession();
+                }
             }
 
             throw new ApiError(message, code, type, errorData);

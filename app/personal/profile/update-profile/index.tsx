@@ -164,6 +164,13 @@ export default function PersonalUpdateProfile() {
         return
       }
 
+      // 10MB limit for profile pictures
+      const fileSize = (currentAvatarFile as any).size || (currentAvatarFile as any).fileSize || 0;
+      if (fileSize > 10 * 1024 * 1024) {
+        showAlert('Profile picture is too large. Max 10MB allowed.');
+        return;
+      }
+
       try {
         const formData = await buildFormDataFromAsset(currentAvatarFile, { fieldName: 'avatar' });
 

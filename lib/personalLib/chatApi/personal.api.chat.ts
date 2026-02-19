@@ -1,4 +1,6 @@
+import { Platform } from 'react-native';
 import { apiClient } from "@/lib/constantLib";
+import { authState } from "@/state/auth/state.auth";
 import type {
     GetChatsResponse,
     GetMessagesResponse,
@@ -64,6 +66,70 @@ async function uploadFile(formData: FormData): Promise<UploadFileResponse> {
     return apiClient.post<UploadFileResponse>('/personal/chat/upload', formData);
 }
 
+/** 
+ * POST /personal/chat/upload with progress tracking using XMLHttpRequest.
+ * fetch() does not support upload progress tracking.
+ */
+function uploadFileWithProgress(
+    formData: FormData,
+    onProgress: (progress: number) => void
+): Promise<UploadFileResponse> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const url = `${apiClient.baseURL}/personal/chat/upload`.replace(/\/+$/, '');
+
+        xhr.open('POST', url);
+
+        // Standard headers
+        xhr.setRequestHeader('Accept', 'application/json');
+
+        // Add Authorization header for mobile (syncing with ApiClient logic)
+        const isWeb = Platform.OS === 'web';
+        const sessionId = authState.sessionId.peek();
+        const userId = authState.userId.peek();
+
+        if (sessionId && userId && !isWeb) {
+            xhr.setRequestHeader('Authorization', `Bearer ${sessionId}:${userId}`);
+        }
+
+        // Web credentials mode
+        if (isWeb) {
+            xhr.withCredentials = true;
+        }
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const progress = Math.round((event.loaded / event.total) * 100);
+                onProgress(progress);
+            }
+        };
+
+        xhr.onload = () => {
+            console.log(`[API] Upload XHR onload. Status: ${xhr.status}`);
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    resolve(response);
+                } catch (e) {
+                    reject(new Error('Failed to parse upload response'));
+                }
+            } else {
+                try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    reject(errorData);
+                } catch {
+                    reject(new Error(`Upload failed with status ${xhr.status}`));
+                }
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.onabort = () => reject(new Error('Upload aborted'));
+
+        xhr.send(formData);
+    });
+}
+
 /** GET /personal/chat/file-url?message_id= */
 async function getFileURL(query: GetFileURLQuery): Promise<GetFileURLResponse> {
     const params = new URLSearchParams({ message_id: query.message_id });
@@ -114,6 +180,7 @@ export const PersonalChatApi = {
     acknowledgeDelivery,
     getUserChats,
     uploadFile,
+    uploadFileWithProgress,
     getFileURL,
     markChatRead,
     unsendMessage,

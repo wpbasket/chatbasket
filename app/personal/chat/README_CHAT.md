@@ -38,6 +38,9 @@ We use `@legendapp/state` to drive immediate UI updates.
 3.  **Success**: Optimistic message replaced with real ID; status updates to 'Sent'.
 4.  **Error**: Message marked as failed; retry option shown.
 
+### 3.1 Large File Support
+The chat system supports files up to **100MB**. The network layer is configured to allow these transfers to take up to **10 minutes**, ensuring that slow connections can still complete large uploads without getting cut off by standard API timeouts.
+
 ## 4. Components
 -   **`[chat_id].tsx`**: Main controller. Handles data fetching and status calculation.
 -   **`MessageBubble.tsx`**: Dumb component. Renders text/media and the status icon.

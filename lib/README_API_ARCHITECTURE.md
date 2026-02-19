@@ -13,6 +13,9 @@ We decouple the **UI** from the **Network Implementation**. Components never cal
   * Handles Base URL normalization.
   * Whitelists auth endpoints from auth headers.
   * Standardizes error handling; clears session when backend returns `session_invalid` / `missing_auth`.
+  * **Timeout Strategy**:
+    * **Standard Requests**: Targeted at **30 seconds** (enforced by backend middleware).
+    * **Data Transfers**: File uploads (Chat, Avatars) support up to **10 minutes** to accommodate large payloads (100MB) on slow connections.
 
 ### 2. The API Definition (e.g., `public.api.profile.ts`)
 *   **Role**: Define the Contract.
