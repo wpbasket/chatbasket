@@ -158,7 +158,10 @@ export default PersonalHome;
 
 const HomeLogic = React.memo(({ fetchChats }: { fetchChats: () => void }) => {
   useEffect(() => {
-    fetchChats();
+    const timer = setTimeout(() => {
+      fetchChats();
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [fetchChats]);
   return null;
 });

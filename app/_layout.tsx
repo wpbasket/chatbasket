@@ -139,7 +139,9 @@ export default function RootLayout() {
         initUserPosts();
         // Register push notification token after app is fully loaded and visible
         if (authState.isLoggedIn.get()) {
-          void registerTokenWithBackend();
+          setTimeout(() => {
+            void registerTokenWithBackend();
+          }, 10000);
           // Check if app was opened via notification (Cold Start)
           void checkInitialNotification();
         }

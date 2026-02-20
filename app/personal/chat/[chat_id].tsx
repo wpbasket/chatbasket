@@ -195,8 +195,10 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 id: 'unsend',
                 label: 'Unsend',
                 onPress: () => {
-                    $chatMessagesState.unsendMessages(chatId, [messageId]);
                     PersonalChatApi.unsendMessage({ chat_id: chatId, message_ids: [messageId] })
+                        .then(() => {
+                            $chatMessagesState.unsendMessages(chatId, [messageId]);
+                        })
                         .catch(err => console.error('[UI] Unsend failed', err));
                 }
             });
@@ -313,8 +315,10 @@ const ChatContentContainer = React.memo(({
                 }
 
                 loadMessages(chat_id).then(() => {
-                    void PersonalChatApi.markChatRead({ chat_id }).catch(() => { });
-                    $chatListState.markChatRead(chat_id);
+                    setTimeout(() => {
+                        void PersonalChatApi.markChatRead({ chat_id }).catch(() => { });
+                        $chatListState.markChatRead(chat_id);
+                    }, 1500);
                 });
             });
         }, [chat_id, recipient_id])
@@ -642,11 +646,11 @@ const ChatContentContainer = React.memo(({
         );
 
         if (confirmed) {
-            $chatMessagesState.unsendMessages(chat_id, selectedIds);
             $chatMessagesState.toggleSelectMode(chat_id, false);
             $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
             try {
                 await PersonalChatApi.unsendMessage({ chat_id, message_ids: selectedIds });
+                $chatMessagesState.unsendMessages(chat_id, selectedIds);
             } catch (err) {
                 console.error('[UI] Bulk Unsend failed', err);
             }

@@ -83,6 +83,7 @@ const MessageBubble = memo(
 
         // ── Media type detection — memoized, only recomputes when mime/name/type change ─
         const { isImage, isVideo, isAudio } = useMemo(() => {
+            if (messageType === 'unsent') return { isImage: false, isVideo: false, isAudio: false };
             const lowerMime = (fileMimeType || '').toLowerCase();
             const lowerName = (fileName || '').toLowerCase();
             return {
@@ -130,7 +131,8 @@ const MessageBubble = memo(
         };
 
         const renderStatusIcon = () => {
-            if (!isMe || messageType === 'unsent') return null;
+            if (messageType === 'unsent') return <View style={styles.statusPlaceholder} />;
+            if (!isMe) return null;
             if (status === 'pending') return (
                 <View style={styles.statusContainer}>
                     <IconSymbol name="clock" size={16} color="rgba(255,255,255,0.7)" />
@@ -559,7 +561,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     contentPadding: {
         paddingTop: 4,
-        paddingBottom: 0,
+        // paddingBottom: 0,
         paddingHorizontal: 20,
     },
     bubbleText: {
@@ -622,6 +624,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     unsentText: {
         fontSize: 14,
+        lineHeight: 20,
         fontStyle: 'italic',
         opacity: 0.6,
         color: theme.colors.textSecondary,
@@ -645,7 +648,7 @@ const styles = StyleSheet.create((theme) => ({
         justifyContent: 'flex-end',
         paddingHorizontal: 20,
         paddingBottom: 0,
-        marginTop: -5,
+        marginTop: -4,
     },
     timeText: {
         fontSize: 8.5,

@@ -9,7 +9,7 @@ import { ApiError } from '../models/model.api';
 const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/signup-verification', '/auth/login-verification', '/auth/resend-otp'];
 
 export class ApiClient {
-  public baseURL = Url.BASE_API_URL
+  public baseURL = Url.BASE_API_URL ? `${Url.BASE_API_URL.replace(/\/+$/, '')}/api` : ''
 
   private buildUrl(endpoint: string, params?: Record<string, any>): string {
     const base = (this.baseURL || '').replace(/\/+$|\/+$/g, '');

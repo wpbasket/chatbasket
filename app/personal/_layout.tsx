@@ -11,7 +11,7 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { useUnistyles } from 'react-native-unistyles';
 import { useEffect } from 'react';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
-import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
+import { PersonalUtilRefreshDeviceStatus } from '@/utils/personalUtils/personal.util.device';
 
 export default function PersonalTabLayout() {
   const { theme } = useUnistyles();
@@ -19,8 +19,10 @@ export default function PersonalTabLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    $syncEngine.catchUp();
-    PersonalUtilGetUser();
+    setTimeout(() => {
+      $syncEngine.catchUp();
+    }, 3000);
+    PersonalUtilRefreshDeviceStatus();
   }, []);
 
   return (

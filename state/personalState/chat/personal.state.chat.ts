@@ -456,6 +456,7 @@ const chatActions = {
                 if (message$.peek()) {
                     message$.assign({
                         content: 'Message unsent',
+                        message_type: 'unsent',
                         // @ts-ignore - dynamic extension for UI
                         is_unsent: true
                     });
