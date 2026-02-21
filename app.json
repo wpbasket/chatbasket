@@ -102,7 +102,14 @@
       ],
       "expo-sqlite",
       "expo-video",
-      "expo-audio"
+      "expo-audio",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow Chatbasket to access your camera for video calls.",
+          "microphonePermission": "Allow Chatbasket to access your microphone for voice and video calls."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

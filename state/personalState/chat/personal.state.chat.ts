@@ -11,10 +11,6 @@ const lastAckedMsgId: Record<string, string> = {};
 
 // Helper to auto-ack incoming messages (Recipient ACK) AND outgoing syncs (Sender ACK)
 const ackIncomingMessages = (messages: MessageEntry[], options?: { skipSenderSync?: boolean }) => {
-    const user = $personalStateUser.user.peek();
-    const myId = user?.id;
-    if (!myId) return;
-
     if (options?.skipSenderSync) {
         console.log(`[Auto-Ack] ackIncomingMessages called with skipSenderSync=TRUE. Ignoring ${messages.length} messages for sender sync.`);
     } else {
@@ -260,6 +256,7 @@ interface ChatMessagesState {
     prependMessages: (chatId: string, entries: MessageEntry[]) => void;
     addMessage: (chatId: string, entry: MessageEntry) => void;
     updateMessageStatus: (chatId: string, messageId: string, updates: Partial<MessageEntry>) => void;
+    markMessagesDeliveredUpTo: (chatId: string, messageId: string) => void;
     removeMessage: (chatId: string, messageId: string) => void;
     removeMessages: (chatId: string, messageIds: string[]) => void;
     unsendMessages: (chatId: string, messageIds: string[]) => void;
@@ -388,23 +385,28 @@ const chatActions = {
         });
     },
 
-    addMessage(chatId: string, entry: MessageEntry) {
+    async addMessage(chatId: string, entry: MessageEntry) {
+        // Resolve media URLs first (async) before entering synchronous batch
+        let resolvedEntry = { ...entry };
+        if (resolvedEntry.file_id) {
+            await resolveMediaUrls([resolvedEntry]);
+        }
+
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const existing = chat.messagesById.peek();
-            if (existing[entry.message_id]) return;
+            if (existing[resolvedEntry.message_id]) return;
 
             const current = chat.messages.peek();
-            const updated = [entry, ...current].slice(0, 1000);
+            const updated = [resolvedEntry, ...current].slice(0, 1000);
 
             chat.messages.set(updated);
-            chat.messagesById[entry.message_id].set(entry);
-            chat.messagesById[entry.message_id].set(entry);
+            chat.messagesById[resolvedEntry.message_id].set(resolvedEntry);
             chat.messageIds.set(updated.map((e) => e.message_id));
 
             // Auto-Ack (Skip sender sync since we just sent it)
-            console.log(`[ChatActions] addMessage: Adding local message ${entry.message_id}. Skipping Sender Sync.`);
-            ackIncomingMessages([entry], { skipSenderSync: true });
+            console.log(`[ChatActions] addMessage: Adding local message ${resolvedEntry.message_id}. Skipping Sender Sync.`);
+            ackIncomingMessages([resolvedEntry], { skipSenderSync: true });
         });
     },
 
@@ -421,6 +423,25 @@ const chatActions = {
                     chat.messages[index].assign(updates);
                 }
             }
+        });
+    },
+
+    markMessagesDeliveredUpTo(chatId: string, messageId: string) {
+        batch(() => {
+            const chat = ensureChatInternal(chatId);
+            const targetMessage = chat.messagesById[messageId]?.peek();
+            if (!targetMessage) return;
+
+            const targetTime = new Date(targetMessage.created_at).getTime();
+            const currentMessages = chat.messages.peek();
+
+            currentMessages.forEach((m: MessageEntry, index: number) => {
+                const mTime = new Date(m.created_at).getTime();
+                if (mTime <= targetTime && !m.delivered_to_recipient) {
+                    chat.messagesById[m.message_id].delivered_to_recipient.set(true);
+                    chat.messages[index].delivered_to_recipient.set(true);
+                }
+            });
         });
     },
 
@@ -451,9 +472,20 @@ const chatActions = {
             const chat = ensureChatInternal(chatId);
             const idSet = new Set(messageIds);
 
+            let unreadDecrementCount = 0;
+
+            let messagesFoundInState = 0;
+
             messageIds.forEach(id => {
                 const message$ = chat.messagesById[id];
-                if (message$.peek()) {
+                const msgData = message$.peek();
+                if (msgData) {
+                    messagesFoundInState++;
+                    // Only decrement if the message wasn't from me
+                    if (!msgData.is_from_me && msgData.message_type !== 'unsent') {
+                        unreadDecrementCount++;
+                    }
+
                     message$.assign({
                         content: 'Message unsent',
                         message_type: 'unsent',
@@ -466,17 +498,37 @@ const chatActions = {
             // Update chat list preview if necessary
             const chatListEntry = $chatListState.chatsById[chatId].peek();
             if (chatListEntry) {
-                const sortedMessages = chat.messages.peek();
-                if (sortedMessages.length > 0) {
-                    const lastMsg = sortedMessages[0];
-                    if (idSet.has(lastMsg.message_id)) {
-                        $chatListState.upsertChat({
-                            ...chatListEntry,
-                            last_message_content: 'Message unsent',
-                            // @ts-ignore
-                            last_message_is_unsent: true
-                        });
-                    }
+                let newUnreadCount = chatListEntry.unread_count || 0;
+
+                // If the chat messages aren't loaded in state but we have unread messages, 
+                // fallback to subtracting the number of unsent messages from the unread count.
+                if (messagesFoundInState === 0 && newUnreadCount > 0) {
+                    unreadDecrementCount = messageIds.length;
+                }
+
+                if (unreadDecrementCount > 0) {
+                    newUnreadCount = Math.max(0, newUnreadCount - unreadDecrementCount);
+                }
+
+                const isLastMessageUnsent = chatListEntry.last_message_id
+                    ? idSet.has(chatListEntry.last_message_id)
+                    : false;
+
+                if (isLastMessageUnsent) {
+                    // The last message in the chat list preview was unsent
+                    $chatListState.upsertChat({
+                        ...chatListEntry,
+                        last_message_content: 'Message unsent',
+                        unread_count: newUnreadCount,
+                        // @ts-ignore
+                        last_message_is_unsent: true
+                    });
+                } else if (unreadDecrementCount > 0) {
+                    // Just update the read count if it was lowered organically 
+                    $chatListState.upsertChat({
+                        ...chatListEntry,
+                        unread_count: newUnreadCount,
+                    });
                 }
             }
         });

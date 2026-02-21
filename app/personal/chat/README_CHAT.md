@@ -18,16 +18,16 @@ We track delivery internally for auto-deletion (server cleanup), but the user on
 ## 2. Synchronization Flow
 The system differentiates between "Outside" (Delivery) and "Inside" (Read) logic to ensure accurate unread counts and delivery confirmations.
 
-### 2.1 Outside Chat (Inbox / Home Screen)
-- **Process**: `syncPendingMessages` runs in the background or upon Home Screen load.
-- **Action**: Fetches undelivered messages and calls `acknowledgeDelivery(acknowledged_by: 'recipient')`.
-- **Result**: Sender sees a **Yellow Tick** (Delivered). Recipient's **Unread Count** remains unchanged.
+### 2.1 Outside Chat (Inbox / Home Screen) & App Startup
+- **Process**: `syncPendingMessages` runs on boot (bypassing hydration delays), or the `ws.event.bridge.ts` intercepts incoming WebSockets while idling.
+- **Action**: Automatically triggers a "Single ACK" call to `acknowledgeDelivery` for the *latest* message ID.
+- **Result**: The backend uses the timestamp of this single message to bulk-update `delivered = true` for all older pending messages. Sender sees a **Yellow Tick** (Delivered). Recipient's **Unread Count** remains unchanged.
 
 ### 2.2 Inside Chat (Active [chat_id])
 - **Process**: `useFocusEffect` triggers `loadMessages` and a delayed `markChatRead`.
 - **Action**: Hits `/personal/chat/mark-read`.
 - **Result**: Sender sees a **Green Tick** (Read). Recipient's **Unread Count** resets to 0. 
-- **Efficiency**: The backend's `mark-read` implicitly performs a bulk delivery ACK for any missing message confirmations.
+- **Efficiency**: The backend's `mark-read` implicitly performs a bulk delivery ACK for any missing message confirmations in that chat.
 
 ### 2.3 De-duplication Logic
 To prevent redundant API calls when background sync and the chat screen overlap, we use `lastAckedMsgId`. This ensures that even if both processes spot a new message at the same time, only one signal is sent to the server.
@@ -35,8 +35,8 @@ To prevent redundant API calls when background sync and the chat screen overlap,
 ## 3. Relay & Read Status
 The backend acts as a relay for message delivery and status updates.
 
--   **Sending**: Messages are sent to the backend and assigned a server-side delivery status.
--   **Delivery**: When the recipient's app fetches the message, it auto-acks (`acknowledgeDelivery`). The backend marks it as delivered.
+-   **Delivery (Recipient)**: When the recipient's app fetches the message or receives it via WebSocket, it auto-acks (`acknowledgeDelivery`). The backend efficiently bulk-marks it and all older messages as delivered via timestamps.
+-   **Delivery Update (Sender)**: The sender receives a `delivery_ack` WebSocket event with a single ID. The local store uses `markMessagesDeliveredUpTo` to instantly paint all older messages with Yellow Ticks.
 -   **Read Status**:
     -   **Server**: Does NOT store a per-message "read" flag.
     -   **Metadata**: When a user opens a chat, `markChatRead` updates their `last_read_at` timestamp.
@@ -62,3 +62,17 @@ The chat system supports files up to **100MB**. The network layer is configured 
 -   **`[chat_id].tsx`**: Main controller. Handles data fetching and status calculation.
 -   **`MessageBubble.tsx`**: Dumb component. Renders text/media and the status icon.
 -   **`ChatListItem.tsx`**: In-box row. Shows last message preview and read status.
+
+## 6. Revocation & Offline Sync (The Sync Engine)
+Message Revocation (Unsend) and Local Deletions (Delete for Me) require strict synchronization across devices.
+
+### 6.1 Online Flow (WebSocket Push)
+When a user unsends a message, the backend broadcasts a `unsend` (or `delete_for_me`) WebSocket event.
+- The `ws.event.bridge.ts` intercepts this instantly.
+- It calls `$chatMessagesState.unsendMessages` to mutate the local Legend State array, immediately removing the payload and replacing it with a "Message unsent" tombstone in the UI.
+
+### 6.2 Offline Flow (The SyncEngine Catch-Up)
+Because WebSockets are volatile, what happens if a device is offline when a message is unsent?
+- The backend always generates a durable `SyncAction` record in Postgres.
+- When the device comes back online and the user enters the app, `app/personal/_layout.tsx` triggers `$syncEngine.catchUp()`.
+- The `SyncEngine` queries `$api/personal/chat/sync-actions`, retrieves all missed revocation signals, applies them silently to the local state, and acknowledges them with the backend so they are consumed.

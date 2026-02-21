@@ -45,7 +45,7 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
     if (!chat) return null;
 
     const displayName = (contact?.nickname ?? chat.other_user_name) || chat.other_user_username || 'User';
-    const preview = chat.last_message_content ?? 'No messages yet';
+    const preview = chat.last_message_content ?? (chat.last_message_id ? '' : 'No messages yet');
     const time = formatTime(chat.last_message_created_at);
     // const unreadCount = chat.unread_count || 0; // Removed derived value relying on 'chat' object identity
     const hasUnread = unreadCount > 0;

@@ -19,22 +19,6 @@ We split state by "Domain" in the `state/` directory:
     *   `publicState`: Data specific to Public Profile (User Posts, Public Feed).
     *   `personalState`: Data specific to Personal Profile (Private Chats, Contacts).
 
-## Pattern: The "Observable Store"
-We do not write "Actions" or "Reducers". We simply export an Observable Object.
-
-```typescript
-// definition
-export const userPostsStore = observable({
-  posts: [],
-  // Computed (v3)
-  postCount: () => userPostsStore.posts.length
-});
-
-// usage (Component)
-const posts = useValue(userPostsStore.posts); // Re-renders only when 'posts' changes
-const count = useValue(userPostsStore.postCount); // Re-renders only when count changes
-```
-
 ## Persistence
 Legend-State has built-in persistence, but for **Personally Identifiable Information (PII)**, we use a custom **`AppStorage`** wrapper to ensure maximum security:
 *   **Encrypted PII**: Auth, Profile, and Contacts use `AppStorage.createSecure`.

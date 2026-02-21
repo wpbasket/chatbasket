@@ -11,6 +11,7 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { useUnistyles } from 'react-native-unistyles';
 import { useEffect } from 'react';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
+import { startWSEventBridge, stopWSEventBridge } from '@/state/personalState/chat/ws.event.bridge';
 import { PersonalUtilRefreshDeviceStatus } from '@/utils/personalUtils/personal.util.device';
 
 export default function PersonalTabLayout() {
@@ -23,6 +24,16 @@ export default function PersonalTabLayout() {
       $syncEngine.catchUp();
     }, 3000);
     PersonalUtilRefreshDeviceStatus();
+
+    // Start WebSocket real-time event bridge
+    const wsTimer = setTimeout(() => {
+      startWSEventBridge();
+    }, 2000);
+
+    return () => {
+      clearTimeout(wsTimer);
+      stopWSEventBridge();
+    };
   }, []);
 
   return (

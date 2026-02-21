@@ -108,15 +108,15 @@ export default PersonalChatScreen;
 
 const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId: string, chatId: string, index: number }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
-    const chatMetadata = useValue(() => $chatListState.chatsById[chatId]?.get());
+    const otherUserLastReadAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_read_at?.get());
     const messageIds = useValue(() => $chatMessagesState.chats[chatId]?.messageIds.get() || []);
 
     if (!message) return null;
 
     let status = message.status;
-    if (message.is_from_me && chatMetadata?.other_user_last_read_at) {
+    if (message.is_from_me && otherUserLastReadAt) {
         const msgTime = new Date(message.created_at).getTime();
-        const readTime = new Date(chatMetadata.other_user_last_read_at).getTime();
+        const readTime = new Date(otherUserLastReadAt).getTime();
         if (msgTime <= readTime) {
             status = 'read';
         }
@@ -184,6 +184,16 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 label: 'Delete for Me',
                 onPress: () => {
                     $chatMessagesState.removeMessages(chatId, [messageId]);
+
+                    // Clear the home screen preview if this was the last message
+                    const chatEntry = $chatListState.chatsById[chatId]?.peek();
+                    if (chatEntry && chatEntry.last_message_id === messageId) {
+                        $chatListState.chatsById[chatId].assign({
+                            last_message_content: null,
+                            last_message_type: null,
+                        });
+                    }
+
                     PersonalChatApi.deleteMessageForMe({ message_ids: [messageId] })
                         .catch(err => console.error('[UI] Delete failed', err));
                 }
@@ -321,14 +331,12 @@ const ChatContentContainer = React.memo(({
                     }, 1500);
                 });
             });
+
+            return () => {
+                $chatMessagesState.activeChatId.set(null);
+            };
         }, [chat_id, recipient_id])
     );
-
-    useEffect(() => {
-        return () => {
-            $chatMessagesState.activeChatId.set(null);
-        };
-    }, []);
 
 
     const loadMessages = async (chatId: string) => {
@@ -432,6 +440,7 @@ const ChatContentContainer = React.memo(({
             last_message_created_at: now,
             last_message_status: 'pending',
             last_message_is_from_me: true,
+            last_message_id: tempId,
             unread_count: existingChat?.unread_count || 0,
             other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(),
             updated_at: now,
@@ -460,6 +469,7 @@ const ChatContentContainer = React.memo(({
                     last_message_created_at: response.created_at,
                     last_message_status: 'sent',
                     last_message_is_from_me: response.is_from_me,
+                    last_message_id: response.message_id,
                     created_at: optimisticChat?.created_at || response.created_at,
                 });
             });
@@ -545,7 +555,7 @@ const ChatContentContainer = React.memo(({
 
                 $chatListState.upsertChat({
                     ...$chatListState.chatsById[chat_id].peek(),
-                    last_message_content: type === 'image' ? 'Sent an image' : `Sent a file: ${fileName}`,
+                    last_message_content: `📄 ${fileName}`,
                     last_message_created_at: response.created_at,
                     last_message_status: 'sent',
                     last_message_is_from_me: true,

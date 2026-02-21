@@ -42,6 +42,8 @@ We have documented the complex engineering patterns used in this app in detailed
     *   *How we achieved O(1) rendering for Chat & Keyboard interactions.*
 11. **[Chat System Architecture](./app/personal/chat/README_CHAT.md)**
     *   *3-Icon Status System, Relay logic, and "Inside vs Outside" catch-up synchronization.*
+12. **Backend Architecture Reference (`chatbasket_backend/docs/SOCIAL_SYSTEMS.md`)**
+    *   *The definitive master document for profiles, privacy, blocking rules, and the Phase 6 Chat Engine logic.*
 
 ---
 
