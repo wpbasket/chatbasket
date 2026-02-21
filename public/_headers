@@ -10,7 +10,7 @@
 # ----------------------------------------------------------------------
 
 /*
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.chatbasket.live https://chatbasket.live https://1.1.1.1 https://one.one.one.one https://cloudflareinsights.com https://fra.cloud.appwrite.io; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https://fra.cloud.appwrite.io; font-src 'self' data:; object-src 'none';
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.chatbasket.live wss://api.chatbasket.live https://chatbasket.live https://1.1.1.1 https://one.one.one.one https://cloudflareinsights.com https://fra.cloud.appwrite.io; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https://fra.cloud.appwrite.io; font-src 'self' data:; object-src 'none';
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
