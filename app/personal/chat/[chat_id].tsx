@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { FlatList, Alert, Platform, Linking } from 'react-native';
+import { FlatList, Alert, Platform, Linking, Pressable, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
     ThemedText,
@@ -8,16 +8,18 @@ import {
     router,
     Stack
 } from '@/components/ui/basic';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import MessageBubble from './_components/MessageBubble';
 import ChatInputBar from './_components/ChatInputBar';
 import { BulkActionBar } from './_components/BulkActionBar';
 import { $chatMessagesState, $chatListState } from '@/state/personalState/chat/personal.state.chat';
+import { $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
 import { authState } from '@/state/auth/state.auth';
 import { $uiState } from '@/state/ui/state.ui';
 import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
-import { showAlert, showControllersModal, showConfirmDialog } from '@/utils/commonUtils/util.modal';
+import { showAlert, showControllersModal, showConfirmDialog, hideModal } from '@/utils/commonUtils/util.modal';
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
 import { batch } from '@legendapp/state';
@@ -303,6 +305,7 @@ const ChatContentContainer = React.memo(({
     recipient_name,
     displayName
 }: any) => {
+    const { theme } = useUnistyles();
     useFocusEffect(
         useCallback(() => {
             if (!chat_id) return;
@@ -330,6 +333,25 @@ const ChatContentContainer = React.memo(({
                         $chatListState.markChatRead(chat_id);
                     }, 1500);
                 });
+
+                // Check eligibility on mount
+                if (recipient_id) {
+                    PersonalChatApi.checkEligibility({ recipient_id: recipient_id as string })
+                        .then(res => {
+                            batch(() => {
+                                const chat$ = $chatMessagesState.chats[chat_id];
+                                if (chat$.peek()) {
+                                    chat$.isEligible.set(res.allowed);
+                                    if (!res.allowed) {
+                                        chat$.eligibilityReason.set(res.reason || null);
+                                    }
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            console.error('[Chat] Eligibility check failed', err);
+                        });
+                }
             });
 
             return () => {
@@ -410,6 +432,48 @@ const ChatContentContainer = React.memo(({
     const sendMessage = useCallback(async () => {
         const currentChat = $chatMessagesState.chats[chat_id];
         const chatData = currentChat.peek();
+
+        // Check eligibility before proceeding
+        if (!chatData.isEligible && chatData.eligibilityReason === 'not_in_contacts') {
+            showControllersModal([
+                {
+                    id: 'add_contact_redirect',
+                    content: (
+                        <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
+                            <Pressable
+                                onPress={() => {
+                                    $contactsState.setSelectedTab('addedYou');
+                                    router.push('/personal/contacts');
+                                    hideModal();
+                                }}
+                                style={({ pressed }) => [
+                                    styles.addButton,
+                                    pressed ? styles.addButtonPressed : null,
+                                ]}
+                            >
+                                <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
+                                <ThemedText
+                                    type="small"
+                                    style={styles.addButtonLabel}
+                                    selectable={false}
+                                >
+                                    Add to contacts
+                                </ThemedText>
+                            </Pressable>
+                        </View>
+                    )
+                }
+            ], {
+                message: (
+                    <>You cannot send messages to <ThemedText style={{ color: theme.colors.primary }}>{displayName}</ThemedText> until you add them to your contacts.</>
+                ),
+                showConfirmButton: false,
+                showCancelButton: true,
+                cancelText: 'Dismiss'
+            });
+            return;
+        }
+
         const trimmed = chatData.inputText.trim();
         const recipId = chatData.recipientId;
         if (!trimmed || !recipId || !chat_id) return;
@@ -481,7 +545,7 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Message could not be sent.', { name: recipient_name }));
             });
         }
-    }, [chat_id, recipient_name]);
+    }, [chat_id, recipient_name, displayName, theme]);
 
     const sendFile = useCallback(async (asset: any, type: 'image' | 'video' | 'audio' | 'file') => {
         const currentChat = $chatMessagesState.chats[chat_id];
@@ -572,6 +636,50 @@ const ChatContentContainer = React.memo(({
     }, [chat_id, recipient_name]);
 
     const handleAttach = useCallback((event: any) => {
+        const currentChat = $chatMessagesState.chats[chat_id];
+        const chatData = currentChat.peek();
+
+        // Check eligibility before proceeding
+        if (!chatData.isEligible && chatData.eligibilityReason === 'not_in_contacts') {
+            showControllersModal([
+                {
+                    id: 'add_contact_redirect',
+                    content: (
+                        <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
+                            <Pressable
+                                onPress={() => {
+                                    $contactsState.setSelectedTab('addedYou');
+                                    router.push('/personal/contacts');
+                                    hideModal();
+                                }}
+                                style={({ pressed }) => [
+                                    styles.addButton,
+                                    pressed ? styles.addButtonPressed : null,
+                                ]}
+                            >
+                                <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
+                                <ThemedText
+                                    type="small"
+                                    style={styles.addButtonLabel}
+                                    selectable={false}
+                                >
+                                    Add to contacts
+                                </ThemedText>
+                            </Pressable>
+                        </View>
+                    )
+                }
+            ], {
+                message: (
+                    <>You cannot send messages to <ThemedText style={{ color: theme.colors.primary }}>{displayName}</ThemedText> until you add them to your contacts.</>
+                ),
+                showConfirmButton: false,
+                showCancelButton: true,
+                cancelText: 'Dismiss'
+            });
+            return;
+        }
+
         const position = {
             x: event?.nativeEvent?.pageX ?? 0,
             y: event?.nativeEvent?.pageY ?? 0,
@@ -609,7 +717,7 @@ const ChatContentContainer = React.memo(({
             showCancelButton: true,
             closeOnControllerPress: true,
         });
-    }, [sendFile]);
+    }, [chat_id, displayName, theme, sendFile]);
 
     const loadMore = useCallback(async () => {
         if (!chat_id) return;
@@ -767,7 +875,7 @@ const ChatContentContainer = React.memo(({
             )}
         </Memo>
     );
-}, (prev, next) => {
+}, (prev: any, next: any) => {
     return (
         prev.chat_id === next.chat_id &&
         prev.recipient_id === next.recipient_id &&
@@ -808,5 +916,27 @@ const styles = StyleSheet.create((theme, rt) => ({
         fontWeight: '600',
         color: theme.colors.textSecondary,
         backgroundColor: 'transparent',
+    },
+    addButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.neutral2,
+        borderTopRightRadius: 30,
+        borderTopLeftRadius: 20,
+        borderBottomRightRadius: 10,
+        borderBottomLeftRadius: 20,
+        padding: 8,
+        paddingLeft: 10,
+        paddingVertical: 2,
+        paddingRight: 25,
+        alignSelf: 'flex-end',
+    },
+    addButtonPressed: {
+        opacity: 0.6,
+    },
+    addButtonLabel: {
+        color: theme.colors.whiteOrBlack,
     },
 }));

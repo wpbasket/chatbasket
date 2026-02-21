@@ -59,7 +59,7 @@ export default function ContactsScreen() {
   const lastFetchedAt = useValue($contactsState.lastFetchedAt);
   const pendingIds = useValue($contactRequestsState.pendingIds);
 
-  const [selectedTab, setSelectedTab] = useState<'contacts' | 'addedYou'>('contacts');
+  const selectedTab = useValue($contactsState.selectedTab);
 
   const { handlePressIn: handlePressInModal } = pressableAnimation();
 
@@ -262,7 +262,7 @@ export default function ContactsScreen() {
         <ContactsSegmentTabs
           selectedTab={selectedTab}
           onChangeTab={(tab) => {
-            setSelectedTab(tab);
+            $contactsState.setSelectedTab(tab);
           }}
         />
 

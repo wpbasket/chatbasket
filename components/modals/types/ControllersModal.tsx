@@ -36,7 +36,7 @@ export function ControllersModal({
   const handleConfirm = async () => {
     // Don't proceed if confirm is disabled
     if (confirmDisabled) return;
-    
+
     await onConfirm?.();
     onClose?.();
   };
@@ -142,12 +142,12 @@ export function ControllersModal({
                   accessibilityLabel={confirmText}
                   hitSlop={4}
                 >
-                  <ThemedText 
+                  <ThemedText
                     type='defaultGantari'
                     style={[
-                      styles.confirmText, 
+                      styles.confirmText,
                       confirmDisabled && styles.confirmTextDisabled
-                    ]} 
+                    ]}
                     selectable={false}
                   >
                     {confirmText}
@@ -169,7 +169,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     overflow: 'hidden',
 
     ...(rt.themeName == 'dark' ? {
-      backgroundColor:'rgba(13,13,13,0.9)',
+      backgroundColor: 'rgba(13,13,13,0.9)',
       boxShadow: '0px 10px 15px rgba(15,15,15,0.2)',
       borderColor: theme.colors.neutral4,
       borderWidth: 1,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create((theme, rt) => ({
       md: 300,
       lg: 400
     }
-    
+
   },
   header: {
     paddingHorizontal: 16,

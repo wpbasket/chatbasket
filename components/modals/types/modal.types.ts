@@ -81,7 +81,7 @@ export interface ControllerSpec {
 
 export interface ControllersModalProps extends BaseModalProps {
   title?: string;
-  message?: string;
+  message?: string | ReactNode;
   controllers: ControllerSpec[];
   confirmText?: string;
   cancelText?: string;

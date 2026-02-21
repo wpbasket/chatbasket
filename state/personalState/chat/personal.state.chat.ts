@@ -284,6 +284,8 @@ interface ChatData {
     inputText: string;
     isSelectMode: boolean;
     selectedMessageIds: string[];
+    isEligible: boolean;
+    eligibilityReason: string | null;
 }
 
 const createDefaultChatData = (): ChatData => ({
@@ -299,6 +301,8 @@ const createDefaultChatData = (): ChatData => ({
     inputText: '',
     isSelectMode: false,
     selectedMessageIds: [],
+    isEligible: true,
+    eligibilityReason: null,
 });
 
 const chatMessages$ = observable({

@@ -37,6 +37,7 @@ export const $contactsState = observable({
   loading: false,
   error: null as string | null,
   lastFetchedAt: null as number | null,
+  selectedTab: 'contacts' as 'contacts' | 'addedYou',
   setLoading(value: boolean) {
     $contactsState.loading.set(value);
   },
@@ -109,6 +110,9 @@ export const $contactsState = observable({
       $contactsState.addedYou[index].isMutual.set(isMutual);
     }
   },
+  setSelectedTab(tab: 'contacts' | 'addedYou') {
+    $contactsState.selectedTab.set(tab);
+  },
   markFetched() {
     $contactsState.lastFetchedAt.set(Date.now());
   },
@@ -122,6 +126,7 @@ export const $contactsState = observable({
     $contactsState.loading.set(false);
     $contactsState.error.set(null);
     $contactsState.lastFetchedAt.set(null);
+    $contactsState.selectedTab.set('contacts');
     $contactsState.isInContacts.set(false);
   },
   hasContacts() {
