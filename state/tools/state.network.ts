@@ -34,21 +34,24 @@ export const testConnectivity = async (): Promise<boolean> => {
 
 // Web-specific connectivity tracking
 export const initializeWebConnectivity = () => {
-  // Initial connectivity check
-  testConnectivity().then(isConnected => {
-    network$.isConnected.set(isConnected);
-  });
+  // Use browser's native connectivity tracking instead of periodic polling
+  // to avoid Net::ERR_CONNECTION_TIMED_OUT console noise.
+  if (typeof window !== 'undefined' && window.navigator) {
+    network$.isConnected.set(window.navigator.onLine);
 
-  // Periodic connectivity check (every 10 seconds)
-  const periodicCheck = setInterval(async () => {
-    const isConnected = await testConnectivity();
-    network$.isConnected.set(isConnected);
-  }, 10000);
+    const handleOnline = () => network$.isConnected.set(true);
+    const handleOffline = () => network$.isConnected.set(false);
 
-  // Cleanup function
-  return () => {
-    clearInterval(periodicCheck);
-  };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }
+
+  return () => { };
 };
 
 // Native implementation using expo-network

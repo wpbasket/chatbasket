@@ -50,6 +50,8 @@ export const Colors = {
     textSecondary: '#687076',
     border: '#E6E8EB',
     card: '#EAEDF0',
+    card1:'rgba(115, 115, 115, 0.2)',
+    bubbleText:'#2C3E50',
     bubbleSentAlt: '#00cc88',
     greenForest: '#065F46', // Deep, premium emerald
     greenSage: '#86A789',   // Soft, modern sage
@@ -106,6 +108,8 @@ export const Colors = {
     textSecondary: '#9BA1A6',
     border: '#2D2D2D',
     card: '#323235',
+    card1:'#ffffff',
+    bubbleText:'#2C3E50',
     bubbleSentAlt: '#009966',
     greenForest: '#064E3B', // Richer deep green for dark mode
     greenSage: '#4F6F52',   // Muted sage for dark mode

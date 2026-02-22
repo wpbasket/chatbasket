@@ -24,6 +24,36 @@ const formatTime = (dateStr: string): string => {
     }
 };
 
+const formatDuration = (seconds: number): string => {
+    const s = Math.floor(seconds);
+    if (s < 60) return `${s}sec`;
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return secs === 0 ? `${mins} min` : `${mins} min ${secs}sec`;
+};
+
+const formatFileName = (name: string | null | undefined, maxLength: number = 30): string => {
+    if (!name) return '';
+    if (name.length <= maxLength) return name;
+
+    const dotIndex = name.lastIndexOf('.');
+    if (dotIndex !== -1 && dotIndex > 0) {
+        const extension = name.slice(dotIndex);
+        const baseName = name.slice(0, dotIndex);
+
+        if (baseName.length > 20) {
+            const startStr = baseName.slice(0, 15);
+            const endStr = baseName.slice(-5);
+            return `${startStr}...${endStr}${extension}`;
+        }
+    }
+
+    if (name.length > maxLength) {
+        return name.slice(0, 15) + '...' + name.slice(-5);
+    }
+    return name;
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MessageBubbleProps = {
@@ -109,12 +139,12 @@ const MessageBubble = memo(
 
         // ── Shared media meta row (filename + size) ───────────────────────────
         const renderMediaMeta = (fallbackLabel: string) => (
-            <View style={{ paddingHorizontal: 20, paddingBottom: 2 }}>
+            <View style={{ paddingLeft: 20, paddingRight: 30, paddingBottom: 2 }}>
                 <View style={[styles.fileHeader, { backgroundColor: 'transparent', padding: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, isMe && { color: '#FFFFFF' }, { fontSize: 10, flex: 1 }]}>
-                        {fileName || fallbackLabel}
+                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { fontSize: 10, flex: 1 }]}>
+                        {formatFileName(fileName || fallbackLabel)}
                     </ThemedText>
-                    <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : { opacity: 0.5 }, { fontSize: 8, marginLeft: 8 }]}>
+                    <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText, { fontSize: 8, marginLeft: 8 }]}>
                         {formatSize(fileSize)}
                     </ThemedText>
                 </View>
@@ -124,28 +154,28 @@ const MessageBubble = memo(
         const renderProgressBar = () => {
             if (status !== 'pending' || progress >= 100 || progress <= 0) return null;
             return (
-                <View style={[styles.progressContainer, { marginHorizontal: 20 }]}>
+                <View style={[styles.progressContainer, { marginLeft: 20, marginRight: 30 }]}>
                     <View style={[styles.progressBar, { width: `${progress}%` }]} />
                 </View>
             );
         };
 
         const renderStatusIcon = () => {
-            if (messageType === 'unsent') return <View style={styles.statusPlaceholder} />;
+            if (messageType === 'unsent') return isMe ? <View style={styles.statusPlaceholder} /> : null;
             if (!isMe) return null;
             if (status === 'pending') return (
                 <View style={styles.statusContainer}>
-                    <IconSymbol name="clock" size={16} color="rgba(255,255,255,0.7)" />
+                    <IconSymbol name="clock" size={18} color={theme.colors.neutral2} />
                 </View>
             );
             if (status === 'read') return (
                 <View style={styles.statusContainer}>
-                    <MaterialCommunityIcon name="checkmark.all" size={18} color={theme.colors.primary} />
+                    <IconSymbol name="check" size={18} color={theme.colors.primary} />
                 </View>
             );
             if (delivered || status === 'sent') return (
                 <View style={styles.statusContainer}>
-                    <IconSymbol name="checkmark" size={16} color="#FFD700" />
+                    <IconSymbol name="check" size={18} color="#E6B800" />
                 </View>
             );
             return null;
@@ -187,7 +217,7 @@ const MessageBubble = memo(
                         {renderMediaMeta('Image')}
                         {renderProgressBar()}
                         {!!text && (
-                            <ThemedText style={[styles.caption, styles.bubbleText, isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
+                            <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
                         )}
@@ -205,10 +235,10 @@ const MessageBubble = memo(
                                     <IconSymbol name={isVideo ? 'video.fill' : 'waveform'} size={24} color={theme.colors.primary} />
                                 </View>
                                 <View style={styles.fileInfo}>
-                                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, isMe && { color: '#FFFFFF' }]}>
-                                        {fileName || (isVideo ? 'Video' : 'Audio')}
+                                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
+                                        {formatFileName(fileName || (isVideo ? 'Video' : 'Audio'))}
                                     </ThemedText>
-                                    <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : { opacity: 0.6 }]}>
+                                    <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
                                         {status === 'pending' ? 'Preparing...' : 'Resolving...'}
                                     </ThemedText>
                                 </View>
@@ -246,7 +276,7 @@ const MessageBubble = memo(
                         {renderMediaMeta(isVideo ? 'Video' : 'Audio')}
                         {renderProgressBar()}
                         {!!text && (
-                            <ThemedText style={[styles.caption, styles.bubbleText, isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
+                            <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
                         )}
@@ -263,17 +293,17 @@ const MessageBubble = memo(
                                 <IconSymbol name="doc.fill" size={24} color={theme.colors.orange} />
                             </View>
                             <View style={styles.fileInfo}>
-                                <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, isMe && { color: '#FFFFFF' }]}>
-                                    {fileName || 'Attachment'}
+                                <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
+                                    {formatFileName(fileName || 'Attachment')}
                                 </ThemedText>
-                                <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : { color: '#FFFFFF' }]}>
+                                <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
                                     {(!isResolved && status !== 'pending') ? 'Resolving link...' : formatSize(fileSize)}
                                 </ThemedText>
                             </View>
                         </View>
                         {renderProgressBar()}
                         {!!text && (
-                            <ThemedText style={[styles.caption, styles.bubbleText, isMe && { color: '#FFFFFF' }]}>
+                            <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
                                 {text}
                             </ThemedText>
                         )}
@@ -284,7 +314,7 @@ const MessageBubble = memo(
             // Plain text
             return (
                 <View style={styles.contentPadding}>
-                    <ThemedText style={[styles.bubbleText, isMe && { color: '#FFFFFF' }]}>{text}</ThemedText>
+                    <ThemedText style={[styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>{text}</ThemedText>
                 </View>
             );
         };
@@ -299,7 +329,7 @@ const MessageBubble = memo(
                 hitSlop={0}
                 style={({ pressed }) => [
                     { opacity: pressed ? 0.7 : 1 },
-                    isMe ? styles.myBubbleContainer : styles.otherBubbleContainer,
+                    !isMe ? styles.myBubbleContainer : styles.otherBubbleContainer,
                 ]}
             >
                 <View
@@ -490,7 +520,7 @@ const AudioInlinePlayer = memo(({ url }: { url: string }) => {
                     </View>
                 </View>
                 <ThemedText style={styles.audioTimer}>
-                    {Math.floor(status.currentTime)}s / {Math.floor(status.duration)}s
+                    {formatDuration(status.currentTime)} / {formatDuration(status.duration)}
                 </ThemedText>
             </View>
         </View>
@@ -511,7 +541,7 @@ const AudioPlaceholder = memo(({ isMe }: { isMe: boolean }) => (
                     <View style={[styles.audioProgressFill, { width: '0%' }]} />
                 </View>
             </View>
-            <ThemedText style={styles.audioTimer}>0s / --</ThemedText>
+            <ThemedText style={styles.audioTimer}>{formatDuration(0)} / --</ThemedText>
         </View>
     </View>
 ));
@@ -524,13 +554,13 @@ const styles = StyleSheet.create((theme) => ({
     // Pressable containers: shrink-wrap to bubble content so gap between
     // bubbles is outside the hit area. Sender = right (flex-end), receiver = left (flex-start).
     myBubbleContainer: {
-        alignSelf: 'flex-start',
+        alignSelf: 'flex-end',
         marginBottom: 28,
         maxWidth: '85%',
         minWidth: 150,
     },
     otherBubbleContainer: {
-        alignSelf: 'flex-end',
+        alignSelf: 'flex-start',
         marginBottom: 28,
         maxWidth: '85%',
         minWidth: 150,
@@ -541,11 +571,11 @@ const styles = StyleSheet.create((theme) => ({
         // No maxWidth/minWidth here — they live on the Pressable container above
     },
     myBubble: {
-        backgroundColor: theme.colors.bubblePurple,
+        backgroundColor: theme.colors.card1,
         borderBottomRightRadius: 4,  // swapped
     },
     otherBubble: {
-        backgroundColor: theme.colors.card,
+        backgroundColor: theme.colors.bubblePurple,
         borderBottomLeftRadius: 4,   // swapped
     },
     mediaBubble: {
@@ -562,14 +592,16 @@ const styles = StyleSheet.create((theme) => ({
     contentPadding: {
         paddingTop: 4,
         // paddingBottom: 0,
-        paddingHorizontal: 20,
+        paddingLeft: 20,
+        paddingRight: 30,
     },
     bubbleText: {
-        color: theme.colors.text,
+        color: theme.colors.bubbleText,
         lineHeight: 20,
     },
     mediaFrame: {
-        marginHorizontal: 20,
+        marginLeft: 20,
+        marginRight: 30,
         marginTop: 8,
         aspectRatio: 16 / 9,
         borderRadius: 12,
@@ -627,13 +659,15 @@ const styles = StyleSheet.create((theme) => ({
         lineHeight: 20,
         fontStyle: 'italic',
         opacity: 0.6,
-        color: theme.colors.textSecondary,
+        color: 'white',
+
     },
     myUnsentText: {
-        color: 'rgba(255, 255, 255, 0.9)',
+        color: theme.colors.bubbleText,
     },
     statusContainer: {
         marginLeft: 6,
+        marginTop: -10,
         backgroundColor: 'transparent',
     },
     statusPlaceholder: {
@@ -646,9 +680,10 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        paddingHorizontal: 20,
-        paddingBottom: 0,
-        marginTop: -4,
+        paddingLeft: 20,
+        paddingRight: 7,
+        height: 10,
+
     },
     timeText: {
         fontSize: 8.5,
@@ -656,10 +691,11 @@ const styles = StyleSheet.create((theme) => ({
         letterSpacing: 1,
     },
     myTimeText: {
-        color: 'rgba(255,255,255,0.8)',
+        opacity: 0.8,
+        color: theme.colors.bubbleText,
     },
     otherTimeText: {
-        opacity: 0.6,
+        color: 'rgba(255,255,255,0.8)',
     },
     selectedBubble: {
         borderWidth: 2,
