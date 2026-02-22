@@ -6,6 +6,7 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ExpoAudio from 'expo-audio';
+import { UnistylesRuntime } from 'react-native-unistyles';
 
 // ─── Pure helpers — outside component, never recreated on render ──────────────
 
@@ -165,7 +166,7 @@ const MessageBubble = memo(
             if (!isMe) return null;
             if (status === 'pending') return (
                 <View style={styles.statusContainer}>
-                    <IconSymbol name="clock" size={18} color={theme.colors.neutral2} />
+                    <IconSymbol name="clock" size={16} color={theme.colors.neutral2} />
                 </View>
             );
             if (status === 'read') return (
@@ -267,7 +268,7 @@ const MessageBubble = memo(
                             // Audio: show static shell until first tap, then mount real player
                             <View pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
-                                    <AudioInlinePlayer url={activeMediaUrl} />
+                                    <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} />
                                 ) : (
                                     <AudioPlaceholder isMe={isMe} />
                                 )}
@@ -445,9 +446,10 @@ const VideoInlinePlayer = memo(({ url }: { url: string }) => {
 
 // ─── AudioInlinePlayer ────────────────────────────────────────────────────────
 
-const AudioInlinePlayer = memo(({ url }: { url: string }) => {
+const AudioInlinePlayer = memo(({ url, isMe }: { url: string; isMe: boolean }) => {
     const player = ExpoAudio.useAudioPlayer(url, { updateInterval: 250 });
     const status = ExpoAudio.useAudioPlayerStatus(player);
+    const isDark = UnistylesRuntime.themeName === 'dark';
     const [trackWidth, setTrackWidth] = useState(0);
     const hasAutoPlayed = React.useRef(false);
 
@@ -515,7 +517,7 @@ const AudioInlinePlayer = memo(({ url }: { url: string }) => {
                     style={styles.audioProgressTrack}
                     onLayout={handleLayout}
                 >
-                    <View style={styles.audioProgressInner} pointerEvents="none">
+                    <View style={[styles.audioProgressInner, isMe && isDark && { backgroundColor: 'black' }]} pointerEvents="none">
                         <View style={[styles.audioProgressFill, { width: `${progressValue * 100}%` }]} />
                     </View>
                 </View>
@@ -530,21 +532,24 @@ const AudioInlinePlayer = memo(({ url }: { url: string }) => {
 // ─── AudioPlaceholder ────────────────────────────────────────────────────────
 // Static shell shown before user taps — zero network cost, zero native player init.
 
-const AudioPlaceholder = memo(({ isMe }: { isMe: boolean }) => (
-    <View style={styles.inlineAudioPlayer}>
-        <View style={[styles.audioPlayButton, { opacity: 0.85 }]}>
-            <IconSymbol name="play.fill" size={25} color="#6366f1" />
-        </View>
-        <View style={styles.audioWaveform}>
-            <View style={styles.audioProgressTrack}>
-                <View style={styles.audioProgressInner}>
-                    <View style={[styles.audioProgressFill, { width: '0%' }]} />
-                </View>
+const AudioPlaceholder = memo(({ isMe }: { isMe: boolean }) => {
+    const isDark = UnistylesRuntime.themeName === 'dark';
+    return (
+        <View style={styles.inlineAudioPlayer}>
+            <View style={[styles.audioPlayButton, { opacity: 0.85 }]}>
+                <IconSymbol name="play.fill" size={25} color="#6366f1" />
             </View>
-            <ThemedText style={styles.audioTimer}>{formatDuration(0)} / --</ThemedText>
+            <View style={styles.audioWaveform}>
+                <View style={styles.audioProgressTrack}>
+                    <View style={[styles.audioProgressInner, isMe && isDark && { backgroundColor: 'black' }]}>
+                        <View style={[styles.audioProgressFill, { width: '0%' }]} />
+                    </View>
+                </View>
+                <ThemedText style={styles.audioTimer}>{formatDuration(0)} / --</ThemedText>
+            </View>
         </View>
-    </View>
-));
+    );
+});
 
 export default MessageBubble;
 
