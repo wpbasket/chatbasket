@@ -30,7 +30,7 @@ export interface GetContactsResponse {
 }
 
 /**
- * CheckContactExistanceResponse is the response from checking if a contact exists
+ * CheckContactExistanceResponse is the response from checking if a contact exists (legacy symbol name)
  * Hierarchy: Response container → profile type and optional recipient info
  */
 export interface CheckContactExistanceResponse {
@@ -95,8 +95,8 @@ export interface CreateContactPayload {
 }
 
 /**
- * CheckContactExistancePayload is the request payload for checking if a contact exists
- * Endpoint: POST /contacts/check-existance
+ * CheckContactExistancePayload is the request payload for checking if a contact exists (legacy symbol name)
+ * Endpoint: POST /personal/contacts/check-existence
  */
 export interface CheckContactExistancePayload {
     contact_username: string;

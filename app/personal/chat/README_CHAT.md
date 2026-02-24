@@ -75,4 +75,4 @@ When a user unsends a message, the backend broadcasts a `unsend` (or `delete_for
 Because WebSockets are volatile, what happens if a device is offline when a message is unsent?
 - The backend always generates a durable `SyncAction` record in Postgres.
 - When the device comes back online and the user enters the app, `app/personal/_layout.tsx` triggers `$syncEngine.catchUp()`.
-- The `SyncEngine` queries `$api/personal/chat/sync-actions`, retrieves all missed revocation signals, applies them silently to the local state, and acknowledges them with the backend so they are consumed.
+- The `SyncEngine` queries `/personal/chat/sync-actions`, retrieves all missed revocation signals, applies them silently to the local state, and acknowledges them with the backend so they are consumed.

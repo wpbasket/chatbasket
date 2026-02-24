@@ -2,7 +2,7 @@
 // MESSAGE TYPES
 // ============================================================================
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'unsent';
 
 // ============================================================================
 // RESPONSE MODELS — match Go personalmodel/chat_models.go
@@ -42,7 +42,7 @@ export interface MessageEntry {
     is_from_me: boolean;
     recipient_id: string;
     content: string;
-    message_type: string;    // Go string (text|image|video|audio|file)
+    message_type: string;    // Go string (text|image|video|audio|file|unsent)
     delivered_to_recipient: boolean; // Go bool (Added in Phase 8b)
     synced_to_sender_primary: boolean; // Added in Phase 17
     is_unsent?: boolean;             // Added Phase 5.3

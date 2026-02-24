@@ -36,7 +36,7 @@ Components deal with logic, not URLs.
 const profile = await profileApi.getProfile();
 
 // ❌ Bad
-const res = await fetch('https://api.chatbasket.live/api/public/profile/get-profile');
+const res = await fetch('https://api.chatbasket.live/api/public/profile/get-profile'); // direct URL call bypasses apiClient
 ```
 
 ## Benefits
