@@ -15,7 +15,7 @@ export async function resolveMediaUrls(messages: MessageEntry[]) {
         .map(async (m) => {
             try {
                 const res = await PersonalChatApi.getFileURL({ message_id: m.message_id });
-                m.file_url = res.file_url;
+                m.file_url = res.view_url;
             } catch (err) {
                 console.warn(`[ChatMedia] Failed to fetch URL for message ${m.message_id}:`, err);
             }
