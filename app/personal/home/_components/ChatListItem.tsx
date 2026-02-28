@@ -9,6 +9,8 @@ import { $contactsState } from '@/state/personalState/contacts/personal.state.co
 import { useUnistyles } from 'react-native-unistyles';
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
 import { useValue } from '@legendapp/state/react';
+import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
+import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 
@@ -40,14 +42,25 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
     // Fine-grained observation: observe specific fields to ensure updates trigger re-renders
     const chat = useValue(() => $chatListState.chatsById[chatId]?.get());
     const unreadCount = useValue(() => $chatListState.chatsById[chatId]?.unread_count.get() ?? 0);
+    const lastReadAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_read_at.get() ?? '');
+    const lastDeliveredAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_delivered_at.get() ?? '');
+    const lastMessageStatus = useValue(() => $chatListState.chatsById[chatId]?.last_message_status.get() ?? 'sent');
     const contact = useValue(() => $contactsState.contactsById[chat?.other_user_id]?.get());
 
     if (!chat) return null;
 
     const displayName = (contact?.nickname ?? chat.other_user_name) || chat.other_user_username || 'User';
-    const preview = chat.last_message_content ?? (chat.last_message_id ? '' : 'No messages yet');
+
+    // Construct dummy MessageEntry to reuse getPreviewText helper
+    const preview = getPreviewText({
+        content: chat.last_message_content,
+        file_name: chat.last_message_content, // Reusing field for file identification if needed
+        message_type: chat.last_message_type,
+        // @ts-ignore
+        is_unsent: chat.last_message_is_unsent,
+    } as any);
+
     const time = formatTime(chat.last_message_created_at);
-    // const unreadCount = chat.unread_count || 0; // Removed derived value relying on 'chat' object identity
     const hasUnread = unreadCount > 0;
 
     return (
@@ -93,27 +106,50 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                                 return null;
                             }
 
-                            let iconName: any = 'checkmark';
-                            let color = '#FFD700'; // Sent/Delivered (Yellow)
-                            const status = chat.last_message_status;
+                            let status = lastMessageStatus;
+
+                            const parseDate = (d: string | null | undefined) => {
+                                if (!d) return NaN;
+                                try {
+                                    return new Date(String(d).replace(' ', 'T')).getTime();
+                                } catch {
+                                    return NaN;
+                                }
+                            };
+
+                            // SOURCE OF TRUTH: Compare last message time against chat-level persistent delivery/read timestamps
+                            if (chat.last_message_created_at) {
+                                const msgTime = parseDate(chat.last_message_created_at);
+                                const readTime = parseDate(lastReadAt);
+
+                                // GRACE PERIOD: 10s for clock drift
+                                if (!isNaN(readTime) && msgTime <= readTime + 10000) {
+                                    status = 'read';
+                                } else {
+                                    const deliveredTime = parseDate(lastDeliveredAt);
+                                    if (!isNaN(deliveredTime) && msgTime <= deliveredTime + 10000) {
+                                        status = 'delivered';
+                                    }
+                                }
+                            }
 
                             if (status === 'pending') {
-                                iconName = 'clock';
-                                color = theme.colors.icon;
-                            } else if (status === 'read') {
-                                iconName = 'checkmark'; // Single tick
-                                color = '#4CAF50'; // Read (Green)
+                                return <IconSymbol name="clock" size={14} color="#999" style={styles.statusIcon} />;
                             }
-                            // 'sent' & 'delivered' -> Single Yellow Checkmark
 
-                            return (
-                                <IconSymbol
-                                    name={iconName}
-                                    size={16}
-                                    color={color}
-                                    style={styles.statusIcon}
-                                />
-                            );
+                            if (status === 'read') {
+                                return <MaterialCommunityIcon name="checkmark.all" size={15} color={theme.colors.primary} style={styles.statusIcon} />;
+                            }
+
+                            if (status === 'delivered') {
+                                return <MaterialCommunityIcon name="checkmark.all" size={15} color="#999" style={styles.statusIcon} />;
+                            }
+
+                            if (status === 'sent') {
+                                return <MaterialCommunityIcon name="checkmark" size={15} color="#999" style={styles.statusIcon} />;
+                            }
+
+                            return null;
                         })()}
                         <ThemedText
                             numberOfLines={1}

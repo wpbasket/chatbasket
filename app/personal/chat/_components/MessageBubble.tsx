@@ -61,7 +61,7 @@ type MessageBubbleProps = {
     text: string;
     type: 'me' | 'other';
     messageType?: string;
-    status?: 'pending' | 'sent' | 'read';
+    status?: 'pending' | 'sent' | 'delivered' | 'read';
     delivered?: boolean;
     createdAt: string;
     onLongPress?: (event: import('react-native').GestureResponderEvent) => void;
@@ -164,21 +164,33 @@ const MessageBubble = memo(
         const renderStatusIcon = () => {
             if (messageType === 'unsent') return isMe ? <View style={styles.statusPlaceholder} /> : null;
             if (!isMe) return null;
+
             if (status === 'pending') return (
                 <View style={styles.statusContainer}>
-                    <IconSymbol name="clock" size={16} color={theme.colors.neutral2} />
+                    <IconSymbol name="clock" size={15} color="#999" />
                 </View>
             );
-            if (status === 'read') return (
+
+            // Double Checkmark: Grey or Primary (for read)
+            if (delivered || status === 'delivered' || status === 'read') {
+                const isRead = status === 'read';
+                return (
+                    <View style={styles.statusContainer}>
+                        <MaterialCommunityIcon
+                            name="checkmark.all"
+                            color={isRead ? theme.colors.primary : "#999"}
+                            size={16}
+                        />
+                    </View>
+                );
+            }
+
+            if (status === 'sent') return (
                 <View style={styles.statusContainer}>
-                    <IconSymbol name="check" size={18} color={theme.colors.primary} />
+                    <MaterialCommunityIcon name="checkmark" size={16} color="#999" />
                 </View>
             );
-            if (delivered || status === 'sent') return (
-                <View style={styles.statusContainer}>
-                    <IconSymbol name="check" size={18} color="#E6B800" />
-                </View>
-            );
+
             return null;
         };
 

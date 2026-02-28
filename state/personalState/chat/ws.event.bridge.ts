@@ -13,8 +13,9 @@ import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import type { WSEvent } from '@/lib/personalLib/chatApi/ws.client';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
 import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
-import { $chatMessagesState, $chatListState } from '@/state/personalState/chat/personal.state.chat';
+import { $chatMessagesState, $chatListState, sharedAckTracker, ackIncomingMessages } from '@/state/personalState/chat/personal.state.chat';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
+import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 
 // ─── Event Handlers ─────────────────────────────────────────────────────────
 
@@ -53,38 +54,28 @@ function handleNewMessage(payload: any): void {
         console.log(`[WS Bridge] new_message: ADDING to active chat state — msgID=${msg.message_id}`);
         $chatMessagesState.addMessage(msg.chat_id, msg);
 
-        // Auto-read logic: since the chat is open, immediately mark as read
+        // Auto-read logic: since the chat is open, immediately mark as read (debounced)
         if (!msg.is_from_me) {
-            console.log(`[WS Bridge] new_message: AUTO-READING message because chat is open`);
-            void PersonalChatApi.markChatRead({ chat_id: msg.chat_id }).catch((err) => {
-                console.warn(`[WS Bridge] new_message: Failed to auto-read`, err);
-            });
+            console.log(`[WS Bridge] new_message: AUTO-READING message (debounced) because chat is open`);
+            $chatMessagesState.debouncedMarkRead(msg.chat_id);
             $chatListState.markChatRead(msg.chat_id);
         }
     } else {
-        console.log(`[WS Bridge] new_message: chat is NOT active, skipping addMessage (will update list only)`);
-
-        // Even if the chat isn't open, the device HAS received the message.
-        // We MUST send a delivery ACK so the sender sees the Yellow Tick and the DB updates.
-        if (!msg.is_from_me) {
-            console.log(`[WS Bridge] new_message: Sending BACKGROUND delivery ACK for ${msg.message_id}`);
-            PersonalChatApi.acknowledgeDelivery({
-                message_id: msg.message_id,
-                acknowledged_by: 'recipient',
-                success: true,
-            }).catch(err => console.warn(`[WS Bridge] Background ACK failed`, err));
-        }
+        console.log(`[WS Bridge] new_message: chat is NOT active, triggering background auto-ack`);
+        // Trigger background delivery ACK for chats in the inbox
+        ackIncomingMessages([msg]);
     }
 
     // Update chat list preview (upsert with latest message info)
     const currentEntry = $chatListState.chatsById[msg.chat_id]?.peek();
     console.log(`[WS Bridge] new_message: chatListEntry exists=${!!currentEntry}`);
-    if (currentEntry) {
-        let previewContent = msg.content;
-        if (!previewContent && msg.file_name) {
-            previewContent = `📄 ${msg.file_name}`;
-        }
 
+    const previewContent = getPreviewText(msg);
+
+    const isChatActive = activeChatId === msg.chat_id;
+    const shouldIncrementUnread = !msg.is_from_me && !isChatActive;
+
+    if (currentEntry) {
         const updatedEntry: ChatEntry = {
             ...currentEntry,
             last_message_content: previewContent,
@@ -93,12 +84,39 @@ function handleNewMessage(payload: any): void {
             last_message_is_from_me: msg.is_from_me,
             last_message_id: msg.message_id,
             last_message_status: msg.status ?? 'sent',
-            unread_count: !msg.is_from_me && activeChatId !== msg.chat_id
+            last_message_is_unsent: msg.message_type === 'unsent',
+            unread_count: shouldIncrementUnread
                 ? (currentEntry.unread_count || 0) + 1
-                : currentEntry.unread_count,
+                : (isChatActive ? 0 : currentEntry.unread_count),
         };
         console.log(`[WS Bridge] new_message: UPSERTING chat list — unread_count=${updatedEntry.unread_count}`);
         $chatListState.upsertChat(updatedEntry);
+    } else {
+        // Construct a new ChatEntry for previously unknown chats (instantly shows up on Home screen)
+        const otherUserId = msg.is_from_me ? msg.recipient_id : (msg as any).sender_id || msg.recipient_id; // Fallback for sender_id
+
+        const newEntry: ChatEntry = {
+            chat_id: msg.chat_id,
+            other_user_id: otherUserId,
+            other_user_name: '', // Will be updated by contacts or subsequent sync
+            other_user_username: '',
+            avatar_url: '',
+            last_message_content: previewContent,
+            last_message_created_at: msg.created_at,
+            last_message_type: msg.message_type,
+            last_message_is_from_me: msg.is_from_me,
+            last_message_id: msg.message_id,
+            last_message_status: msg.status ?? 'sent',
+            last_message_sender_id: msg.is_from_me ? 'me' : otherUserId, // Placeholder or real ID
+            last_message_is_unsent: msg.message_type === 'unsent',
+            unread_count: shouldIncrementUnread ? 1 : 0,
+            created_at: msg.created_at,
+            updated_at: msg.created_at,
+            other_user_last_read_at: '',
+            other_user_last_delivered_at: '',
+        };
+        console.log(`[WS Bridge] new_message: CREATING NEW chat list entry — unread_count=${newEntry.unread_count}`);
+        $chatListState.upsertChat(newEntry);
     }
 
     console.log(`[WS Bridge] new_message: DONE — msgID=${msg.message_id} chatID=${msg.chat_id} is_from_me=${msg.is_from_me} content="${msg.content?.substring(0, 50)}"`);
@@ -110,22 +128,49 @@ function handleNewMessage(payload: any): void {
  * Payload: { message_id, chat_id, acknowledged_by }
  */
 function handleDeliveryAck(payload: any): void {
-    console.log('[WS Bridge] handleDeliveryAck: ENTER', JSON.stringify(payload));
-    const { message_id, chat_id } = payload;
-    if (!message_id) {
-        console.warn('[WS Bridge] delivery_ack: MISSING message_id, skipping');
-        return;
-    }
+    try {
+        console.log('[WS Bridge] handleDeliveryAck: ENTER', JSON.stringify(payload));
 
-    // Update the message status if the chat is open
-    const activeChatId = $chatMessagesState.activeChatId.peek();
-    console.log(`[WS Bridge] delivery_ack: activeChatId=${activeChatId}, payload.chat_id=${chat_id}`);
-    if (chat_id) {
-        console.log(`[WS Bridge] delivery_ack: UPDATING messages up to ${message_id} in chat ${chat_id} → delivered_to_recipient=true`);
-        $chatMessagesState.markMessagesDeliveredUpTo(chat_id, message_id);
-    }
+        // Support both Phase A (singular) and Phase B (batched/array)
+        const messageIds: string[] = Array.isArray(payload.message_ids)
+            ? payload.message_ids
+            : payload.message_id
+                ? [payload.message_id]
+                : [];
 
-    console.log(`[WS Bridge] delivery_ack: DONE — msgID=${message_id}`);
+        const chat_id = payload.chat_id;
+        const delivered_at = payload.delivered_at;
+
+        if (messageIds.length === 0) {
+            console.warn('[WS Bridge] delivery_ack: MISSING message_ids, skipping');
+            return;
+        }
+
+        // 1. Remove from shared lock
+        messageIds.forEach(id => sharedAckTracker.delete(id));
+
+        // 2. Update the message status / chat meta
+        const activeChatId = $chatMessagesState.activeChatId.peek();
+        const targetChatId = chat_id || activeChatId;
+
+        console.log(`[WS Bridge] delivery_ack: targetChatId=${targetChatId} (fromPayload=${chat_id}, active=${activeChatId})`);
+
+        if (targetChatId) {
+            if (delivered_at) {
+                console.log(`[WS Bridge] delivery_ack: CALLING markMessagesDeliveredUpTo(${targetChatId}, ${delivered_at})`);
+                $chatMessagesState.markMessagesDeliveredUpTo(targetChatId, delivered_at);
+            } else {
+                console.log(`[WS Bridge] delivery_ack: CALLING markMessagesDelivered(${targetChatId}, ${messageIds.length} ids)`);
+                $chatMessagesState.markMessagesDelivered(targetChatId, messageIds);
+            }
+        } else {
+            console.warn('[WS Bridge] delivery_ack: NO targetChatId found, cannot update state');
+        }
+
+        console.log(`[WS Bridge] delivery_ack: DONE — ids=${messageIds.join(',')}`);
+    } catch (err) {
+        console.error('[WS Bridge] ❌ CRITICAL ERROR in handleDeliveryAck:', err);
+    }
 }
 
 /**
@@ -143,16 +188,8 @@ function handleReadReceipt(payload: any): void {
         return;
     }
 
-    // Update the chat list entry with the new read timestamp
-    const currentEntry = $chatListState.chatsById[chat_id]?.peek();
-    console.log(`[WS Bridge] read_receipt: chatListEntry exists=${!!currentEntry}, chat_id=${chat_id}`);
-    if (currentEntry) {
-        console.log(`[WS Bridge] read_receipt: UPSERTING other_user_last_read_at=${read_at} for chat ${chat_id}`);
-        $chatListState.upsertChat({
-            ...currentEntry,
-            other_user_last_read_at: read_at,
-        });
-    }
+    // 1. Update status for active chat or list preview
+    $chatMessagesState.markMessagesReadUpTo(chat_id, read_at);
 
     const activeChatId = $chatMessagesState.activeChatId.peek();
     console.log(`[WS Bridge] read_receipt: DONE — chat_id=${chat_id} reader_id=${reader_id} read_at=${read_at} isActiveChat=${activeChatId === chat_id}`);
@@ -165,14 +202,14 @@ function handleReadReceipt(payload: any): void {
  */
 function handleUnsend(payload: any): void {
     console.log('[WS Bridge] handleUnsend: ENTER', JSON.stringify(payload));
-    const { chat_id, message_ids } = payload;
+    const { chat_id, message_ids, sender_id } = payload;
     if (!chat_id || !Array.isArray(message_ids)) {
         console.warn('[WS Bridge] unsend: INVALID payload — missing chat_id or message_ids', payload);
         return;
     }
 
-    console.log(`[WS Bridge] unsend: CALLING unsendMessages for chat=${chat_id}, count=${message_ids.length}, ids=${message_ids.join(',')}`);
-    $chatMessagesState.unsendMessages(chat_id, message_ids);
+    console.log(`[WS Bridge] unsend: CALLING unsendMessages for chat=${chat_id}, count=${message_ids.length}, sender=${sender_id}`);
+    $chatMessagesState.unsendMessages(chat_id, message_ids, sender_id);
 
     console.log(`[WS Bridge] unsend: DONE — ${message_ids.length} messages in chat ${chat_id}`);
 }
@@ -229,6 +266,12 @@ function handleSyncAction(payload: any): void {
 // ─── Event Router ───────────────────────────────────────────────────────────
 
 function routeWSEvent(event: WSEvent): void {
+    // Drop events that contain a ref field (already handled by wsClient.send promise logic)
+    if (event.ref) {
+        // console.log(`[WS Bridge] Ignoring response event (ref=${event.ref})`);
+        return;
+    }
+
     switch (event.type) {
         case 'new_message':
             handleNewMessage(event.payload);
@@ -248,6 +291,9 @@ function routeWSEvent(event: WSEvent): void {
         case 'sync_action':
             handleSyncAction(event.payload);
             break;
+        case 'error':
+            console.error(`[WS Bridge] Server reported error:`, event.error);
+            break;
         default:
             console.warn(`[WS Bridge] UNKNOWN event type: "${event.type}"`, event);
     }
@@ -256,6 +302,7 @@ function routeWSEvent(event: WSEvent): void {
 // ─── Lifecycle: Start/Stop ──────────────────────────────────────────────────
 
 let unsubscribe: (() => void) | null = null;
+let unsubscribeReconnect: (() => void) | null = null;
 
 /**
  * Start the WebSocket event bridge.
@@ -264,6 +311,14 @@ let unsubscribe: (() => void) | null = null;
 export function startWSEventBridge(): void {
     if (unsubscribe) return;
     unsubscribe = wsClient.subscribe(routeWSEvent);
+
+    // Auto-sync on reconnection
+    unsubscribeReconnect = wsClient.onReconnect(() => {
+        console.log('[WS Bridge] Reconnected! Triggering sync...');
+        $syncEngine.fetchAndApply();
+        $chatMessagesState.syncPendingMessages();
+    });
+
     wsClient.connect();
 }
 
@@ -275,6 +330,10 @@ export function stopWSEventBridge(): void {
     if (unsubscribe) {
         unsubscribe();
         unsubscribe = null;
+    }
+    if (unsubscribeReconnect) {
+        unsubscribeReconnect();
+        unsubscribeReconnect = null;
     }
     wsClient.disconnect();
 }

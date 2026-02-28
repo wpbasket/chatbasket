@@ -111,16 +111,36 @@ export default PersonalChatScreen;
 const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId: string, chatId: string, index: number }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
     const otherUserLastReadAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_read_at?.get());
+    const otherUserLastDeliveredAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_delivered_at?.get());
     const messageIds = useValue(() => $chatMessagesState.chats[chatId]?.messageIds.get() || []);
 
     if (!message) return null;
 
     let status = message.status;
-    if (message.is_from_me && otherUserLastReadAt) {
-        const msgTime = new Date(message.created_at).getTime();
-        const readTime = new Date(otherUserLastReadAt).getTime();
-        if (msgTime <= readTime) {
+    let delivered = message.delivered_to_recipient;
+
+    const parseDate = (d: string | null | undefined) => {
+        if (!d) return NaN;
+        try {
+            return new Date(d.replace(' ', 'T')).getTime();
+        } catch {
+            return NaN;
+        }
+    };
+
+    if (message.is_from_me) {
+        const msgTime = parseDate(message.created_at);
+
+        // SOURCE OF TRUTH: Compare message time against chat-level persistent delivery/read timestamps
+        const readTime = parseDate(otherUserLastReadAt);
+        if (!isNaN(readTime) && msgTime <= readTime + 10000) {
             status = 'read';
+            delivered = true;
+        } else {
+            const deliveredTime = parseDate(otherUserLastDeliveredAt);
+            if (!isNaN(deliveredTime) && msgTime <= deliveredTime + 10000) {
+                delivered = true;
+            }
         }
     }
 
@@ -281,7 +301,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 type={message.is_from_me ? 'me' : 'other'}
                 messageType={message.message_type}
                 status={status}
-                delivered={message.delivered_to_recipient}
+                delivered={delivered}
                 createdAt={message.created_at}
                 onLongPress={handleLongPress}
                 onContextMenu={handleLongPress}
@@ -315,42 +335,46 @@ const ChatContentContainer = React.memo(({
                 const currentChat = $chatMessagesState.chats[chat_id];
                 currentChat.recipientId.set(recipient_id ?? null);
 
-                const msgs = currentChat.messages.peek();
-                if (msgs.length > 0) {
-                    msgs.forEach(m => {
-                        if (!m.is_from_me && !m.delivered_to_recipient) {
-                            currentChat.messagesById[m.message_id].delivered_to_recipient.set(true);
-                        }
-                        if (m.is_from_me && !m.synced_to_sender_primary) {
-                            currentChat.messagesById[m.message_id].synced_to_sender_primary.set(true);
+                const chatData = currentChat.peek();
+                const hasMessages = chatData.messages.length > 0;
+
+                // OPTIMIZATION: Only load if we have no messages yet, or if there's a significant unread count
+                const unreadCount = $chatListState.chatsById[chat_id]?.unread_count.peek() ?? 0;
+
+                if (!hasMessages || unreadCount > 0) {
+                    loadMessages(chat_id).then(() => {
+                        if (unreadCount > 0) {
+                            // Delay slightly to ensure UI has rendered new messages before marking read
+                            setTimeout(() => {
+                                $chatMessagesState.debouncedMarkRead(chat_id);
+                                $chatListState.markChatRead(chat_id);
+                            }, 500);
                         }
                     });
                 }
 
-                loadMessages(chat_id).then(() => {
-                    setTimeout(() => {
-                        void PersonalChatApi.markChatRead({ chat_id }).catch(() => { });
-                        $chatListState.markChatRead(chat_id);
-                    }, 1500);
-                });
-
-                // Check eligibility on mount
+                // Check eligibility on mount (Only if it's the first time or was previously ineligible)
                 if (recipient_id) {
-                    PersonalChatApi.checkEligibility({ recipient_id: recipient_id as string })
-                        .then(res => {
-                            batch(() => {
-                                const chat$ = $chatMessagesState.chats[chat_id];
-                                if (chat$.peek()) {
-                                    chat$.isEligible.set(res.allowed);
-                                    if (!res.allowed) {
-                                        chat$.eligibilityReason.set(res.reason || null);
+                    const chat$ = $chatMessagesState.chats[chat_id];
+                    const chat = chat$.peek();
+                    if (chat && chat.isEligible) {
+                        // Already allowed, skip redundant check unless it was a long time ago (could add timestamp check here if needed)
+                    } else {
+                        PersonalChatApi.checkEligibility({ recipient_id: recipient_id as string })
+                            .then(res => {
+                                batch(() => {
+                                    if (chat$.peek()) {
+                                        chat$.isEligible.set(res.allowed);
+                                        if (!res.allowed) {
+                                            chat$.eligibilityReason.set(res.reason || null);
+                                        }
                                     }
-                                }
+                                });
+                            })
+                            .catch(err => {
+                                console.error('[Chat] Eligibility check failed', err);
                             });
-                        })
-                        .catch(err => {
-                            console.error('[Chat] Eligibility check failed', err);
-                        });
+                    }
                 }
             });
 
@@ -391,6 +415,24 @@ const ChatContentContainer = React.memo(({
                 });
             }
 
+            if (response.other_user_last_delivered_at) {
+                batch(() => {
+                    const chat$ = $chatListState.chatsById[chatId];
+                    const chat = chat$.peek();
+                    if (chat) {
+                        chat$.other_user_last_delivered_at.set(response.other_user_last_delivered_at);
+
+                        if (chat.last_message_created_at && chat.last_message_is_from_me && chat.last_message_status === 'sent') {
+                            const lastMsgTime = new Date(chat.last_message_created_at).getTime();
+                            const deliveredTime = new Date(response.other_user_last_delivered_at).getTime();
+                            if (lastMsgTime <= deliveredTime) {
+                                chat$.last_message_status.set('delivered');
+                            }
+                        }
+                    }
+                });
+            }
+
             const messagesWithStatus = (response.messages ?? []).map(m => ({
                 ...m,
                 status: 'sent'
@@ -410,15 +452,26 @@ const ChatContentContainer = React.memo(({
                     const chat$ = $chatListState.chatsById[chatId];
                     const currentChat = chat$.peek();
 
-                    if (currentChat && (!currentChat.last_message_created_at || new Date(latestMsg.created_at).getTime() > new Date(currentChat.last_message_created_at).getTime())) {
-                        chat$.assign({
-                            last_message_content: latestMsg.content,
-                            last_message_created_at: latestMsg.created_at,
-                            last_message_status: latestMsg.status ?? 'sent',
-                            last_message_is_from_me: latestMsg.is_from_me,
-                            last_message_type: latestMsg.message_type,
-                            last_message_id: latestMsg.message_id
-                        });
+                    if (currentChat) {
+                        // PROTECTION: Trust server's authoritative preview state.
+                        // If the server explicitly says a chat has no preview (content is empty/null),
+                        // we MUST NOT allow the message history load to re-populate it.
+                        const serverPreview = currentChat.last_message_content;
+                        if (serverPreview === null || serverPreview === '') {
+                            return;
+                        }
+
+                        if (!currentChat.last_message_created_at || new Date(latestMsg.created_at).getTime() > new Date(currentChat.last_message_created_at).getTime()) {
+                            chat$.assign({
+                                last_message_content: latestMsg.content,
+                                last_message_created_at: latestMsg.created_at,
+                                last_message_status: latestMsg.status ?? 'sent',
+                                last_message_is_from_me: latestMsg.is_from_me,
+                                last_message_type: latestMsg.message_type,
+                                last_message_id: latestMsg.message_id,
+                                last_message_is_unsent: latestMsg.message_type === 'unsent',
+                            });
+                        }
                     }
                 }
             });
@@ -505,6 +558,7 @@ const ChatContentContainer = React.memo(({
             last_message_status: 'pending',
             last_message_is_from_me: true,
             last_message_id: tempId,
+            last_message_is_unsent: false, // Clear stale unsend flag
             unread_count: existingChat?.unread_count || 0,
             other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(),
             updated_at: now,
@@ -625,6 +679,7 @@ const ChatContentContainer = React.memo(({
                     last_message_is_from_me: true,
                     last_message_type: type,
                     last_message_id: response.message_id,
+                    last_message_is_unsent: false, // Clear stale unsend flag
                 } as ChatEntry);
             });
         } catch (err: unknown) {

@@ -21,6 +21,7 @@ export interface ChatEntry {
     created_at: string;               // Go time.Time → JSON string
     updated_at: string;
     other_user_last_read_at: string;  // Go time.Time → JSON string (Added Phase 9)
+    other_user_last_delivered_at: string; // Added Phase 18
     last_message_content: string | null;     // Go *string
     last_message_created_at: string | null;  // Go *time.Time → JSON string | null
     last_message_type: string | null;        // Go *string
@@ -85,6 +86,7 @@ export interface GetMessagesResponse {
     messages: MessageEntry[];
     count: number;
     other_user_last_read_at: string; // Go time.Time → JSON string (Added)
+    other_user_last_delivered_at: string; // Added Phase 18
 }
 
 /**
@@ -164,10 +166,17 @@ export interface SendMessagePayload {
     message_type: string;    // text|image|video|audio|file
 }
 
-/** POST /personal/chat/ack */
 export interface AckDeliveryPayload {
     message_id: string;
     acknowledged_by: 'recipient' | 'sender';
+    success: boolean;
+}
+
+/** POST /personal/chat/ack-batch (Phase B) */
+export interface AckDeliveryBatchPayload {
+    message_ids: string[];
+    acknowledged_by: 'recipient' | 'sender';
+    recipient_id?: string; // Optional for sender-sync broadcasts
     success: boolean;
 }
 
