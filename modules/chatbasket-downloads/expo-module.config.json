@@ -1,9 +1,0 @@
-{
-  "platforms": ["apple", "android", "web"],
-  "apple": {
-    "modules": ["ChatbasketDownloadsModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.chatbasketdownloads.ChatbasketDownloadsModule"]
-  }
-}

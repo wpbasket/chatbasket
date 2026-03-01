@@ -1,7 +1,7 @@
 import { PreferencesStorage } from '@/lib/storage/commonStorage/storage.preferences';
 import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
-import { Colors } from './constants/Colors';
-import { Fonts } from './constants/fonts';
+import { Colors } from './src/constants/Colors';
+import { Fonts } from './src/constants/fonts';
 
 // Define Unistyles themes using your current Colors.ts structure
 const lightTheme = {

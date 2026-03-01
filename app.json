@@ -7,20 +7,18 @@
     "icon": "./assets/images/splash-icon.png",
     "scheme": "chatbasket",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "icon": "./assets/images/splash-icon.png",
       "bundleIdentifier": "com.tasktoclear.chatbasket"
     },
     "android": {
+      "package": "com.tasktoclear.chatbasket",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/splash-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "softwareKeyboardLayoutMode": "resize",
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.tasktoclear.chatbasket",
+      "softwareKeyboardLayoutMode": "resize",
       "intentFilters": [
         {
           "action": "VIEW",

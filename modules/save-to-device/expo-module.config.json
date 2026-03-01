@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["SaveToDeviceModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.savetodevice.SaveToDeviceModule"]
+  }
+}
