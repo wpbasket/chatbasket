@@ -136,113 +136,105 @@ export default function Settings() {
   }
 
   return (
-    <>
-      {/* Existing settings UI kept but hidden temporarily */}
-      {false && (
-        <ThemedView style={styles.mainContainer}>
-          <ThemedView style={{ paddingTop: rt.insets.top }}>
-            <Header
-              onBackPress={goBack}
-              centerSection={<ThemedText type='subtitle'>Settings</ThemedText>}
-            />
-          </ThemedView>
-          <View style={styles.container}>
-            <View style={[styles.flex1, { marginTop: 20 }]}>
-              <ThemedText style={styles.sectionHeader}>Security</ThemedText>
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Email :</ThemedText>
-                </View>
-                <View style={styles.itemContainer}>
-                  <ThemedText style={styles.item}>{email}</ThemedText>
-                </View>
-                <Pressable
-                  onPress={editEmail}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.changeContainer
-                  ]}
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Settings</ThemedText>}
+        />
+      </ThemedView>
+      <View style={styles.container}>
+        <View style={[styles.flex1, { marginTop: 20 }]}>
+          <ThemedText style={styles.sectionHeader}>Security</ThemedText>
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Email :</ThemedText>
+            </View>
+            <View style={styles.itemContainer}>
+              <ThemedText style={styles.item}>{email}</ThemedText>
+            </View>
+            <Pressable
+              onPress={editEmail}
+              onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.changeContainer
+              ]}
 
-                >
-                  <MaterialCommunityIcon size={25} name={'account.emailEdit'} />
-                </Pressable>
-              </View>
+            >
+              <MaterialCommunityIcon size={25} name={'account.emailEdit'} />
+            </Pressable>
+          </View>
 
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Password :</ThemedText>
-                </View>
-                <View style={styles.itemContainer}>
-                  <ThemedText style={styles.item}>******</ThemedText>
-                </View>
-                <Pressable
-                  onPress={editPassword}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.changeContainer
-                  ]}
-                >
-                  <MaterialCommunityIcon size={25} name={'edit'} />
-                </Pressable>
-              </View>
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Password :</ThemedText>
+            </View>
+            <View style={styles.itemContainer}>
+              <ThemedText style={styles.item}>******</ThemedText>
+            </View>
+            <Pressable
+              onPress={editPassword}
+              onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.changeContainer
+              ]}
+            >
+              <MaterialCommunityIcon size={25} name={'edit'} />
+            </Pressable>
+          </View>
 
-              <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
+          <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
 
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Mode :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Choose mode'
-                    value={selectedModeValue}
-                    options={modeOptions}
-                    onSelect={handleSelectMode}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Notifications'
-                    value={selectedNotificationValue}
-                    options={notificationDisplayOptions}
-                    modalOptions={notificationActionOptions}
-                    onSelect={handleSelectNotifications}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <View style={styles.itemTitleContainer}>
-                  <ThemedText style={styles.itemTitle}>Theme :</ThemedText>
-                </View>
-                <View style={styles.themePickerContainer}>
-                  <Dropdown
-                    placeholder='Choose theme'
-                    value={selectedThemeValue}
-                    options={themeOptions}
-                    onSelect={handleSelectTheme}
-                    style={styles.dropdownBorder}
-                  />
-                </View>
-              </View>
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Mode :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Choose mode'
+                value={selectedModeValue}
+                options={modeOptions}
+                onSelect={handleSelectMode}
+                style={styles.dropdownBorder}
+              />
             </View>
           </View>
-        </ThemedView>
-      )}
-      <ThemedView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
-      </ThemedView>
-    </>
+
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Notifications :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Notifications'
+                value={selectedNotificationValue}
+                options={notificationDisplayOptions}
+                modalOptions={notificationActionOptions}
+                onSelect={handleSelectNotifications}
+                style={styles.dropdownBorder}
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.itemTitleContainer}>
+              <ThemedText style={styles.itemTitle}>Theme :</ThemedText>
+            </View>
+            <View style={styles.themePickerContainer}>
+              <Dropdown
+                placeholder='Choose theme'
+                value={selectedThemeValue}
+                options={themeOptions}
+                onSelect={handleSelectTheme}
+                style={styles.dropdownBorder}
+              />
+            </View>
+          </View>
+        </View>
+      </View>
+    </ThemedView>
   )
 }
 

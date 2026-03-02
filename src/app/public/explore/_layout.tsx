@@ -15,7 +15,7 @@ export default function ExploreScreenLayout() {
       <ThemeProvider value={UnistylesRuntime.colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <ThemedView style={styles.outerContainer}>
           <Stack>
-              <Stack.Screen name="index"/>
+              <Stack.Screen name="index" options={{ headerShown: false }}/>
           </Stack>
         </ThemedView>
       </ThemeProvider>

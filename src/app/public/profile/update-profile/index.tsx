@@ -286,134 +286,126 @@ export default function UpdateProfile() {
   }
 
   return (
-    <>
-      {/* Existing update-profile UI kept but hidden temporarily */}
-      {false && (
-        <ThemedView style={styles.mainContainer}>
-          <ThemedView style={{ paddingTop: rt.insets.top }}>
-            <Header
-              onBackPress={goBack}
-              centerSection={<ThemedText type='subtitle'>Update Profile</ThemedText>}
-            />
-          </ThemedView>
-          <ThemedView style={styles.container}>
-            <ThemedView style={styles.profilePictureContainer}>
-              <Pressable style={({ pressed }) => [
-                { opacity: pressed ? 0.1 : 1 },
-                styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
-              ]} >
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Update Profile</ThemedText>}
+        />
+      </ThemedView>
+      <ThemedView style={styles.container}>
+        <ThemedView style={styles.profilePictureContainer}>
+          <Pressable style={({ pressed }) => [
+            { opacity: pressed ? 0.1 : 1 },
+            styles.profilePicture, (isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid) && styles.profileInputError
+          ]} >
             {(avatarFile || (user?.avatarUri && user.avatarUri.length > 1)) && (
-                  <Image
-                    source={{ uri: avatarFile?.uri || avatarUri! }}
-                    style={styles.profilePictureImage}
-                  />
-                )}
-              </Pressable>
-              <ThemedView style={styles.outerEditIcon}>
-                <Pressable
-                  onPress={handleAvatarChange}
-                  onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.editIcon
-                  ]}
-                >
-                  <MaterialCommunityIcon name='image.edit' size={25} />
-                  <ThemedText style={[styles.bucketText,]} selectable={false}>Change avatar</ThemedText>
-                </Pressable>
-              </ThemedView>
-            </ThemedView>
-            <TextInput
-              placeholder="Name"
-              inputMode='text'
-              maxLength={70}
-              value={name ?? user?.name}
-              onChangeText={(text) => updateProfile$.name.set(text)}
-              textContentType='name'
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
-            />
-
-
-            <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameCheckedWhileNull) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
-              <TextInput
-                placeholder="Username"
-                maxLength={30}
-                inputMode='text'
-                value={username ?? user?.username}
-                onChangeText={(text) => { updateProfile$.username.set(text); updateProfile$.usernameChecked.set(false) }}
-                textContentType='username'
-                placeholderTextColor="gray"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.inputField, { outline: 'none' }]}
+              <Image
+                source={{ uri: avatarFile?.uri || avatarUri! }}
+                style={styles.profilePictureImage}
               />
-              <Pressable
-                onPress={checkUsername}
-                onPressIn={handlePressIn}
-                style={({ pressed }) => [
-                  styles.inputButton,
-                  { opacity: pressed ? 0.1 : 1 }
-                ]}>
-                {isUsernameChecked ? (
-                  <IconSymbol name="check" size={25} />
-                ) : username && username !== user?.username && (
-                  <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
-                )}
-              </Pressable>
-            </ThemedView>
-
-
-            <TextInput
-              placeholder="Bio"
-              inputMode='text'
-              value={bio ?? user?.bio}
-              onChangeText={(text) => updateProfile$.bio.set(text)}
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={200}
-              multiline={true}
-              style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
-            />
-
-            <ThemedView style={[styles.profileVisibleToContainer]} >
-              <Dropdown
-                options={[
-                  { label: 'Public', value: 'public' },
-                  { label: 'Private', value: 'private' },
-                  { label: 'Follower', value: 'follower' },
-                ]}
-                value={profileVisibleTo ?? user?.profileVisibleTo}
-                placeholder="Select profile visibility"
-                style={styles.dropdownBorder}
-                error={!isProfileVisibleToValid && isSubmitted}
-                searchable={false}
-                onSelect={(value) => updateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
-              />
-
-            </ThemedView>
-
+            )}
+          </Pressable>
+          <ThemedView style={styles.outerEditIcon}>
             <Pressable
-              onPress={handleUpdateProfile}
-              style={({ pressed }) => [
-                styles.submit,
-                { opacity: pressed ? 0.1 : 1 }
-              ]}
-
+              onPress={handleAvatarChange}
               onPressIn={handlePressIn}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.editIcon
+              ]}
             >
-              <ThemedText style={styles.submitText} selectable={false}>Save</ThemedText>
+              <MaterialCommunityIcon name='image.edit' size={25} />
+              <ThemedText style={[styles.bucketText,]} selectable={false}>Change avatar</ThemedText>
             </Pressable>
           </ThemedView>
         </ThemedView>
-      )}
-      <ThemedView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
+        <TextInput
+          placeholder="Name"
+          inputMode='text'
+          maxLength={70}
+          value={name ?? user?.name}
+          onChangeText={(text) => updateProfile$.name.set(text)}
+          textContentType='name'
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
+        />
+
+
+        <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameCheckedWhileNull) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
+          <TextInput
+            placeholder="Username"
+            maxLength={30}
+            inputMode='text'
+            value={username ?? user?.username}
+            onChangeText={(text) => { updateProfile$.username.set(text); updateProfile$.usernameChecked.set(false) }}
+            textContentType='username'
+            placeholderTextColor="gray"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.inputField, { outline: 'none' }]}
+          />
+          <Pressable
+            onPress={checkUsername}
+            onPressIn={handlePressIn}
+            style={({ pressed }) => [
+              styles.inputButton,
+              { opacity: pressed ? 0.1 : 1 }
+            ]}>
+            {isUsernameChecked ? (
+              <IconSymbol name="check" size={25} />
+            ) : username && username !== user?.username && (
+              <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
+            )}
+          </Pressable>
+        </ThemedView>
+
+
+        <TextInput
+          placeholder="Bio"
+          inputMode='text'
+          value={bio ?? user?.bio}
+          onChangeText={(text) => updateProfile$.bio.set(text)}
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={200}
+          multiline={true}
+          style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
+        />
+
+        <ThemedView style={[styles.profileVisibleToContainer]} >
+          <Dropdown
+            options={[
+              { label: 'Public', value: 'public' },
+              { label: 'Private', value: 'private' },
+              { label: 'Follower', value: 'follower' },
+            ]}
+            value={profileVisibleTo ?? user?.profileVisibleTo}
+            placeholder="Select profile visibility"
+            style={styles.dropdownBorder}
+            error={!isProfileVisibleToValid && isSubmitted}
+            searchable={false}
+            onSelect={(value) => updateProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+          />
+
+        </ThemedView>
+
+        <Pressable
+          onPress={handleUpdateProfile}
+          style={({ pressed }) => [
+            styles.submit,
+            { opacity: pressed ? 0.1 : 1 }
+          ]}
+
+          onPressIn={handlePressIn}
+        >
+          <ThemedText style={styles.submitText} selectable={false}>Save</ThemedText>
+        </Pressable>
       </ThemedView>
-    </>
+    </ThemedView>
   )
 }
 

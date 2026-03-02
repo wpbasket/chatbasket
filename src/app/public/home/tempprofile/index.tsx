@@ -1,5 +1,4 @@
 import ProfileList from '@/components/publicComponents/profile/ProfileList';
-import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { useValue } from '@legendapp/state/react';
@@ -19,28 +18,20 @@ export default function Profile() {
         setActiveTab(tab);
     }, []);
 
-    if (false && !user) {
+    if (!user) {
         return (
             <NotFoundScreen />
         )
     }
 
     return (
-        <>
-            {/* Existing temp profile UI kept but hidden temporarily */}
-            {false && (
-                <ThemedView style={styles.container}>
-                    <ProfileList
-                        user={user}
-                        activeTab={activeTab}
-                        onTabPress={onTabPress}
-                    />
-                </ThemedView>
-            )}
-            <ThemedView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
-            </ThemedView>
-        </>
+        <ThemedView style={styles.container}>
+            <ProfileList
+                user={user}
+                activeTab={activeTab}
+                onTabPress={onTabPress}
+            />
+        </ThemedView>
     );
 }
 

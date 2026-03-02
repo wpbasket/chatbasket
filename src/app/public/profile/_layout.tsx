@@ -12,10 +12,10 @@ export default function ProfileScreenLayout() {
   return (
     <>
       <ThemeProvider value={UnistylesRuntime.colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <LoginPrompt>
+        {/* <LoginPrompt> */}
           <ThemedView style={styles.outerContainer}>
             <Stack>
-              <Stack.Screen name="index" />
+              <Stack.Screen name="index" options={{ headerShown: false }}/>
               <Stack.Protected guard={isInTheProfileUpdateMode}>
                 <Stack.Screen name='create-profile' options={{ headerShown: false }} />
                 <Stack.Screen name='update-profile' options={{ headerShown: false }} />
@@ -23,7 +23,7 @@ export default function ProfileScreenLayout() {
               </Stack.Protected>
             </Stack>
           </ThemedView>
-        </LoginPrompt>
+        {/* </LoginPrompt> */}
       </ThemeProvider>
     </>
   );

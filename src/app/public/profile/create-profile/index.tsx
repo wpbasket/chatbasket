@@ -19,7 +19,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles"
 export default function CreateProfile() {
   // Redirect to profile if user already has a profile
   useEffect(() => {
-    if (false && authState.user.get()) {
+    if (authState.user.get()) {
       authState.isInTheProfileUpdateMode.set(false)
       router.replace('/public/profile');
     }
@@ -122,103 +122,95 @@ export default function CreateProfile() {
   }
 
   return (
-    <>
-      {/* Existing create-profile UI kept but hidden temporarily */}
-      {false && (
-        <ThemedView style={styles.mainContainer}>
-          <ThemedView style={{ paddingTop: rt.insets.top }}>
-            <Header
-              onBackPress={goBack}
-              centerSection={<ThemedText type='subtitle'>Create Profile</ThemedText>}
-            />
-          </ThemedView>
-          <ThemedView style={styles.container}>
-            <ThemedText type="title">Create Profile</ThemedText>
-
-            <TextInput
-              placeholder="Name"
-              inputMode='text'
-              maxLength={70}
-              value={name ?? ""}
-              onChangeText={(text) => createProfile$.name.set(text)}
-              textContentType='name'
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
-            />
-
-            <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameChecked) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
-              <TextInput
-                placeholder="Username"
-                maxLength={30}
-                inputMode='text'
-                value={payloadUsername ?? ""}
-                onChangeText={(text) => { createProfile$.username.set(text); createProfile$.usernameChecked.set(false) }}
-                textContentType='username'
-                placeholderTextColor="gray"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.inputField, { outline: 'none' }]}
-              />
-              <Pressable onPress={checkUsername} style={({ pressed }) => [
-                styles.inputButton,
-                { opacity: pressed ? 0.1 : 1 }
-              ]}>
-                {isUsernameChecked ? (
-                  <IconSymbol name="check" size={25} />
-                ) : (
-                  <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
-                )}
-              </Pressable>
-            </ThemedView>
-
-            <TextInput
-              placeholder="Bio"
-              inputMode='text'
-              value={bio ?? ""}
-              onChangeText={(text) => createProfile$.bio.set(text)}
-              placeholderTextColor="gray"
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={200}
-              multiline={true}
-              style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
-            />
-
-            <ThemedView style={[styles.profileVisibleToContainer]} >
-              <Dropdown
-                options={[
-                  { label: 'Public', value: 'public' },
-                  { label: 'Private', value: 'private' },
-                  { label: 'Follower', value: 'follower' },
-                ]}
-                value={profileVisibleTo}
-                placeholder="Select profile visibility"
-                error={!isProfileVisibleToValid && isSubmitted}
-                searchable={false}
-                style={styles.reverseModalBackground}
-                onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
-              />
-            </ThemedView>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.submit,
-                { opacity: pressed ? 0.1 : 1 }
-              ]}
-              onPress={handleProfileCreation}
-              onPressIn={handlePressIn}
-            >
-              <ThemedText style={styles.submitText} selectable={false}>Create</ThemedText>
-            </Pressable>
-          </ThemedView>
-        </ThemedView>
-      )}
-      <ThemedView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
+    <ThemedView style={styles.mainContainer}>
+      <ThemedView style={{ paddingTop: rt.insets.top }}>
+        <Header
+          onBackPress={goBack}
+          centerSection={<ThemedText type='subtitle'>Create Profile</ThemedText>}
+        />
       </ThemedView>
-    </>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title">Create Profile</ThemedText>
+
+        <TextInput
+          placeholder="Name"
+          inputMode='text'
+          maxLength={70}
+          value={name ?? ""}
+          onChangeText={(text) => createProfile$.name.set(text)}
+          textContentType='name'
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.input, !isNameValid && isSubmitted && styles.inputError]}
+        />
+
+        <ThemedView style={[styles.inputContainer, (!isUsernameValid || !isUsernameChecked) && (isUsernameSubmitted || isSubmitted) && styles.inputError]}>
+          <TextInput
+            placeholder="Username"
+            maxLength={30}
+            inputMode='text'
+            value={payloadUsername ?? ""}
+            onChangeText={(text) => { createProfile$.username.set(text); createProfile$.usernameChecked.set(false) }}
+            textContentType='username'
+            placeholderTextColor="gray"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.inputField, { outline: 'none' }]}
+          />
+          <Pressable onPress={checkUsername} style={({ pressed }) => [
+            styles.inputButton,
+            { opacity: pressed ? 0.1 : 1 }
+          ]}>
+            {isUsernameChecked ? (
+              <IconSymbol name="check" size={25} />
+            ) : (
+              <ThemedText selectable={false} color={theme.colors.primary} type='smallBold'>Check</ThemedText>
+            )}
+          </Pressable>
+        </ThemedView>
+
+        <TextInput
+          placeholder="Bio"
+          inputMode='text'
+          value={bio ?? ""}
+          onChangeText={(text) => createProfile$.bio.set(text)}
+          placeholderTextColor="gray"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={200}
+          multiline={true}
+          style={[styles.bio, !isBioValid && isSubmitted && styles.inputError]}
+        />
+
+        <ThemedView style={[styles.profileVisibleToContainer]} >
+          <Dropdown
+            options={[
+              { label: 'Public', value: 'public' },
+              { label: 'Private', value: 'private' },
+              { label: 'Follower', value: 'follower' },
+            ]}
+            value={profileVisibleTo}
+            placeholder="Select profile visibility"
+            error={!isProfileVisibleToValid && isSubmitted}
+            searchable={false}
+            style={styles.reverseModalBackground}
+            onSelect={(value) => createProfile$.profileVisibleTo.set(value as 'public' | 'private' | 'follower')}
+          />
+        </ThemedView>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.submit,
+            { opacity: pressed ? 0.1 : 1 }
+          ]}
+          onPress={handleProfileCreation}
+          onPressIn={handlePressIn}
+        >
+          <ThemedText style={styles.submitText} selectable={false}>Create</ThemedText>
+        </Pressable>
+      </ThemedView>
+    </ThemedView>
   )
 }
 
