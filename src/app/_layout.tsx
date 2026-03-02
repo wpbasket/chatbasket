@@ -7,6 +7,7 @@ import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { initUserPosts } from '@/state/publicState/public.state.initUserPosts';
 import { initializeGlobalNetworkTracking } from '@/state/tools/state.network';
+import { Logger } from '@/utils/personalUtils/logger/logger';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -22,7 +23,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
-// import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { KeyboardSync } from '@/components/tools/KeyboardSync';
 import React from 'react';
 import { StyleSheet, UnistylesRuntime } from 'react-native-unistyles';
@@ -57,6 +58,8 @@ export default function RootLayout() {
 
   // One-time initialization of app storage and auth state restoration
   useEffect(() => {
+    Logger.init(); // Starts the logger directly, taking values from config
+
     const init = async () => {
       try {
         await initializeAppStorage();
@@ -185,7 +188,7 @@ export default function RootLayout() {
       <ShareIntentProvider>
         <IncomingShareListener />
         <KeyboardSync />
-        {/* <KeyboardProvider> */}
+        <KeyboardProvider>
         <ThemeProvider value={themeName === 'dark' ? DarkTheme : DefaultTheme}>
           <ThemedView style={styles.outerContainer}>
             <Stack>
@@ -217,7 +220,7 @@ export default function RootLayout() {
             <AppModal />
           </ThemedView>
         </ThemeProvider>
-        {/* </KeyboardProvider> */}
+        </KeyboardProvider>
       </ShareIntentProvider>
     </>
   );

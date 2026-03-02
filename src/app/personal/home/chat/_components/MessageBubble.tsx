@@ -1,5 +1,5 @@
 import React, { memo, useState, useMemo, useCallback } from 'react';
-import { View, Pressable, Modal, TouchableOpacity, Image as RNImage, useWindowDimensions } from 'react-native';
+import { View, Pressable, Modal, TouchableOpacity, Image as RNImage, useWindowDimensions, Platform } from 'react-native';
 import { ThemedText, ThemedView } from '@/components/ui/basic';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
@@ -140,7 +140,7 @@ const MessageBubble = memo(
 
         // ── Shared media meta row (filename + size) ───────────────────────────
         const renderMediaMeta = (fallbackLabel: string) => (
-            <View style={{ paddingLeft: 20, paddingRight: 30, paddingBottom: 2 }}>
+            <View style={{ paddingLeft: 20, paddingRight: 30, paddingBottom: 6, paddingTop: 4, zIndex: 1 }}>
                 <View style={[styles.fileHeader, { backgroundColor: 'transparent', padding: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
                     <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { fontSize: 10, flex: 1 }]}>
                         {formatFileName(fileName || fallbackLabel)}
@@ -153,7 +153,7 @@ const MessageBubble = memo(
         );
 
         const renderProgressBar = () => {
-            if (status !== 'pending' || progress >= 100 || progress <= 0) return null;
+            if (isVideo || status !== 'pending' || progress >= 100 || progress <= 0) return null;
             return (
                 <View style={[styles.progressContainer, { marginLeft: 20, marginRight: 30 }]}>
                     <View style={[styles.progressBar, { width: `${progress}%` }]} />
@@ -209,16 +209,16 @@ const MessageBubble = memo(
                 const activeViewUrl = viewUrl || fileUrl;
                 if (!activeViewUrl) {
                     return (
-                        <>
+                        <View style={styles.mediaBubbleWrapper}>
                             <View style={[styles.mediaFrame, { justifyContent: 'center', alignItems: 'center' }]}>
                                 <IconSymbol name="photo.fill" size={48} color={theme.colors.border} />
                             </View>
                             {renderProgressBar()}
-                        </>
+                        </View>
                     );
                 }
                 return (
-                    <>
+                    <View style={styles.mediaBubbleWrapper} pointerEvents={isSelectMode ? 'auto' : 'box-none'}>
                         <View style={styles.mediaFrame}>
                             <RNImage
                                 source={{ uri: activeViewUrl.trim() }}
@@ -234,7 +234,7 @@ const MessageBubble = memo(
                                 {text}
                             </ThemedText>
                         )}
-                    </>
+                    </View>
                 );
             }
 
@@ -242,7 +242,7 @@ const MessageBubble = memo(
                 const activeMediaUrl = viewUrl || fileUrl;
                 if (!activeMediaUrl) {
                     return (
-                        <View style={styles.contentPadding}>
+                        <View style={isVideo ? styles.mediaBubbleWrapper : styles.contentPadding}>
                             <View style={styles.fileHeader}>
                                 <View style={styles.fileIconBox}>
                                     <IconSymbol name={isVideo ? 'video.fill' : 'waveform'} size={24} color={theme.colors.primary} />
@@ -256,18 +256,18 @@ const MessageBubble = memo(
                                     </ThemedText>
                                 </View>
                             </View>
-                            {renderProgressBar()}
+                            {!isVideo && renderProgressBar()}
                         </View>
                     );
                 }
 
                 return (
-                    <>
+                    <View style={styles.mediaBubbleWrapper} pointerEvents={(isMediaLoaded && !isSelectMode) ? 'box-none' : 'auto'}>
                         {isVideo ? (
                             // Video: show tap-to-load thumbnail until first tap, then mount player
                             <View style={styles.mediaFrame} pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
-                                    <VideoInlinePlayer url={activeMediaUrl} />
+                                    <VideoInlinePlayer url={activeMediaUrl} onExit={() => setIsMediaLoaded(false)} />
                                 ) : (
                                     <View style={styles.videoPlaceholder}>
                                         <View style={styles.videoPlayButton}>
@@ -278,7 +278,7 @@ const MessageBubble = memo(
                             </View>
                         ) : (
                             // Audio: show static shell until first tap, then mount real player
-                            <View pointerEvents={isSelectMode ? 'none' : 'auto'}>
+                            <View style={{ marginTop: 8 }} pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
                                     <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} />
                                 ) : (
@@ -287,13 +287,13 @@ const MessageBubble = memo(
                             </View>
                         )}
                         {renderMediaMeta(isVideo ? 'Video' : 'Audio')}
-                        {renderProgressBar()}
+                        {!isVideo && renderProgressBar()}
                         {!!text && (
                             <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
                         )}
-                    </>
+                    </View>
                 );
             }
 
@@ -344,6 +344,10 @@ const MessageBubble = memo(
                     { opacity: pressed ? 0.7 : 1 },
                     !isMe ? styles.myBubbleContainer : styles.otherBubbleContainer,
                 ]}
+                // On native, once media is loaded, we want touches to pass through to the player
+                // unless we are in selection mode.
+                pointerEvents={((isMediaLoaded && isAudio) && !isSelectMode) ? 'box-none' : 'auto'}
+                disabled={((isMediaLoaded && isAudio) && !isSelectMode)}
             >
                 <View
                     accessibilityRole="text"
@@ -356,6 +360,7 @@ const MessageBubble = memo(
                         messageType === 'file' && styles.fileBubble,
                         isSelected && styles.selectedBubble,
                     ]}
+                    pointerEvents={((isMediaLoaded && isAudio) && !isSelectMode) ? 'box-none' : 'auto'}
                 >
                     {renderContent()}
 
@@ -399,6 +404,8 @@ const MessageBubble = memo(
                             </ThemedView>
                         </Modal>
                     )}
+
+
                 </View>
             </Pressable>
         );
@@ -418,10 +425,12 @@ const MessageBubble = memo(
         prev.isSelectMode === next.isSelectMode
 );
 
+// ─── VideoModalPlayer ─────────────────────────────────────────────────────────
+
 // ─── VideoInlinePlayer ────────────────────────────────────────────────────────
 
-const VideoInlinePlayer = memo(({ url }: { url: string }) => {
-    const hasAutoPlayed = React.useRef(false);
+const VideoInlinePlayer = memo(({ url, onExit }: { url: string; onExit: () => void }) => {
+    const videoRef = React.useRef<VideoView>(null);
 
     const setup = useCallback((player: any) => {
         player.loop = false;
@@ -430,29 +439,31 @@ const VideoInlinePlayer = memo(({ url }: { url: string }) => {
 
     const player = useVideoPlayer({ uri: url, useCaching: true }, setup);
 
-    // expo-video player status: 'idle' | 'loading' | 'readyToPlay' | 'error'
-    // Play once readyToPlay — calling play() before this is silently ignored.
-    // useRef guards against re-triggering if status oscillates.
     React.useEffect(() => {
         const sub = player.addListener('statusChange', ({ status }: { status: string }) => {
-            if (!hasAutoPlayed.current && status === 'readyToPlay') {
-                hasAutoPlayed.current = true;
+            if (status === 'readyToPlay') {
                 player.play();
+                videoRef.current?.enterFullscreen();
             }
         });
         return () => sub.remove();
     }, [player]);
 
     return (
-        <View style={styles.inlinePlayerContainer}>
-            <VideoView
-                style={styles.inlineVideo}
-                player={player}
-                // allowsFullscreen
-                allowsPictureInPicture
-                contentFit="contain"
-            />
-        </View>
+        <VideoView
+            ref={videoRef}
+            style={styles.inlineVideo}
+            player={player}
+            allowsPictureInPicture
+            contentFit="contain"
+            nativeControls
+            onFullscreenExit={onExit}
+            playsInline={false}
+            buttonOptions={{
+                showPlayPause: true,
+                showBottomBar: true,
+            }}
+        />
     );
 });
 
@@ -596,15 +607,13 @@ const styles = StyleSheet.create((theme) => ({
         borderBottomLeftRadius: 4,   // swapped
     },
     mediaBubble: {
-        minWidth: 260,
+        width: 300,
     },
     fileBubble: {
-        minWidth: 260,
+        width: 300,
     },
     videoBubble: {
-        width: '100%',
-        minWidth: 260,
-        maxWidth: 360,  // prevents oversized video on wide web screens
+        width: 300,
     },
     contentPadding: {
         paddingTop: 4,
@@ -616,15 +625,19 @@ const styles = StyleSheet.create((theme) => ({
         color: theme.colors.bubbleText,
         lineHeight: 20,
     },
+    mediaBubbleWrapper: {
+        width: 300,
+        paddingBottom: 12,
+    },
     mediaFrame: {
-        marginLeft: 20,
-        marginRight: 30,
-        marginTop: 8,
-        aspectRatio: 16 / 9,
-        borderRadius: 12,
+        width: 300,
+        height: 180,
+        borderTopLeftRadius: 18,
+        borderTopRightRadius: 18,
+        borderBottomLeftRadius: 2,
+        borderBottomRightRadius: 2,
         overflow: 'hidden',
         backgroundColor: 'rgba(0,0,0,0.06)',
-        marginBottom: 4,
     },
     mediaFrameContent: {
         width: '100%',
@@ -644,7 +657,6 @@ const styles = StyleSheet.create((theme) => ({
         borderBottomLeftRadius: 60,
         borderTopRightRadius: 80,
         borderBottomRightRadius: 8,
-        paddingTop: 5,
     },
     fileIconBox: {
         width: 35,
@@ -700,7 +712,6 @@ const styles = StyleSheet.create((theme) => ({
         paddingLeft: 20,
         paddingRight: 7,
         height: 10,
-
     },
     timeText: {
         fontSize: 8.5,
@@ -715,9 +726,8 @@ const styles = StyleSheet.create((theme) => ({
         color: 'rgba(255,255,255,0.8)',
     },
     selectedBubble: {
-        borderWidth: 2,
-        borderColor: theme.colors.primary,
         transform: [{ scale: 0.98 }],
+        opacity: 0.6,
     },
     selectionOverlay: {
         position: 'absolute',
@@ -771,7 +781,6 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         borderRadius: 14,
-        margin: 8,
         padding: 10,
         height: 42,
         justifyContent: 'center',

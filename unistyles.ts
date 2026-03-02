@@ -8,14 +8,14 @@ const lightTheme = {
   colors: Colors.light,
   fonts: Fonts.light,
   gap: (v: number) => v * 8,
-  elevation20:20
-  
+  elevation20: 20
+
 };
 const darkTheme = {
   colors: Colors.dark,
   fonts: Fonts.dark,
   gap: (v: number) => v * 8,
-  elevation20:0
+  elevation20: 0
 };
 
 type AppThemes = {
@@ -39,8 +39,8 @@ const breakpoints = {
 // type AppThemes = typeof AppThemes;
 type AppBreakpoints = typeof breakpoints;
 declare module 'react-native-unistyles' {
-  export interface UnistylesThemes extends AppThemes {}
-  export interface UnistylesBreakpoints extends AppBreakpoints {}
+  export interface UnistylesThemes extends AppThemes { }
+  export interface UnistylesBreakpoints extends AppBreakpoints { }
 }
 
 // Configure Unistyles
@@ -53,9 +53,17 @@ StyleSheet.configure({
   settings: {
     adaptiveThemes: false, // Enable adaptive themes
     initialTheme: () => {
-      // Prefer user's saved preference if available
-      const saved = PreferencesStorage.getTheme()
-      if (saved === 'light' || saved === 'dark') return saved
+      // Prefer user's saved preference if available.
+      // Try/catch: on native cold start, MMKV may not be ready yet when
+      // StyleSheet.configure() runs at module-load time.  In that case we
+      // fall back to the system color scheme; the real preference is applied
+      // once storage is initialised in _layout.tsx.
+      try {
+        const saved = PreferencesStorage.getTheme()
+        if (saved === 'light' || saved === 'dark') return saved
+      } catch {
+        // MMKV not ready — fall through to system default
+      }
       // Fallback to system color scheme
       return UnistylesRuntime.colorScheme === 'dark' ? 'dark' : 'light'
     },

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV, type MMKV } from 'react-native-mmkv';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
@@ -121,7 +121,7 @@ export class AppStorage<T extends Record<string, any>> {
         this.isSecure = options?.isSecure ?? false;
 
         if (Platform.OS !== 'web') {
-            this.mmkv = new MMKV({ id, ...config });
+            this.mmkv = createMMKV({ id, ...config });
         }
     }
 
@@ -325,7 +325,7 @@ export class AppStorage<T extends Record<string, any>> {
                 console.error(`[AppStorage] Failed to remove ${keyStr}`, e);
             }
         } else {
-            this.mmkv?.delete(keyStr);
+            this.mmkv?.remove(keyStr);
         }
     }
 

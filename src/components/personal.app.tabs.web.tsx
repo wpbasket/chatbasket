@@ -48,9 +48,6 @@ export default function PersonalAppTabs() {
           <TabTrigger name="index" href="/personal" asChild>
             <View style={{ display: 'none' }} />
           </TabTrigger>
-          <TabTrigger name="chat" href="/personal/chat" asChild>
-            <View style={{ display: 'none' }} />
-          </TabTrigger>
           {TAB_CONFIG.map(tab => (
             <TabTrigger key={tab.name} name={tab.name} href={tab.href} asChild>
               <TabButton icon={tab.icon}>{tab.label}</TabButton>
@@ -89,8 +86,8 @@ export function CustomTabList(props: TabListProps) {
   const { theme } = useUnistyles();
 
   const isTabBarHidden = Platform.select({
-    web: width > 800 || segments.at(1) === 'chat',
-    default: segments.at(1) === 'chat',
+    web: width > 800 || segments.at(2) === 'chat',
+    default: segments.at(2) === 'chat',
   });
 
   return (

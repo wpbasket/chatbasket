@@ -11,37 +11,46 @@ type PreferencesSchema = {
   [MODE_KEY]: AppModePreference;
 };
 
-// Use AppStorage with sync backend for Web to support synchronous access
-const prefStorage = new AppStorage<PreferencesSchema>('preferences', {}, {
-  webBackend: 'sync',
-  disableWebPrefix: true // Maintain compatibility with existing localStorage keys
-});
+// Lazy singleton — defers MMKV construction until first access so the native
+// runtime is ready.  On Web the cost is negligible; on native it avoids the
+// "Cannot read property 'prototype' of undefined" crash at module-load time.
+let _prefStorage: AppStorage<PreferencesSchema> | null = null;
+
+function getPrefStorage(): AppStorage<PreferencesSchema> {
+  if (!_prefStorage) {
+    _prefStorage = new AppStorage<PreferencesSchema>('preferences', {}, {
+      webBackend: 'sync',
+      disableWebPrefix: true, // Maintain compatibility with existing localStorage keys
+    });
+  }
+  return _prefStorage;
+}
 
 export const PreferencesStorage = {
   // Synchronous getters are needed for Unistyles initialTheme
   getTheme(): ThemePreference | null {
-    return prefStorage.getSync(THEME_KEY);
+    return getPrefStorage().getSync(THEME_KEY);
   },
 
   setTheme(theme: ThemePreference) {
-    prefStorage.set(THEME_KEY, theme);
+    getPrefStorage().set(THEME_KEY, theme);
   },
 
   clearTheme() {
-    prefStorage.remove(THEME_KEY);
+    getPrefStorage().remove(THEME_KEY);
   },
 
   // App mode persistence (public | personal)
   getMode(): AppModePreference | null {
-    return prefStorage.getSync(MODE_KEY);
+    return getPrefStorage().getSync(MODE_KEY);
   },
 
   setMode(mode: AppModePreference) {
-    prefStorage.set(MODE_KEY, mode);
+    getPrefStorage().set(MODE_KEY, mode);
   },
 
   clearMode() {
-    prefStorage.remove(MODE_KEY);
+    getPrefStorage().remove(MODE_KEY);
   },
 };
 

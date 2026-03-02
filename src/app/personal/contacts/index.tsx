@@ -143,7 +143,7 @@ export default function ContactsScreen() {
     if (existingChat) {
       $chatMessagesState.isChatOpen.set(true);
       router.push({
-        pathname: '/personal/chat/[chat_id]',
+        pathname: '/personal/home/chat/[chat_id]',
         params: {
           chat_id: existingChat.chat_id,
           recipient_id: entry.id,
@@ -172,7 +172,7 @@ export default function ContactsScreen() {
       // 3. Navigate to conversation
       $chatMessagesState.isChatOpen.set(true);
       router.push({
-        pathname: '/personal/chat/[chat_id]',
+        pathname: '/personal/home/chat/[chat_id]',
         params: {
           chat_id: chat.chat_id,
           recipient_id: entry.id,

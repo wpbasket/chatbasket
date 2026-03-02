@@ -1,9 +1,7 @@
-import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import React from 'react';
 import { useUnistyles } from 'react-native-unistyles';
-import { IconSymbol } from './ui/fonts/IconSymbol';
-
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Platform, useWindowDimensions } from 'react-native';
 
 export default function PublicAppTabs() {
@@ -36,10 +34,8 @@ export default function PublicAppTabs() {
             <NativeTabs.Trigger name="home">
                 <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
                 <NativeTabs.Trigger.Icon
-                    src={{
-                        default: <IconSymbol name="house.line" size={25} color={theme.colors.icon} />,
-                        selected: <IconSymbol name="house.fill" size={25} color={theme.colors.primary} />
-                    }}
+                    src={<NativeTabs.Trigger.VectorIcon family={Ionicons} name="home" />}
+                    selectedColor={theme.colors.primary}
                     renderingMode="original"
                 />
             </NativeTabs.Trigger>
@@ -47,10 +43,8 @@ export default function PublicAppTabs() {
             <NativeTabs.Trigger name="explore">
                 <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
                 <NativeTabs.Trigger.Icon
-                    src={{
-                        default: <MaterialCommunityIcon size={25} name="magnify.scan" color={theme.colors.icon} />,
-                        selected: <MaterialCommunityIcon size={25} name="magnify.scan" color={theme.colors.primary} />
-                    }}
+                    src={<NativeTabs.Trigger.VectorIcon family={Ionicons} name="search" />}
+                    selectedColor={theme.colors.primary}
                     renderingMode="original"
                 />
             </NativeTabs.Trigger>
@@ -58,10 +52,8 @@ export default function PublicAppTabs() {
             <NativeTabs.Trigger name="profile">
                 <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
                 <NativeTabs.Trigger.Icon
-                    src={{
-                        default: <IconSymbol size={25} name="person.line" color={theme.colors.icon} />,
-                        selected: <IconSymbol size={25} name="person.fill" color={theme.colors.primary} />
-                    }}
+                    src={<NativeTabs.Trigger.VectorIcon family={Ionicons} name="person-outline" />}
+                    selectedColor={theme.colors.primary}
                     renderingMode="original"
                 />
             </NativeTabs.Trigger>

@@ -13,7 +13,12 @@ function getInitialMode(): AppMode {
       return 'personal'
     }
   }
-  return (PreferencesStorage.getMode?.() as AppMode | null) ?? 'personal'
+  try {
+    return (PreferencesStorage.getMode?.() as AppMode | null) ?? 'personal'
+  } catch {
+    // MMKV may not be ready on native cold start
+    return 'personal'
+  }
 }
 
 const initialMode: AppMode = getInitialMode()

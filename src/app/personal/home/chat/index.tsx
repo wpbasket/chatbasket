@@ -5,5 +5,5 @@ import { Redirect } from 'expo-router';
  * Conversations are accessed from the home screen chat list.
  */
 export default function ChatIndex() {
-  return <Redirect href="/personal/chat/[chat_id]" />;
+  return <Redirect href="/personal/home/chat/[chat_id]" />;
 }

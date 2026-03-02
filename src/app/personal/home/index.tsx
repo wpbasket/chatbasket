@@ -33,7 +33,7 @@ const PersonalHome = React.memo(() => {
 
     $chatMessagesState.isChatOpen.set(true);
     router.push({
-      pathname: '/personal/chat/[chat_id]',
+      pathname: '/personal/home/chat/[chat_id]',
       params: {
         chat_id: chat.chat_id,
         recipient_id: chat.other_user_id,

@@ -70,7 +70,7 @@ export default function ChatInputBar({
                 accessibilityHint="Type your message here"
                 style={[
                     styles.input,
-                    {outline: 'none'},
+                    { outline: 'none' },
                     { height: Math.min(Math.max(48, inputHeight), 120) }
                 ]}
                 onContentSizeChange={(e) =>
@@ -107,7 +107,7 @@ const styles = StyleSheet.create((theme, rt) => ({
         alignItems: 'flex-end',
         paddingHorizontal: 12,
         paddingTop: 8,
-        paddingBottom: rt.insets.bottom + 8,
+        paddingBottom: 8 + rt.insets.bottom,
         borderTopWidth: 1,
         borderColor: theme.colors.border,
         backgroundColor: theme.colors.background,

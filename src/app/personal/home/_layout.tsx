@@ -13,6 +13,7 @@ export default function PersonalHomeScreenLayout() {
         <ThemedView style={styles.outerContainer}>
           <Stack>
             <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="chat" options={{ headerShown: false }} />
           </Stack>
         </ThemedView>
       </ThemeProvider>
