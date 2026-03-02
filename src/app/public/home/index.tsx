@@ -19,37 +19,45 @@ export default function Home() {
     router.push(next === 'public' ? '/public/home' : '/personal/home');
   };
   return (
-    <ThemedView style={styles.container} >
-      <ThemedView style={styles.titleContainer} >
-        <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
-        <Pressable
-          onPress={toggleMode}
-          style={({ pressed }) => [
-            { opacity: pressed ? 0.1 : 1 },
-            styles.modeToggle
-          ]}
-        >
-          <ThemedText type="default" style={styles.modeText} selectable={false}>
-            {currentMode === 'public' ? 'Public' : 'Personal'}
-          </ThemedText>
-        </Pressable>
-      </ThemedView>
-      {/* <LegendList
-              data={posts_for_user}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <Postcard post={item} interactive={true} key={item.id} />
-              )}
-              contentContainerStyle={{ paddingBottom: 150 }}
-              showsVerticalScrollIndicator={Platform.OS === 'web' ? false : true}
-              scrollEnabled={true}
-              recycleItems={true}
-              maintainVisibleContentPosition={true}
-            /> */}
+    <>
+      {/* Existing home UI kept but hidden temporarily */}
+      {false && (
+        <ThemedView style={styles.container} >
+          <ThemedView style={styles.titleContainer} >
+            <ThemedText type="logo" style={styles.logo} selectable={false}>ChatBasket</ThemedText>
+            <Pressable
+              onPress={toggleMode}
+              style={({ pressed }) => [
+                { opacity: pressed ? 0.1 : 1 },
+                styles.modeToggle
+              ]}
+            >
+              <ThemedText type="default" style={styles.modeText} selectable={false}>
+                {currentMode === 'public' ? 'Public' : 'Personal'}
+              </ThemedText>
+            </Pressable>
+          </ThemedView>
+          {/* <LegendList
+                  data={posts_for_user}
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => (
+                    <Postcard post={item} interactive={true} key={item.id} />
+                  )}
+                  contentContainerStyle={{ paddingBottom: 150 }}
+                  showsVerticalScrollIndicator={Platform.OS === 'web' ? false : true}
+                  scrollEnabled={true}
+                  recycleItems={true}
+                  maintainVisibleContentPosition={true}
+                /> */}
+          <ThemedView style={styles.temp_container}>
+            <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
+          </ThemedView>
+        </ThemedView>
+      )}
       <ThemedView style={styles.temp_container}>
         <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
       </ThemedView>
-    </ThemedView>
+    </>
   );
 }
 

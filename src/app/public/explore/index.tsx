@@ -119,64 +119,72 @@ export default function ChatScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          header: () => (
-            <ThemedView style={styles.container}>
-              <Header
-                onBackPress={() => router.back()}
-                centerSection={
-                  <ThemedText type="subtitle">
-                    Chat
-                  </ThemedText>
-                }
-                rightSection={<ThemedView style={styles.profilePic} />}
-              />
-            </ThemedView>
-          ),
-        }}
-      />
-
-      <ThemedView
-        style={[
-          styles.content,
-          { transform: [{ translateY: -stableIme }] }
-        ]}
-      >
-        <FlatList
-          ref={listRef}
-          inverted
-          data={messages}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          initialNumToRender={15}
-          windowSize={7}
-          maxToRenderPerBatch={10}
-          removeClippedSubviews
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingVertical: 12 }}
-          keyboardShouldPersistTaps="handled"
-        />
-
-        <ThemedView style={styles.inputBar}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            multiline
-            placeholder="Type message..."
-            style={[
-              styles.input,
-              { height: Math.min(Math.max(48, inputHeight), 120) }
-            ]}
-            onContentSizeChange={(e) =>
-              setInputHeight(e.nativeEvent.contentSize.height)
-            }
+      {/* Existing explore/chat UI kept but hidden temporarily */}
+      {false && (
+        <>
+          <Stack.Screen
+            options={{
+              header: () => (
+                <ThemedView style={styles.container}>
+                  <Header
+                    onBackPress={() => router.back()}
+                    centerSection={
+                      <ThemedText type="subtitle">
+                        Chat
+                      </ThemedText>
+                    }
+                    rightSection={<ThemedView style={styles.profilePic} />}
+                  />
+                </ThemedView>
+              ),
+            }}
           />
 
-          <Pressable onPress={sendMessage} style={styles.sendBtn}>
-            <ThemedText>Send</ThemedText>
-          </Pressable>
-        </ThemedView>
+          <ThemedView
+            style={[
+              styles.content,
+              { transform: [{ translateY: -stableIme }] }
+            ]}
+          >
+            <FlatList
+              ref={listRef}
+              inverted
+              data={messages}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              initialNumToRender={15}
+              windowSize={7}
+              maxToRenderPerBatch={10}
+              removeClippedSubviews
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingVertical: 12 }}
+              keyboardShouldPersistTaps="handled"
+            />
+
+            <ThemedView style={styles.inputBar}>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                multiline
+                placeholder="Type message..."
+                style={[
+                  styles.input,
+                  { height: Math.min(Math.max(48, inputHeight), 120) }
+                ]}
+                onContentSizeChange={(e) =>
+                  setInputHeight(e.nativeEvent.contentSize.height)
+                }
+              />
+
+              <Pressable onPress={sendMessage} style={styles.sendBtn}>
+                <ThemedText>Send</ThemedText>
+              </Pressable>
+            </ThemedView>
+          </ThemedView>
+        </>
+      )}
+      <ThemedView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
       </ThemedView>
     </>
   );

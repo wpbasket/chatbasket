@@ -67,7 +67,7 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  if (userNotFound) {
+  if (false && userNotFound) {
     return <ProfileEmptyState />;
   }
 
@@ -119,20 +119,23 @@ export default function ProfileScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          header: () => (
-            <ThemedView style={{ paddingTop: rt.insets.top }}>
-              <Header
-                onBackPress={goBack}
-                centerSection={<ThemedText type='subtitle'>{user?.name}</ThemedText>}
-              />
-            </ThemedView>
-          )
-        }}
-      />
-      <ThemedView style={styles.mainContainer}>
-        <ScrollView>
+      {/* Existing profile UI kept but hidden temporarily */}
+      {false && (
+        <>
+          <Stack.Screen
+            options={{
+              header: () => (
+                <ThemedView style={{ paddingTop: rt.insets.top }}>
+                  <Header
+                    onBackPress={goBack}
+                    centerSection={<ThemedText type='subtitle'>{user?.name}</ThemedText>}
+                  />
+                </ThemedView>
+              )
+            }}
+          />
+          <ThemedView style={styles.mainContainer}>
+            <ScrollView>
           {/* Edit Icon Section */}
           <ThemedView style={styles.outerEditIcon}>
             <Pressable
@@ -275,7 +278,12 @@ export default function ProfileScreen() {
           </ThemedView>
           {/* Profile Section flex:row End */}
 
-        </ScrollView>
+            </ScrollView>
+          </ThemedView>
+        </>
+      )}
+      <ThemedView style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ThemedText type='defaultGantari'>Coming Soon</ThemedText>
       </ThemedView>
     </>
   );
