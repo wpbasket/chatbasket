@@ -9,7 +9,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest --forceExit",
-    "build-web": "npx expo export -p web",
+    "build-web": "npx expo export -p web -c",
     "deploy-web": "npm run build-web && npx wrangler pages deploy dist"
   },
   "dependencies": {
