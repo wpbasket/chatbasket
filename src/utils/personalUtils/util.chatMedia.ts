@@ -1,4 +1,4 @@
-import { PersonalChatApi } from "@/lib/personalLib/chatApi/personal.api.chat";
+import { ChatTransport } from "@/lib/personalLib/chatApi/chat.transport";
 import type { MessageEntry } from "@/lib/personalLib";
 
 /**
@@ -14,7 +14,7 @@ export async function resolveMediaUrls(messages: MessageEntry[]) {
         )
         .map(async (m) => {
             try {
-                const res = await PersonalChatApi.getFileURL({ message_id: m.message_id });
+                const res = await ChatTransport.getFileURL({ message_id: m.message_id });
                 m.file_url = res.view_url;
             } catch (err) {
                 console.warn(`[ChatMedia] Failed to fetch URL for message ${m.message_id}:`, err);

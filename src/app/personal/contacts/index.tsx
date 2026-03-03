@@ -16,7 +16,7 @@ import {
   PersonalUtilFetchContactRequests,
   PersonalUtilFetchContacts,
 } from '@/utils/personalUtils/personal.util.contacts';
-import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/personal.state.chat';
 import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
 import { getChatErrorMessage, getEligibilityMessage } from '@/utils/personalUtils/util.chatErrors';
@@ -156,7 +156,7 @@ export default function ContactsScreen() {
     try {
       // 2. Not found locally, check eligibility
       const eligibility = await runWithLoading(() =>
-        PersonalChatApi.checkEligibility({ recipient_id: entry.id })
+        ChatTransport.checkEligibility({ recipient_id: entry.id })
       );
 
       if (!eligibility.allowed) {
@@ -166,7 +166,7 @@ export default function ContactsScreen() {
 
       // 2. Create or get existing chat
       const chat = await runWithLoading(() =>
-        PersonalChatApi.createChat({ recipient_id: entry.id })
+        ChatTransport.createChat({ recipient_id: entry.id })
       );
 
       // 3. Navigate to conversation

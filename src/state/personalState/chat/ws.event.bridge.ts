@@ -12,10 +12,12 @@
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import type { WSEvent } from '@/lib/personalLib/chatApi/ws.client';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
-import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
 import { $chatMessagesState, $chatListState, sharedAckTracker, ackIncomingMessages } from '@/state/personalState/chat/personal.state.chat';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
+
+// Production-safe debug logger — compiled out in release builds
+const dbg = __DEV__ ? console.log.bind(console) : () => {};
 
 // ─── Event Handlers ─────────────────────────────────────────────────────────
 
@@ -26,7 +28,7 @@ import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
  * { message_id, chat_id, recipient_id, content, message_type, is_from_me, created_at, ... }
  */
 function handleNewMessage(payload: any): void {
-    console.log('[WS Bridge] handleNewMessage: ENTER', JSON.stringify(payload));
+    dbg('[WS Bridge] handleNewMessage: ENTER', JSON.stringify(payload));
     const msg = payload as MessageEntry;
     if (!msg.chat_id || !msg.message_id) {
         console.warn('[WS Bridge] new_message: INVALID payload — missing chat_id or message_id', payload);
@@ -41,34 +43,39 @@ function handleNewMessage(payload: any): void {
 
     // Add message to the active chat if it's open
     const activeChatId = $chatMessagesState.activeChatId.peek();
-    console.log(`[WS Bridge] new_message: activeChatId=${activeChatId}, msg.chat_id=${msg.chat_id}`);
+    dbg(`[WS Bridge] new_message: activeChatId=${activeChatId}, msg.chat_id=${msg.chat_id}`);
 
     if (activeChatId === msg.chat_id) {
         // Check for duplicates (the sender's device already has it via optimistic update)
         const existing = $chatMessagesState.chats.peek()?.[msg.chat_id]?.messagesById?.[msg.message_id];
         if (existing) {
-            console.log(`[WS Bridge] new_message: DUPLICATE ${msg.message_id}, skipping`);
+            dbg(`[WS Bridge] new_message: DUPLICATE ${msg.message_id}, skipping`);
             return;
         }
 
-        console.log(`[WS Bridge] new_message: ADDING to active chat state — msgID=${msg.message_id}`);
+        dbg(`[WS Bridge] new_message: ADDING to active chat state — msgID=${msg.message_id}`);
         $chatMessagesState.addMessage(msg.chat_id, msg);
+        // addMessage internally calls ackIncomingMessages with skipSenderSync:true (Part A only).
+        // Explicitly fire Part B (sender-sync ACK) here for cross-device sync of our own messages.
+        if (msg.is_from_me) {
+            ackIncomingMessages([msg]); // Part A won't fire (is_from_me=true) — only Part B runs
+        }
 
         // Auto-read logic: since the chat is open, immediately mark as read (debounced)
         if (!msg.is_from_me) {
-            console.log(`[WS Bridge] new_message: AUTO-READING message (debounced) because chat is open`);
+            dbg(`[WS Bridge] new_message: AUTO-READING message (debounced) because chat is open`);
             $chatMessagesState.debouncedMarkRead(msg.chat_id);
             $chatListState.markChatRead(msg.chat_id);
         }
     } else {
-        console.log(`[WS Bridge] new_message: chat is NOT active, triggering background auto-ack`);
+        dbg(`[WS Bridge] new_message: chat is NOT active, triggering background auto-ack`);
         // Trigger background delivery ACK for chats in the inbox
         ackIncomingMessages([msg]);
     }
 
     // Update chat list preview (upsert with latest message info)
     const currentEntry = $chatListState.chatsById[msg.chat_id]?.peek();
-    console.log(`[WS Bridge] new_message: chatListEntry exists=${!!currentEntry}`);
+    dbg(`[WS Bridge] new_message: chatListEntry exists=${!!currentEntry}`);
 
     const previewContent = getPreviewText(msg);
 
@@ -89,7 +96,7 @@ function handleNewMessage(payload: any): void {
                 ? (currentEntry.unread_count || 0) + 1
                 : (isChatActive ? 0 : currentEntry.unread_count),
         };
-        console.log(`[WS Bridge] new_message: UPSERTING chat list — unread_count=${updatedEntry.unread_count}`);
+        dbg(`[WS Bridge] new_message: UPSERTING chat list — unread_count=${updatedEntry.unread_count}`);
         $chatListState.upsertChat(updatedEntry);
     } else {
         // Construct a new ChatEntry for previously unknown chats (instantly shows up on Home screen)
@@ -115,11 +122,11 @@ function handleNewMessage(payload: any): void {
             other_user_last_read_at: '',
             other_user_last_delivered_at: '',
         };
-        console.log(`[WS Bridge] new_message: CREATING NEW chat list entry — unread_count=${newEntry.unread_count}`);
+        dbg(`[WS Bridge] new_message: CREATING NEW chat list entry — unread_count=${newEntry.unread_count}`);
         $chatListState.upsertChat(newEntry);
     }
 
-    console.log(`[WS Bridge] new_message: DONE — msgID=${msg.message_id} chatID=${msg.chat_id} is_from_me=${msg.is_from_me} content="${msg.content?.substring(0, 50)}"`);
+    dbg(`[WS Bridge] new_message: DONE — msgID=${msg.message_id} chatID=${msg.chat_id} is_from_me=${msg.is_from_me} content="${msg.content?.substring(0, 50)}"`);
 }
 
 /**
@@ -129,7 +136,7 @@ function handleNewMessage(payload: any): void {
  */
 function handleDeliveryAck(payload: any): void {
     try {
-        console.log('[WS Bridge] handleDeliveryAck: ENTER', JSON.stringify(payload));
+        dbg('[WS Bridge] handleDeliveryAck: ENTER', JSON.stringify(payload));
 
         // Support both Phase A (singular) and Phase B (batched/array)
         const messageIds: string[] = Array.isArray(payload.message_ids)
@@ -153,21 +160,21 @@ function handleDeliveryAck(payload: any): void {
         const activeChatId = $chatMessagesState.activeChatId.peek();
         const targetChatId = chat_id || activeChatId;
 
-        console.log(`[WS Bridge] delivery_ack: targetChatId=${targetChatId} (fromPayload=${chat_id}, active=${activeChatId})`);
+        dbg(`[WS Bridge] delivery_ack: targetChatId=${targetChatId} (fromPayload=${chat_id}, active=${activeChatId})`);
 
         if (targetChatId) {
             if (delivered_at) {
-                console.log(`[WS Bridge] delivery_ack: CALLING markMessagesDeliveredUpTo(${targetChatId}, ${delivered_at})`);
+                dbg(`[WS Bridge] delivery_ack: CALLING markMessagesDeliveredUpTo(${targetChatId}, ${delivered_at})`);
                 $chatMessagesState.markMessagesDeliveredUpTo(targetChatId, delivered_at);
             } else {
-                console.log(`[WS Bridge] delivery_ack: CALLING markMessagesDelivered(${targetChatId}, ${messageIds.length} ids)`);
+                dbg(`[WS Bridge] delivery_ack: CALLING markMessagesDelivered(${targetChatId}, ${messageIds.length} ids)`);
                 $chatMessagesState.markMessagesDelivered(targetChatId, messageIds);
             }
         } else {
             console.warn('[WS Bridge] delivery_ack: NO targetChatId found, cannot update state');
         }
 
-        console.log(`[WS Bridge] delivery_ack: DONE — ids=${messageIds.join(',')}`);
+        dbg(`[WS Bridge] delivery_ack: DONE — ids=${messageIds.join(',')}`);
     } catch (err) {
         console.error('[WS Bridge] ❌ CRITICAL ERROR in handleDeliveryAck:', err);
     }
@@ -181,7 +188,7 @@ function handleDeliveryAck(payload: any): void {
  * This maps to the Yellow→Green tick transition for messages we sent.
  */
 function handleReadReceipt(payload: any): void {
-    console.log('[WS Bridge] handleReadReceipt: ENTER', JSON.stringify(payload));
+    dbg('[WS Bridge] handleReadReceipt: ENTER', JSON.stringify(payload));
     const { chat_id, reader_id, read_at } = payload;
     if (!chat_id) {
         console.warn('[WS Bridge] read_receipt: MISSING chat_id, skipping');
@@ -192,7 +199,7 @@ function handleReadReceipt(payload: any): void {
     $chatMessagesState.markMessagesReadUpTo(chat_id, read_at);
 
     const activeChatId = $chatMessagesState.activeChatId.peek();
-    console.log(`[WS Bridge] read_receipt: DONE — chat_id=${chat_id} reader_id=${reader_id} read_at=${read_at} isActiveChat=${activeChatId === chat_id}`);
+    dbg(`[WS Bridge] read_receipt: DONE — chat_id=${chat_id} reader_id=${reader_id} read_at=${read_at} isActiveChat=${activeChatId === chat_id}`);
 }
 
 /**
@@ -201,17 +208,17 @@ function handleReadReceipt(payload: any): void {
  * Payload: { chat_id, message_ids }
  */
 function handleUnsend(payload: any): void {
-    console.log('[WS Bridge] handleUnsend: ENTER', JSON.stringify(payload));
+    dbg('[WS Bridge] handleUnsend: ENTER', JSON.stringify(payload));
     const { chat_id, message_ids, sender_id } = payload;
     if (!chat_id || !Array.isArray(message_ids)) {
         console.warn('[WS Bridge] unsend: INVALID payload — missing chat_id or message_ids', payload);
         return;
     }
 
-    console.log(`[WS Bridge] unsend: CALLING unsendMessages for chat=${chat_id}, count=${message_ids.length}, sender=${sender_id}`);
+    dbg(`[WS Bridge] unsend: CALLING unsendMessages for chat=${chat_id}, count=${message_ids.length}, sender=${sender_id}`);
     $chatMessagesState.unsendMessages(chat_id, message_ids, sender_id);
 
-    console.log(`[WS Bridge] unsend: DONE — ${message_ids.length} messages in chat ${chat_id}`);
+    dbg(`[WS Bridge] unsend: DONE — ${message_ids.length} messages in chat ${chat_id}`);
 }
 
 /**
@@ -220,7 +227,7 @@ function handleUnsend(payload: any): void {
  * Payload: { message_ids, chat_id }
  */
 function handleDeleteForMe(payload: any): void {
-    console.log('[WS Bridge] handleDeleteForMe: ENTER', JSON.stringify(payload));
+    dbg('[WS Bridge] handleDeleteForMe: ENTER', JSON.stringify(payload));
     const { message_ids, chat_id } = payload;
     if (!Array.isArray(message_ids)) {
         console.warn('[WS Bridge] delete_for_me: INVALID payload — missing message_ids', payload);
@@ -229,25 +236,25 @@ function handleDeleteForMe(payload: any): void {
 
     // Use the chat_id from the payload if available, otherwise fall back to the active chat
     const targetChatId = chat_id || $chatMessagesState.activeChatId.peek();
-    console.log(`[WS Bridge] delete_for_me: targetChatId=${targetChatId}, count=${message_ids.length}, ids=${message_ids.join(',')}`);
+    dbg(`[WS Bridge] delete_for_me: targetChatId=${targetChatId}, count=${message_ids.length}, ids=${message_ids.join(',')}`);
     if (targetChatId) {
-        console.log(`[WS Bridge] delete_for_me: REMOVING ${message_ids.length} messages from chat ${targetChatId}`);
+        dbg(`[WS Bridge] delete_for_me: REMOVING ${message_ids.length} messages from chat ${targetChatId}`);
         $chatMessagesState.removeMessages(targetChatId, message_ids);
 
         // Clear the chat list preview if the deleted message was the last preview message
         const chatEntry = $chatListState.chatsById[targetChatId]?.peek();
         if (chatEntry && message_ids.includes(chatEntry.last_message_id)) {
-            console.log(`[WS Bridge] delete_for_me: Cleared preview for chat ${targetChatId} (was last_message_id=${chatEntry.last_message_id})`);
+            dbg(`[WS Bridge] delete_for_me: Cleared preview for chat ${targetChatId} (was last_message_id=${chatEntry.last_message_id})`);
             $chatListState.chatsById[targetChatId].assign({
                 last_message_content: null,
                 last_message_type: null,
             });
         }
     } else {
-        console.log(`[WS Bridge] delete_for_me: NO chat_id and NO active chat, messages will be removed on next fetch`);
+        dbg(`[WS Bridge] delete_for_me: NO chat_id and NO active chat, messages will be removed on next fetch`);
     }
 
-    console.log(`[WS Bridge] delete_for_me: DONE — ${message_ids.length} messages`);
+    dbg(`[WS Bridge] delete_for_me: DONE — ${message_ids.length} messages`);
 }
 
 /**
@@ -257,10 +264,10 @@ function handleDeleteForMe(payload: any): void {
  * Payload: matches SyncActionResponse
  */
 function handleSyncAction(payload: any): void {
-    console.log('[WS Bridge] handleSyncAction: ENTER', JSON.stringify(payload));
-    console.log('[WS Bridge] sync_action: CALLING $syncEngine.fetchAndApply()');
+    dbg('[WS Bridge] handleSyncAction: ENTER', JSON.stringify(payload));
+    dbg('[WS Bridge] sync_action: CALLING $syncEngine.fetchAndApply()');
     $syncEngine.fetchAndApply();
-    console.log('[WS Bridge] sync_action: DONE — fetchAndApply triggered');
+    dbg('[WS Bridge] sync_action: DONE — fetchAndApply triggered');
 }
 
 // ─── Event Router ───────────────────────────────────────────────────────────
@@ -268,7 +275,7 @@ function handleSyncAction(payload: any): void {
 function routeWSEvent(event: WSEvent): void {
     // Drop events that contain a ref field (already handled by wsClient.send promise logic)
     if (event.ref) {
-        // console.log(`[WS Bridge] Ignoring response event (ref=${event.ref})`);
+        // dbg(`[WS Bridge] Ignoring response event (ref=${event.ref})`);
         return;
     }
 
@@ -290,6 +297,9 @@ function routeWSEvent(event: WSEvent): void {
             break;
         case 'sync_action':
             handleSyncAction(event.payload);
+            break;
+        case 'ping_response':
+            // Server acknowledged our keepalive ping — no action needed.
             break;
         case 'error':
             console.error(`[WS Bridge] Server reported error:`, event.error);
@@ -314,7 +324,7 @@ export function startWSEventBridge(): void {
 
     // Auto-sync on reconnection
     unsubscribeReconnect = wsClient.onReconnect(() => {
-        console.log('[WS Bridge] Reconnected! Triggering sync...');
+        dbg('[WS Bridge] Reconnected! Triggering sync...');
         $syncEngine.fetchAndApply();
         $chatMessagesState.syncPendingMessages();
     });

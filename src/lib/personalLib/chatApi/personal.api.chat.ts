@@ -1,12 +1,13 @@
 import { Platform } from 'react-native';
 import { apiClient } from "@/lib/constantLib";
 import { authState } from "@/state/auth/state.auth";
-import { wsClient } from "./ws.client";
 import type {
     GetChatsResponse,
     GetMessagesResponse,
     EligibilityResponse,
     AckDeliveryResponse,
+    AckDeliveryBatchResponse,
+    StatusOkayResponse,
     UploadFileResponse,
     GetFileURLResponse,
     CheckEligibilityPayload,
@@ -26,22 +27,6 @@ import type {
     MessageEntry,
 } from "@/lib/personalLib";
 
-/**
- * Common wrapper that attempts WebSocket communication first.
- * If the WebSocket is disconnected, it falls back to the provided REST action.
- */
-async function request<T>(type: string, payload: any, restAction: () => Promise<T>): Promise<T> {
-    if (wsClient.isConnected) {
-        try {
-            return await wsClient.send<T>(type, payload);
-        } catch (err) {
-            console.warn(`[API] WS request "${type}" failed, falling back to REST:`, err);
-            return restAction();
-        }
-    }
-    return restAction();
-}
-
 /** POST /personal/chat/check-eligibility */
 async function checkEligibility(payload: CheckEligibilityPayload): Promise<EligibilityResponse> {
     return apiClient.post<EligibilityResponse>('/personal/chat/check-eligibility', payload);
@@ -54,11 +39,7 @@ async function createChat(payload: CreateChatPayload): Promise<ChatEntry> {
 
 /** POST /personal/chat/send → returns the created MessageEntry */
 async function sendMessage(payload: SendMessagePayload): Promise<MessageEntry> {
-    return request<MessageEntry>(
-        'send_message',
-        payload,
-        () => apiClient.post<MessageEntry>('/personal/chat/send', payload)
-    );
+    return apiClient.post<MessageEntry>('/personal/chat/send', payload);
 }
 
 /**
@@ -74,38 +55,22 @@ async function getMessages(query: GetMessagesQuery): Promise<GetMessagesResponse
 
 /** POST /personal/chat/ack */
 async function acknowledgeDelivery(payload: AckDeliveryPayload): Promise<AckDeliveryResponse> {
-    return request<AckDeliveryResponse>(
-        'ack_delivery',
-        payload,
-        () => apiClient.post<AckDeliveryResponse>('/personal/chat/ack', payload)
-    );
+    return apiClient.post<AckDeliveryResponse>('/personal/chat/ack', payload);
 }
 
 /** 
- * POST /personal/chat/ack-batch (Phase B)
- * WS: 'ack_delivery_batch'
- * REST Fallback: Backend lacks a dedicated batch endpoint, so we loop over individual ACKs.
+ * POST /personal/chat/ack-batch (REST fallback — no batch endpoint exists)
+ * Loops individual ACKs. Use ChatTransport.acknowledgeDeliveryBatch for WS-first batching.
  */
-async function acknowledgeDeliveryBatch(payload: AckDeliveryBatchPayload): Promise<AckDeliveryResponse> {
-    return request<AckDeliveryResponse>(
-        'ack_delivery_batch',
-        payload,
-        async () => {
-            console.log(`[API] REST Fallback: Looping ${payload.message_ids.length} individual ACKs`);
-            for (const id of payload.message_ids) {
-                try {
-                    await acknowledgeDelivery({
-                        message_id: id,
-                        acknowledged_by: 'recipient',
-                        success: payload.success
-                    });
-                } catch (e) {
-                    console.error(`[API] REST Fallback: Failed to ACK message ${id}`, e);
-                }
-            }
-            return { acknowledged: true };
+async function acknowledgeDeliveryBatch(payload: AckDeliveryBatchPayload): Promise<AckDeliveryBatchResponse> {
+    for (const id of payload.message_ids) {
+        try {
+            await acknowledgeDelivery({ message_id: id, acknowledged_by: 'recipient', success: payload.success });
+        } catch (e) {
+            console.error(`[REST] acknowledgeDeliveryBatch: Failed to ACK message ${id}`, e);
         }
-    );
+    }
+    return { acknowledged_count: payload.message_ids.length };
 }
 
 /** GET /personal/chat/list → returns full chat inbox */
@@ -188,31 +153,19 @@ async function getFileURL(query: GetFileURLQuery): Promise<GetFileURLResponse> {
     return apiClient.get<GetFileURLResponse>(`/personal/chat/file-url?${params.toString()}`);
 }
 
-/** POST /personal/chat/mark-read → backend returns { success: true } */
-async function markChatRead(payload: MarkChatReadPayload): Promise<{ success: boolean }> {
-    return request<{ success: boolean }>(
-        'mark_read',
-        payload,
-        () => apiClient.post<{ success: boolean }>('/personal/chat/mark-read', payload)
-    );
+/** POST /personal/chat/mark-read */
+async function markChatRead(payload: MarkChatReadPayload): Promise<StatusOkayResponse> {
+    return apiClient.post<StatusOkayResponse>('/personal/chat/mark-read', payload);
 }
 
 /** POST /personal/chat/unsend */
-async function unsendMessage(payload: UnsendMessagePayload): Promise<{ success: boolean }> {
-    return request<{ success: boolean }>(
-        'unsend',
-        payload,
-        () => apiClient.post<{ success: boolean }>('/personal/chat/unsend', payload)
-    );
+async function unsendMessage(payload: UnsendMessagePayload): Promise<StatusOkayResponse> {
+    return apiClient.post<StatusOkayResponse>('/personal/chat/unsend', payload);
 }
 
 /** POST /personal/chat/delete-for-me */
-async function deleteMessageForMe(payload: DeleteMessageForMePayload): Promise<{ success: boolean }> {
-    return request<{ success: boolean }>(
-        'delete_for_me',
-        payload,
-        () => apiClient.post<{ success: boolean }>('/personal/chat/delete-for-me', payload)
-    );
+async function deleteMessageForMe(payload: DeleteMessageForMePayload): Promise<StatusOkayResponse> {
+    return apiClient.post<StatusOkayResponse>('/personal/chat/delete-for-me', payload);
 }
 
 /** GET /personal/chat/sync-actions */
@@ -223,8 +176,8 @@ async function getSyncActions(query: GetSyncActionsQuery): Promise<GetSyncAction
 }
 
 /** POST /personal/chat/sync-actions/ack */
-async function acknowledgeSyncAction(payload: AcknowledgeSyncActionPayload): Promise<{ success: boolean }> {
-    return apiClient.post<{ success: boolean }>('/personal/chat/sync-actions/ack', payload);
+async function acknowledgeSyncAction(payload: AcknowledgeSyncActionPayload): Promise<StatusOkayResponse> {
+    return apiClient.post<StatusOkayResponse>('/personal/chat/sync-actions/ack', payload);
 }
 
 

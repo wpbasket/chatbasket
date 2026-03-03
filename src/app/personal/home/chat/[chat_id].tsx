@@ -17,7 +17,7 @@ import { $chatMessagesState, $chatListState } from '@/state/personalState/chat/p
 import { $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
 import { authState } from '@/state/auth/state.auth';
 import { $uiState } from '@/state/ui/state.ui';
-import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { showAlert, showControllersModal, showConfirmDialog, hideModal } from '@/utils/commonUtils/util.modal';
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
@@ -216,7 +216,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                         });
                     }
 
-                    PersonalChatApi.deleteMessageForMe({ message_ids: [messageId] })
+                    ChatTransport.deleteMessageForMe({ message_ids: [messageId] })
                         .catch(err => console.error('[UI] Delete failed', err));
                 }
             }
@@ -227,7 +227,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 id: 'unsend',
                 label: 'Unsend',
                 onPress: () => {
-                    PersonalChatApi.unsendMessage({ chat_id: chatId, message_ids: [messageId] })
+                    ChatTransport.unsendMessage({ chat_id: chatId, message_ids: [messageId] })
                         .then(() => {
                             $chatMessagesState.unsendMessages(chatId, [messageId]);
                         })
@@ -360,7 +360,7 @@ const ChatContentContainer = React.memo(({
                     if (chat && chat.isEligible) {
                         // Already allowed, skip redundant check unless it was a long time ago (could add timestamp check here if needed)
                     } else {
-                        PersonalChatApi.checkEligibility({ recipient_id: recipient_id as string })
+                        ChatTransport.checkEligibility({ recipient_id: recipient_id as string })
                             .then(res => {
                                 batch(() => {
                                     if (chat$.peek()) {
@@ -391,7 +391,7 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.setLoading(chatId, true);
                 $chatMessagesState.setError(chatId, null);
             });
-            const response = await PersonalChatApi.getMessages({
+            const response = await ChatTransport.getMessages({
                 chat_id: chatId,
                 limit: 50,
                 offset: 0,
@@ -571,7 +571,7 @@ const ChatContentContainer = React.memo(({
         });
 
         try {
-            const response = await PersonalChatApi.sendMessage({
+            const response = await ChatTransport.sendMessage({
                 recipient_id: recipId,
                 content: trimmed,
                 message_type: 'text',
@@ -648,7 +648,7 @@ const ChatContentContainer = React.memo(({
             formData.append('message_type', type);
             formData.append('caption', '');
 
-            const response = await PersonalChatApi.uploadFileWithProgress(formData, (progress) => {
+            const response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
                 $chatMessagesState.updateMessageStatus(chat_id, tempId, { progress });
             });
 
@@ -783,7 +783,7 @@ const ChatContentContainer = React.memo(({
         try {
             currentChat.loading.set(true);
             const offset = currentChat.offset.peek();
-            const response = await PersonalChatApi.getMessages({ chat_id, limit: 50, offset });
+            const response = await ChatTransport.getMessages({ chat_id, limit: 50, offset });
 
             const messagesWithStatus = (response.messages ?? []).map(m => ({
                 ...m, status: 'sent'
@@ -822,7 +822,7 @@ const ChatContentContainer = React.memo(({
             $chatMessagesState.toggleSelectMode(chat_id, false);
             $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
             try {
-                await PersonalChatApi.unsendMessage({ chat_id, message_ids: selectedIds });
+                await ChatTransport.unsendMessage({ chat_id, message_ids: selectedIds });
                 $chatMessagesState.unsendMessages(chat_id, selectedIds);
             } catch (err) {
                 console.error('[UI] Bulk Unsend failed', err);
@@ -838,7 +838,7 @@ const ChatContentContainer = React.memo(({
         $chatMessagesState.toggleSelectMode(chat_id, false);
         $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
         try {
-            await PersonalChatApi.deleteMessageForMe({ message_ids: selectedIds });
+            await ChatTransport.deleteMessageForMe({ message_ids: selectedIds });
         } catch (err) {
             console.error('[UI] Bulk Delete failed', err);
         }

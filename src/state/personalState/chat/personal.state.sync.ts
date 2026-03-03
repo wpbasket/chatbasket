@@ -1,6 +1,6 @@
 import { batch } from '@legendapp/state';
 import { $chatMessagesState, $chatListState } from './personal.state.chat';
-import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 
 let syncInterval: any = null;
 let isPolling = false;
@@ -19,7 +19,7 @@ export const $syncEngine = {
         isPolling = true;
 
         try {
-            const response = await PersonalChatApi.getSyncActions({ limit: 50 });
+            const response = await ChatTransport.getSyncActions({ limit: 50 });
             if (!response?.actions || response.actions.length === 0) return;
 
             batch(() => {
@@ -49,7 +49,7 @@ export const $syncEngine = {
                         }
 
                         // Always acknowledge successful processing to clear it from the relay
-                        PersonalChatApi.acknowledgeSyncAction({ action_id: action.id })
+                        ChatTransport.acknowledgeSyncAction({ action_id: action.id })
                             .catch(err => console.error(`[SyncEngine] ACK failed for ${action.id}`, err));
 
                     } catch (actionErr) {
@@ -58,7 +58,7 @@ export const $syncEngine = {
                 }
             });
         } catch (err) {
-            console.error('[SyncEngine] Polling cycle failed', err);
+            console.error('[SyncEngine] Sync fetch failed', err);
         } finally {
             isPolling = false;
         }

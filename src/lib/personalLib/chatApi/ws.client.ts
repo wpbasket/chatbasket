@@ -59,6 +59,9 @@ class WSClientManager {
     /** Callbacks for reconnection events */
     private reconnectSubscribers: Set<() => void> = new Set();
 
+    /** Ping timer — keeps the connection alive on mobile (prevents NAT/firewall silent drops) */
+    private pingTimer: ReturnType<typeof setInterval> | null = null;
+
     // ── Public API ────────────────────────────────────────────────────────
 
     /** Current connection state */
@@ -82,7 +85,10 @@ class WSClientManager {
         }
 
         this.intentionalClose = false;
-        this._state = 'connecting';
+        // Preserve 'reconnecting' state so onopen can detect reconnection
+        if (this._state !== 'reconnecting') {
+            this._state = 'connecting';
+        }
 
         try {
             this.ws = new WebSocket(wsUrl);
@@ -201,8 +207,16 @@ class WSClientManager {
             const wasReconnecting = this._state === 'reconnecting';
             this._state = 'connected';
             this.reconnectAttempts = 0;
-            // Native protocol pings are handled by the browser automatically.
-            // Server→Client PINGs will keep the connection alive.
+
+            // Send periodic pings to prevent NAT/firewall silently dropping idle connections.
+            // This is critical on mobile (Android/iOS) where OS-level timeouts can kill sockets
+            // without triggering onclose, making isConnected appear true on a dead connection.
+            if (this.pingTimer) clearInterval(this.pingTimer);
+            this.pingTimer = setInterval(() => {
+                if (this.isConnected) {
+                    this.ws?.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, WS_PING_INTERVAL);
 
             if (wasReconnecting) {
                 console.log('[WS Client] 🔄 Reconnected. Notifying subscribers.');
@@ -310,6 +324,11 @@ class WSClientManager {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
+        }
+
+        if (this.pingTimer) {
+            clearInterval(this.pingTimer);
+            this.pingTimer = null;
         }
 
         this.rejectAllPending('Client disconnecting');

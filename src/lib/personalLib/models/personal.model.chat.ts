@@ -45,6 +45,7 @@ export interface MessageEntry {
     content: string;
     message_type: string;    // Go string (text|image|video|audio|file|unsent)
     delivered_to_recipient: boolean; // Go bool (Added in Phase 8b)
+    delivered_to_recipient_primary?: boolean; // Go bool (Added Phase C) — backend MessageResponse field
     synced_to_sender_primary: boolean; // Added in Phase 17
     is_unsent?: boolean;             // Added Phase 5.3
     status?: 'pending' | 'sent' | 'read';
@@ -95,6 +96,24 @@ export interface GetMessagesResponse {
  */
 export interface AckDeliveryResponse {
     acknowledged: boolean;
+}
+
+/**
+ * AckDeliveryBatchResponse wraps the WS batch ACK response.
+ * Maps to Go `AckDeliveryBatchResponse` — returned by WS `ack_delivery_batch_response`.
+ * Note: the REST fallback path returns `AckDeliveryResponse` (individual ACK loops).
+ */
+export interface AckDeliveryBatchResponse {
+    acknowledged_count: number;
+}
+
+/**
+ * StatusOkayResponse wraps the standard success response from the backend.
+ * Maps to Go `model.StatusOkay` — returned by mark_read, unsend, delete_for_me, ack_sync_action.
+ */
+export interface StatusOkayResponse {
+    status: boolean;
+    message: string;
 }
 
 /**

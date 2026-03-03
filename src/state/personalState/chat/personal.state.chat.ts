@@ -1,7 +1,7 @@
 import { observable, batch, computed, type Observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
-import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { $personalStateUser } from '../user/personal.state.user';
@@ -39,7 +39,6 @@ export const ackIncomingMessages = (messages: MessageEntry[], options?: { skipSe
         candidates.filter(c => {
             if (c.chat_id !== chatId || c.is_from_me) return false;
             // ACK if not delivered at all OR if we are primary and haven't primary-delivered yet
-            // @ts-ignore - delivered_to_recipient_primary exists on backend but maybe missing from frontend type
             return !c.delivered_to_recipient || (isPrimary && !c.delivered_to_recipient_primary);
         }).forEach(c => pool.add(c.message_id));
 
@@ -60,7 +59,7 @@ export const ackIncomingMessages = (messages: MessageEntry[], options?: { skipSe
 
             console.log(`[Auto-Ack] Firing DEBOUNCED BATCH delivery ACK for ${chatId} (${idsToAck.length} messages)`);
 
-            PersonalChatApi.acknowledgeDeliveryBatch({
+            ChatTransport.acknowledgeDeliveryBatch({
                 message_ids: idsToAck,
                 acknowledged_by: 'recipient',
                 success: true,
@@ -71,7 +70,6 @@ export const ackIncomingMessages = (messages: MessageEntry[], options?: { skipSe
                         if (msg$.peek()) {
                             msg$.delivered_to_recipient.set(true);
                             if (isPrimary) {
-                                // @ts-ignore
                                 msg$.delivered_to_recipient_primary.set(true);
                             }
                         }
@@ -102,7 +100,7 @@ export const ackIncomingMessages = (messages: MessageEntry[], options?: { skipSe
                     sharedAckTracker.add(m.message_id);
                     console.log(`[Auto-Ack] Firing SENDER sync ACK for ${m.message_id}`);
 
-                    PersonalChatApi.acknowledgeDelivery({
+                    ChatTransport.acknowledgeDelivery({
                         message_id: m.message_id,
                         acknowledged_by: 'sender',
                         success: true,
@@ -707,7 +705,7 @@ const chatActions = {
     async syncPendingMessages() {
         console.log('[ChatState] syncPendingMessages: START');
         try {
-            const response = await PersonalChatApi.getPendingMessages({ limit: 50 });
+            const response = await ChatTransport.getPendingMessages({ limit: 50 });
             if (!response?.messages || response.messages.length === 0) {
                 console.log('[ChatState] syncPendingMessages: No pending messages found.');
                 return;
@@ -791,7 +789,7 @@ const chatActions = {
         const timer = setTimeout(() => {
             timers.delete(chatId);
             console.log(`[ChatState] debouncedMarkRead: Firing for ${chatId}`);
-            PersonalChatApi.markChatRead({ chat_id: chatId }).catch((err) => {
+            ChatTransport.markChatRead({ chat_id: chatId }).catch((err) => {
                 console.warn(`[ChatState] debouncedMarkRead: FAILED for ${chatId}`, err);
             });
         }, 2000);

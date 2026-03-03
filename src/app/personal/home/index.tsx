@@ -8,7 +8,7 @@ import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/personal.state.chat';
 import { $contactsState, type ContactEntry } from '@/state/personalState/contacts/personal.state.contacts';
-import { PersonalChatApi } from '@/lib/personalLib/chatApi/personal.api.chat';
+import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { useValue, Memo } from '@legendapp/state/react';
 import { useRouter } from 'expo-router';
@@ -49,7 +49,7 @@ const PersonalHome = React.memo(() => {
   const fetchChats = useCallback(async () => {
     $chatListState.setLoading(true);
     try {
-      const response = await PersonalChatApi.getUserChats();
+      const response = await ChatTransport.getUserChats();
       batch(() => {
         $chatListState.setChats(response?.chats ?? []);
         $chatListState.markFetched();
