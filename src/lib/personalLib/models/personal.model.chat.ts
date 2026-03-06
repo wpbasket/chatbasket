@@ -48,7 +48,7 @@ export interface MessageEntry {
     delivered_to_recipient_primary?: boolean; // Go bool (Added Phase C) — backend MessageResponse field
     synced_to_sender_primary: boolean; // Added in Phase 17
     is_unsent?: boolean;             // Added Phase 5.3
-    status?: 'pending' | 'sent' | 'read';
+    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error'; // Phase D: expanded union
     created_at: string;      // Go time.Time → JSON string
     expires_at: string;
     file_url?: string;
@@ -59,6 +59,12 @@ export interface MessageEntry {
     download_url?: string;
     progress?: number;
     file_id?: string | null;
+
+    // Phase D — local-only fields (optional: not present in server responses)
+    acked_by_server?: boolean;       // True after server ACK
+    deleted_for_me?: boolean;        // True after "delete for me"
+    local_uri?: string | null;       // Local file path (before upload)
+    temp_id?: string | null;         // Client-generated ID before server response
 }
 
 /**

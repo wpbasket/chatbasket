@@ -12,12 +12,15 @@
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import type { WSEvent } from '@/lib/personalLib/chatApi/ws.client';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
-import { $chatMessagesState, $chatListState, sharedAckTracker, ackIncomingMessages } from '@/state/personalState/chat/personal.state.chat';
+import { $chatMessagesState, $chatListState, ackIncomingMessages } from '@/state/personalState/chat/personal.state.chat';
+import { insertMessage, messageExists, updateMessageStatus, deleteMessage as storageDeleteMessage, recordFailedInsert, cleanupMessageMedia } from '@/lib/storage/personalStorage/chat/chat.storage';
+import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
+import { authState } from '@/state/auth/state.auth';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 
 // Production-safe debug logger — compiled out in release builds
-const dbg = __DEV__ ? console.log.bind(console) : () => {};
+const dbg = __DEV__ ? console.log.bind(console) : () => { };
 
 // ─── Event Handlers ─────────────────────────────────────────────────────────
 
@@ -27,7 +30,7 @@ const dbg = __DEV__ ? console.log.bind(console) : () => {};
  * Payload from backend matches MessageEntry (MessageResponse JSON):
  * { message_id, chat_id, recipient_id, content, message_type, is_from_me, created_at, ... }
  */
-function handleNewMessage(payload: any): void {
+async function handleNewMessage(payload: any): Promise<void> {
     dbg('[WS Bridge] handleNewMessage: ENTER', JSON.stringify(payload));
     const msg = payload as MessageEntry;
     if (!msg.chat_id || !msg.message_id) {
@@ -41,24 +44,55 @@ function handleNewMessage(payload: any): void {
         msg.status = 'sent';
     }
 
+    // Phase D: Storage-based dedup (replaces in-memory sharedAckTracker)
+    const alreadyExists = await messageExists(msg.message_id);
+    if (alreadyExists) {
+        dbg(`[WS Bridge] new_message: DUPLICATE (storage) ${msg.message_id}, skipping`);
+        return;
+    }
+
+    // Phase D: Persist to local storage BEFORE anything else (Rule 1)
+    try {
+        await insertMessage(msg);
+        dbg(`[WS Bridge] new_message: PERSISTED ${msg.message_id}`);
+    } catch (err) {
+        console.error(`[WS Bridge] new_message: PERSIST FAILED ${msg.message_id}`, err);
+        recordFailedInsert();
+        return; // Do NOT ACK if persist failed — server will re-deliver
+    }
+
+    // Phase 4b: Download media BEFORE ACK
+    // Rule 7: primary blocks ACK on failure, non-primary continues
+    // Rule 8: null isPrimary = non-primary
+    const isPrimary = authState.isPrimary.peek() === true;
+    try {
+        const localUri = await downloadIncomingFile(msg);
+        if (localUri) {
+            msg.local_uri = localUri;
+            await updateMessageStatus(msg.message_id, { local_uri: localUri });
+            dbg(`[WS Bridge] new_message: DOWNLOADED media → ${localUri}`);
+        }
+    } catch (err) {
+        if (isPrimary) {
+            console.error(`[WS Bridge] new_message: DOWNLOAD FAILED (primary, blocking ACK) ${msg.message_id}`, err);
+            return; // Block ACK — will retry on next delivery
+        }
+        console.warn(`[WS Bridge] new_message: DOWNLOAD FAILED (non-primary, continuing) ${msg.message_id}`, err);
+    }
+
     // Add message to the active chat if it's open
     const activeChatId = $chatMessagesState.activeChatId.peek();
     dbg(`[WS Bridge] new_message: activeChatId=${activeChatId}, msg.chat_id=${msg.chat_id}`);
 
     if (activeChatId === msg.chat_id) {
-        // Check for duplicates (the sender's device already has it via optimistic update)
-        const existing = $chatMessagesState.chats.peek()?.[msg.chat_id]?.messagesById?.[msg.message_id];
-        if (existing) {
-            dbg(`[WS Bridge] new_message: DUPLICATE ${msg.message_id}, skipping`);
-            return;
-        }
-
         dbg(`[WS Bridge] new_message: ADDING to active chat state — msgID=${msg.message_id}`);
-        $chatMessagesState.addMessage(msg.chat_id, msg);
-        // addMessage internally calls ackIncomingMessages with skipSenderSync:true (Part A only).
-        // Explicitly fire Part B (sender-sync ACK) here for cross-device sync of our own messages.
+        // addMessage already persists (will be a no-op INSERT OR REPLACE), then ACKs
+        await $chatMessagesState.addMessage(msg.chat_id, msg);
+        // Explicitly fire Part B (sender-sync ACK) for cross-device sync of our own messages.
         if (msg.is_from_me) {
-            ackIncomingMessages([msg]); // Part A won't fire (is_from_me=true) — only Part B runs
+            ackIncomingMessages([msg]).catch(err =>
+                console.warn('[WS Bridge] sender sync ACK failed', err)
+            );
         }
 
         // Auto-read logic: since the chat is open, immediately mark as read (debounced)
@@ -70,7 +104,9 @@ function handleNewMessage(payload: any): void {
     } else {
         dbg(`[WS Bridge] new_message: chat is NOT active, triggering background auto-ack`);
         // Trigger background delivery ACK for chats in the inbox
-        ackIncomingMessages([msg]);
+        ackIncomingMessages([msg]).catch(err =>
+            console.warn('[WS Bridge] background ACK failed', err)
+        );
     }
 
     // Update chat list preview (upsert with latest message info)
@@ -153,10 +189,9 @@ function handleDeliveryAck(payload: any): void {
             return;
         }
 
-        // 1. Remove from shared lock
-        messageIds.forEach(id => sharedAckTracker.delete(id));
+        // Phase D: sharedAckTracker removed — storage is now the source of truth
 
-        // 2. Update the message status / chat meta
+        // Update the message status / chat meta
         const activeChatId = $chatMessagesState.activeChatId.peek();
         const targetChatId = chat_id || activeChatId;
 
@@ -218,6 +253,15 @@ function handleUnsend(payload: any): void {
     dbg(`[WS Bridge] unsend: CALLING unsendMessages for chat=${chat_id}, count=${message_ids.length}, sender=${sender_id}`);
     $chatMessagesState.unsendMessages(chat_id, message_ids, sender_id);
 
+    // Phase D: Persist unsend to local storage so it survives reload
+    Promise.all(message_ids.map((id: string) =>
+        updateMessageStatus(id, { message_type: 'unsent', content: 'Message unsent' })
+    )).catch(err => console.warn('[WS Bridge] unsend storage update failed', err));
+
+    // Phase D: Clean up file data (media blob / local file) on recipient side
+    cleanupMessageMedia(message_ids)
+        .catch(err => console.warn('[WS Bridge] unsend media cleanup failed', err));
+
     dbg(`[WS Bridge] unsend: DONE — ${message_ids.length} messages in chat ${chat_id}`);
 }
 
@@ -237,6 +281,12 @@ function handleDeleteForMe(payload: any): void {
     // Use the chat_id from the payload if available, otherwise fall back to the active chat
     const targetChatId = chat_id || $chatMessagesState.activeChatId.peek();
     dbg(`[WS Bridge] delete_for_me: targetChatId=${targetChatId}, count=${message_ids.length}, ids=${message_ids.join(',')}`);
+    // Phase D: ALWAYS soft-delete in storage — deleteMessage only needs message_id,
+    // not chat_id. Without this, missing chat_id + no active chat would skip the
+    // storage update, and deleted messages would reappear on next load.
+    Promise.all(message_ids.map((id: string) => storageDeleteMessage(id)))
+        .catch(err => console.warn('[WS Bridge] delete_for_me storage update failed', err));
+
     if (targetChatId) {
         dbg(`[WS Bridge] delete_for_me: REMOVING ${message_ids.length} messages from chat ${targetChatId}`);
         $chatMessagesState.removeMessages(targetChatId, message_ids);
@@ -251,7 +301,7 @@ function handleDeleteForMe(payload: any): void {
             });
         }
     } else {
-        dbg(`[WS Bridge] delete_for_me: NO chat_id and NO active chat, messages will be removed on next fetch`);
+        dbg(`[WS Bridge] delete_for_me: NO chat_id and NO active chat — storage soft-deleted, will be removed from state on next load`);
     }
 
     dbg(`[WS Bridge] delete_for_me: DONE — ${message_ids.length} messages`);
@@ -281,7 +331,9 @@ function routeWSEvent(event: WSEvent): void {
 
     switch (event.type) {
         case 'new_message':
-            handleNewMessage(event.payload);
+            handleNewMessage(event.payload).catch(err =>
+                console.error('[WS Bridge] handleNewMessage FAILED:', err)
+            );
             break;
         case 'delivery_ack':
             handleDeliveryAck(event.payload);

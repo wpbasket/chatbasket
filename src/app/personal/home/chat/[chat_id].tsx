@@ -27,6 +27,9 @@ import { useValue, Memo } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
+import { copyFileToPrivateDir } from '@/lib/personalLib/fileSystem/file.copy';
+import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
+import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 
 const PersonalChatScreen = React.memo(() => {
 
@@ -207,6 +210,10 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 onPress: () => {
                     $chatMessagesState.removeMessages(chatId, [messageId]);
 
+                    // Phase D: Mark as soft-deleted in local storage so it won't reappear on next load
+                    ChatStorage.deleteMessage(messageId)
+                        .catch(err => console.warn('[UI] Storage soft-delete failed', err));
+
                     // Clear the home screen preview if this was the last message
                     const chatEntry = $chatListState.chatsById[chatId]?.peek();
                     if (chatEntry && chatEntry.last_message_id === messageId) {
@@ -230,6 +237,14 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                     ChatTransport.unsendMessage({ chat_id: chatId, message_ids: [messageId] })
                         .then(() => {
                             $chatMessagesState.unsendMessages(chatId, [messageId]);
+
+                            // Phase D: Persist unsend to storage immediately (don't wait for WS event)
+                            ChatStorage.updateMessageStatus(messageId, { message_type: 'unsent', content: 'Message unsent' } as any)
+                                .catch(err => console.warn('[UI] Unsend storage update failed', err));
+
+                            // Phase D: Clean up file data (media blob / local file)
+                            ChatStorage.cleanupMessageMedia([messageId])
+                                .catch(err => console.warn('[UI] Unsend media cleanup failed', err));
                         })
                         .catch(err => console.error('[UI] Unsend failed', err));
                 }
@@ -269,17 +284,33 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         }
 
         // Not in select mode — handle file open
-        const activeUrl = message.download_url || message.file_url;
+        // Phase D: prefer local_uri (persisted file) over server URLs (dead post-ACK)
+        const activeUrl = message.local_uri || message.download_url || message.file_url;
         if (message.message_type === 'file' && activeUrl) {
             if (Platform.OS === 'web') {
-                window.open(activeUrl, '_blank');
+                // Web: idb:// marker → open blob in new tab
+                if (activeUrl.startsWith('idb://')) {
+                    const msgId = activeUrl.replace('idb://', '');
+                    getMediaBlob(msgId).then((result: { blob: Blob; mime: string } | null) => {
+                        if (result) {
+                            const blobUrl = URL.createObjectURL(result.blob);
+                            window.open(blobUrl, '_blank');
+                            // Revoke after a short delay to allow the new tab to load
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                        }
+                    }).catch(() => {
+                        console.warn('[UI] Failed to read file from local storage');
+                    });
+                } else {
+                    window.open(activeUrl, '_blank');
+                }
             } else {
                 Linking.openURL(activeUrl).catch(err => {
                     console.error('[UI] Failed to open URL:', err);
                 });
             }
         }
-    }, [chatId, messageId, message.message_type, message.file_url, message.download_url]);
+    }, [chatId, messageId, message.message_type, message.file_url, message.download_url, message.local_uri]);
 
     const isSelected = useValue(() => {
         const selectedIds = $chatMessagesState.chats[chatId]?.selectedMessageIds.get() || [];
@@ -314,6 +345,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 fileName={message.file_name}
                 fileSize={message.file_size}
                 fileMimeType={message.file_mime_type}
+                localUri={message.local_uri}
             />
         </ThemedView>
     );
@@ -391,91 +423,122 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.setLoading(chatId, true);
                 $chatMessagesState.setError(chatId, null);
             });
-            const response = await ChatTransport.getMessages({
-                chat_id: chatId,
-                limit: 50,
-                offset: 0,
-            });
 
-            if (response.other_user_last_read_at) {
+            // ── Phase D: Local-first ── Load from local storage FIRST ─────────
+            const localMessages = await ChatStorage.getMessagesByChat(chatId, 50, 0);
+
+            if (localMessages.length > 0) {
+                const asEntries = localMessages.map(m => ({
+                    ...m,
+                    status: m.status || 'sent',
+                } as MessageEntry));
+
+                await $chatMessagesState.setMessages(chatId, asEntries);
+
                 batch(() => {
-                    const chat$ = $chatListState.chatsById[chatId];
-                    const chat = chat$.peek();
-                    if (chat) {
-                        chat$.other_user_last_read_at.set(response.other_user_last_read_at);
-
-                        if (chat.last_message_created_at && chat.last_message_is_from_me) {
-                            const lastMsgTime = new Date(chat.last_message_created_at).getTime();
-                            const readTime = new Date(response.other_user_last_read_at).getTime();
-                            if (lastMsgTime <= readTime) {
-                                chat$.last_message_status.set('read');
-                            }
-                        }
+                    if (asEntries.length < 50) {
+                        $chatMessagesState.chats[chatId].hasMore.set(false);
                     }
                 });
             }
 
-            if (response.other_user_last_delivered_at) {
-                batch(() => {
-                    const chat$ = $chatListState.chatsById[chatId];
-                    const chat = chat$.peek();
-                    if (chat) {
-                        chat$.other_user_last_delivered_at.set(response.other_user_last_delivered_at);
+            // ── Background: Sync read/delivered timestamps + any new messages ──
+            try {
+                const response = await ChatTransport.getMessages({
+                    chat_id: chatId,
+                    limit: 50,
+                    offset: 0,
+                });
 
-                        if (chat.last_message_created_at && chat.last_message_is_from_me && chat.last_message_status === 'sent') {
-                            const lastMsgTime = new Date(chat.last_message_created_at).getTime();
-                            const deliveredTime = new Date(response.other_user_last_delivered_at).getTime();
-                            if (lastMsgTime <= deliveredTime) {
-                                chat$.last_message_status.set('delivered');
+                if (response.other_user_last_read_at) {
+                    batch(() => {
+                        const chat$ = $chatListState.chatsById[chatId];
+                        const chat = chat$.peek();
+                        if (chat) {
+                            chat$.other_user_last_read_at.set(response.other_user_last_read_at);
+
+                            if (chat.last_message_created_at && chat.last_message_is_from_me) {
+                                const lastMsgTime = new Date(chat.last_message_created_at).getTime();
+                                const readTime = new Date(response.other_user_last_read_at).getTime();
+                                if (lastMsgTime <= readTime) {
+                                    chat$.last_message_status.set('read');
+                                }
                             }
                         }
-                    }
-                });
-            }
+                    });
+                }
 
-            const messagesWithStatus = (response.messages ?? []).map(m => ({
-                ...m,
-                status: 'sent'
-            } as MessageEntry));
+                if (response.other_user_last_delivered_at) {
+                    batch(() => {
+                        const chat$ = $chatListState.chatsById[chatId];
+                        const chat = chat$.peek();
+                        if (chat) {
+                            chat$.other_user_last_delivered_at.set(response.other_user_last_delivered_at);
 
-            batch(() => {
-                $chatMessagesState.setMessages(chatId, messagesWithStatus);
-                if (messagesWithStatus.length < 50) {
+                            if (chat.last_message_created_at && chat.last_message_is_from_me && chat.last_message_status === 'sent') {
+                                const lastMsgTime = new Date(chat.last_message_created_at).getTime();
+                                const deliveredTime = new Date(response.other_user_last_delivered_at).getTime();
+                                if (lastMsgTime <= deliveredTime) {
+                                    chat$.last_message_status.set('delivered');
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Merge any new server messages not already in local storage
+                const serverMessages = (response.messages ?? []).map(m => ({
+                    ...m,
+                    status: 'sent'
+                } as MessageEntry));
+
+                if (serverMessages.length > 0) {
+                    await $chatMessagesState.setMessages(chatId, serverMessages);
+
+                    batch(() => {
+                        // Update hasMore based on combined count
+                        const totalCount = $chatMessagesState.chats[chatId].messages.peek().length;
+                        if (serverMessages.length < 50 && totalCount < 50) {
+                            $chatMessagesState.chats[chatId].hasMore.set(false);
+                        }
+
+                        const sorted = [...serverMessages].sort((a, b) =>
+                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                        );
+                        const latestMsg = sorted[0];
+                        const chat$ = $chatListState.chatsById[chatId];
+                        const currentChat = chat$.peek();
+
+                        if (currentChat) {
+                            const serverPreview = currentChat.last_message_content;
+                            if (serverPreview === null || serverPreview === '') {
+                                return;
+                            }
+
+                            if (!currentChat.last_message_created_at || new Date(latestMsg.created_at).getTime() > new Date(currentChat.last_message_created_at).getTime()) {
+                                chat$.assign({
+                                    last_message_content: latestMsg.content,
+                                    last_message_created_at: latestMsg.created_at,
+                                    last_message_status: latestMsg.status ?? 'sent',
+                                    last_message_is_from_me: latestMsg.is_from_me,
+                                    last_message_type: latestMsg.message_type,
+                                    last_message_id: latestMsg.message_id,
+                                    last_message_is_unsent: latestMsg.message_type === 'unsent',
+                                });
+                            }
+                        }
+                    });
+                } else if (localMessages.length === 0) {
+                    // No messages anywhere — mark hasMore false
                     $chatMessagesState.chats[chatId].hasMore.set(false);
                 }
+            } catch (syncErr) {
+                // Server sync failed — local data is still shown, log warning only
+                console.warn('[Chat] Background server sync failed (offline?):', syncErr);
+            }
 
-                if (messagesWithStatus.length > 0) {
-                    const sorted = [...messagesWithStatus].sort((a, b) =>
-                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                    );
-                    const latestMsg = sorted[0];
-                    const chat$ = $chatListState.chatsById[chatId];
-                    const currentChat = chat$.peek();
-
-                    if (currentChat) {
-                        // PROTECTION: Trust server's authoritative preview state.
-                        // If the server explicitly says a chat has no preview (content is empty/null),
-                        // we MUST NOT allow the message history load to re-populate it.
-                        const serverPreview = currentChat.last_message_content;
-                        if (serverPreview === null || serverPreview === '') {
-                            return;
-                        }
-
-                        if (!currentChat.last_message_created_at || new Date(latestMsg.created_at).getTime() > new Date(currentChat.last_message_created_at).getTime()) {
-                            chat$.assign({
-                                last_message_content: latestMsg.content,
-                                last_message_created_at: latestMsg.created_at,
-                                last_message_status: latestMsg.status ?? 'sent',
-                                last_message_is_from_me: latestMsg.is_from_me,
-                                last_message_type: latestMsg.message_type,
-                                last_message_id: latestMsg.message_id,
-                                last_message_is_unsent: latestMsg.message_type === 'unsent',
-                            });
-                        }
-                    }
-                }
-            });
         } catch (err: unknown) {
+
             $chatMessagesState.setError(chatId, getChatErrorMessage(err, 'Could not load messages.', { name: recipient_name }));
         } finally {
             $chatMessagesState.setLoading(chatId, false);
@@ -577,6 +640,9 @@ const ChatContentContainer = React.memo(({
                 message_type: 'text',
             });
 
+            // Phase D: Swap temp row → real row so no orphan temp lingers in storage
+            await ChatStorage.swapTempIdToRealId(tempId, response.message_id);
+
             batch(() => {
                 $chatMessagesState.removeMessage(chat_id, tempId);
                 $chatMessagesState.addMessage(chat_id, { ...response, status: 'sent' });
@@ -593,6 +659,9 @@ const ChatContentContainer = React.memo(({
             });
 
         } catch (err: unknown) {
+            // Phase D: Clean up temp message from storage to prevent zombie on next load
+            await ChatStorage.deleteMessage(tempId).catch(() => { });
+
             batch(() => {
                 $chatMessagesState.removeMessage(chat_id, tempId);
                 $chatMessagesState.chats[chat_id].inputText.set(trimmed);
@@ -631,12 +700,30 @@ const ChatContentContainer = React.memo(({
             status: 'pending',
             delivered_to_recipient: false,
             synced_to_sender_primary: true,
-            // @ts-ignore
+            // @ts-ignore — file_url set to local copy below after copyFileToPrivateDir
             file_url: asset.uri,
             file_name: fileName,
             file_size: fileSize,
             progress: 0,
         };
+
+        // Phase 4a: Persist the file locally before upload.
+        // On native: copies to chatFiles/. On web: stores blob in encrypted IDB.
+        // This ensures the outbox queue can retry if upload fails after restart.
+        try {
+            const copyResult = await copyFileToPrivateDir(
+                asset.uri,
+                tempId,
+                fileName,
+                fileMimeType ?? undefined,
+            );
+            optimisticMsg.local_uri = copyResult.localUri;
+            // Use local copy path for immediate display (picker URI may not persist)
+            optimisticMsg.file_url = copyResult.localUri;
+            console.log('[sendFile] File persisted locally →', copyResult.localUri);
+        } catch (err) {
+            console.warn('[sendFile] Local file persist failed, proceeding with upload:', err);
+        }
 
         batch(() => {
             $chatMessagesState.addMessage(chat_id, optimisticMsg);
@@ -652,11 +739,16 @@ const ChatContentContainer = React.memo(({
                 $chatMessagesState.updateMessageStatus(chat_id, tempId, { progress });
             });
 
+            // Phase D: Swap temp row → real row so no orphan temp lingers in storage
+            await ChatStorage.swapTempIdToRealId(tempId, response.message_id);
+
             batch(() => {
                 $chatMessagesState.removeMessage(chat_id, tempId);
                 const finalMsg: MessageEntry = {
                     ...response as any,
-                    view_url: response.view_url || asset.uri,
+                    // Phase D: prefer local_uri for display; server URLs are ephemeral
+                    view_url: response.view_url || optimisticMsg.local_uri || asset.uri,
+                    local_uri: optimisticMsg.local_uri,
                     download_url: response.download_url,
                     file_mime_type: response.file_mime_type || fileMimeType,
                     chat_id,
@@ -683,6 +775,9 @@ const ChatContentContainer = React.memo(({
                 } as ChatEntry);
             });
         } catch (err: unknown) {
+            // Phase D: Clean up temp message from storage to prevent zombie on next load
+            await ChatStorage.deleteMessage(tempId).catch(() => { });
+
             batch(() => {
                 $chatMessagesState.removeMessage(chat_id, tempId);
                 $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'File could not be sent.', { name: recipient_name }));
@@ -783,16 +878,20 @@ const ChatContentContainer = React.memo(({
         try {
             currentChat.loading.set(true);
             const offset = currentChat.offset.peek();
-            const response = await ChatTransport.getMessages({ chat_id, limit: 50, offset });
 
-            const messagesWithStatus = (response.messages ?? []).map(m => ({
-                ...m, status: 'sent'
+            // Phase D: Load older messages from local storage only — all messages
+            // are persisted locally, no server round-trip needed for pagination.
+            const localMessages = await ChatStorage.getMessagesByChat(chat_id, 50, offset);
+
+            const messagesWithStatus = localMessages.map(m => ({
+                ...m, status: m.status || 'sent'
             } as MessageEntry));
 
             batch(() => {
                 if (messagesWithStatus.length < 50) currentChat.hasMore.set(false);
-                $chatMessagesState.prependMessages(chat_id, messagesWithStatus);
             });
+            // prependMessages is async (Phase D persist-before-ACK) — await it outside batch()
+            await $chatMessagesState.prependMessages(chat_id, messagesWithStatus);
         } catch {
             // Silently fail for pagination
         } finally {
@@ -824,6 +923,15 @@ const ChatContentContainer = React.memo(({
             try {
                 await ChatTransport.unsendMessage({ chat_id, message_ids: selectedIds });
                 $chatMessagesState.unsendMessages(chat_id, selectedIds);
+
+                // Phase D: Persist unsend to storage immediately (don't wait for WS event)
+                Promise.all(selectedIds.map(id =>
+                    ChatStorage.updateMessageStatus(id, { message_type: 'unsent', content: 'Message unsent' } as any)
+                )).catch(err => console.warn('[UI] Bulk unsend storage update failed', err));
+
+                // Phase D: Clean up file data (media blob / local file)
+                ChatStorage.cleanupMessageMedia(selectedIds)
+                    .catch(err => console.warn('[UI] Bulk unsend media cleanup failed', err));
             } catch (err) {
                 console.error('[UI] Bulk Unsend failed', err);
             }
@@ -837,6 +945,11 @@ const ChatContentContainer = React.memo(({
         $chatMessagesState.removeMessages(chat_id, selectedIds);
         $chatMessagesState.toggleSelectMode(chat_id, false);
         $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
+
+        // Phase D: Mark as soft-deleted in local storage so they won't reappear on next load
+        Promise.all(selectedIds.map(id => ChatStorage.deleteMessage(id)))
+            .catch(err => console.warn('[UI] Storage bulk soft-delete failed', err));
+
         try {
             await ChatTransport.deleteMessageForMe({ message_ids: selectedIds });
         } catch (err) {

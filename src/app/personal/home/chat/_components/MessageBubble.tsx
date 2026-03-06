@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo, useCallback } from 'react';
+import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { View, Pressable, Modal, TouchableOpacity, Image as RNImage, useWindowDimensions, Platform } from 'react-native';
 import { ThemedText, ThemedView } from '@/components/ui/basic';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -7,6 +7,7 @@ import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIc
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ExpoAudio from 'expo-audio';
 import { UnistylesRuntime } from 'react-native-unistyles';
+import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 
 // ─── Pure helpers — outside component, never recreated on render ──────────────
 
@@ -61,7 +62,7 @@ type MessageBubbleProps = {
     text: string;
     type: 'me' | 'other';
     messageType?: string;
-    status?: 'pending' | 'sent' | 'delivered' | 'read';
+    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error';
     delivered?: boolean;
     createdAt: string;
     onLongPress?: (event: import('react-native').GestureResponderEvent) => void;
@@ -77,7 +78,54 @@ type MessageBubbleProps = {
     downloadUrl?: string;
     progress?: number;
     message_id?: string;
+    localUri?: string | null;
 };
+
+// ─── Hook: resolve local_uri to a renderable URI ─────────────────────────────
+// Native: file:// path used directly.
+// Web: idb:// marker → retrieve encrypted blob from IDB → URL.createObjectURL().
+
+function useLocalMediaUri(
+    localUri: string | null | undefined,
+    messageId?: string
+): string | null {
+    const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!localUri) { setResolvedUri(null); return; }
+
+        if (Platform.OS !== 'web') {
+            // Native: local_uri is already a usable file:// path
+            setResolvedUri(localUri);
+            return;
+        }
+
+        // Web: idb:// marker → blob URL via getMediaBlob()
+        if (localUri.startsWith('idb://')) {
+            const msgId = localUri.replace('idb://', '');
+            let revoked = false;
+            let blobUrl: string | null = null;
+            getMediaBlob(msgId).then((result: { blob: Blob; mime: string } | null) => {
+                if (result && !revoked) {
+                    blobUrl = URL.createObjectURL(result.blob);
+                    setResolvedUri(blobUrl);
+                }
+            }).catch(() => {
+                // IDB read failed (corrupt store, etc.) — fall back to server URLs
+                setResolvedUri(null);
+            });
+            return () => {
+                revoked = true;
+                if (blobUrl) URL.revokeObjectURL(blobUrl);
+            };
+        }
+
+        // Other URI (e.g. blob:, data:, etc.)
+        setResolvedUri(localUri);
+    }, [localUri, messageId]);
+
+    return resolvedUri;
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -102,7 +150,10 @@ const MessageBubble = memo(
         fileSize,
         fileMimeType,
         progress = 0,
+        localUri,
     }: MessageBubbleProps) => {
+        // Resolve local_uri to a renderable URI (file:// on native, blob: on web)
+        const resolvedLocalUri = useLocalMediaUri(localUri, message_id);
         const [isLightboxVisible, setIsLightboxVisible] = useState(false);
         // Lazy load: video and audio players only mount after first tap — avoids
         // auto-buffering all media in the list when the chat screen opens.
@@ -206,7 +257,7 @@ const MessageBubble = memo(
             }
 
             if (isImage) {
-                const activeViewUrl = viewUrl || fileUrl;
+                const activeViewUrl = resolvedLocalUri || viewUrl || fileUrl;
                 if (!activeViewUrl) {
                     return (
                         <View style={styles.mediaBubbleWrapper}>
@@ -239,7 +290,7 @@ const MessageBubble = memo(
             }
 
             if (isVideo || isAudio) {
-                const activeMediaUrl = viewUrl || fileUrl;
+                const activeMediaUrl = resolvedLocalUri || viewUrl || fileUrl;
                 if (!activeMediaUrl) {
                     return (
                         <View style={isVideo ? styles.mediaBubbleWrapper : styles.contentPadding}>
@@ -298,7 +349,7 @@ const MessageBubble = memo(
             }
 
             if (messageType === 'file') {
-                const isResolved = !!(downloadUrl || fileUrl);
+                const isResolved = !!(resolvedLocalUri || downloadUrl || fileUrl);
                 return (
                     <View style={styles.contentPadding}>
                         <View style={styles.fileHeader}>
@@ -391,9 +442,9 @@ const MessageBubble = memo(
                                 <TouchableOpacity style={styles.lightboxClose} onPress={closeLightbox}>
                                     <IconSymbol name="xmark" size={32} color="white" />
                                 </TouchableOpacity>
-                                {viewUrl || fileUrl ? (
+                                {resolvedLocalUri || viewUrl || fileUrl ? (
                                     <RNImage
-                                        source={{ uri: (viewUrl || fileUrl || '').trim() }}
+                                        source={{ uri: (resolvedLocalUri || viewUrl || fileUrl || '').trim() }}
                                         // Inline style uses hook values so it responds to rotation
                                         style={{ width: windowWidth, height: windowHeight * 0.85, backgroundColor: '#000' }}
                                         resizeMode="contain"
@@ -422,7 +473,8 @@ const MessageBubble = memo(
         prev.progress === next.progress &&
         prev.delivered === next.delivered &&
         prev.isSelected === next.isSelected &&
-        prev.isSelectMode === next.isSelectMode
+        prev.isSelectMode === next.isSelectMode &&
+        prev.localUri === next.localUri
 );
 
 // ─── VideoModalPlayer ─────────────────────────────────────────────────────────

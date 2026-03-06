@@ -6,113 +6,81 @@ import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { $personalStateUser } from '../user/personal.state.user';
 import { authState } from '../../auth/state.auth';
+import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
+import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
 
-// Track in-flight or last successful ACK to avoid redundant API spam
-// Exported for WS Event Bridge to use as a shared lock
-export const sharedAckTracker = new Set<string>();
-
-// Debounce map and timers to pool multiple calls into one batch per chat
-const pendingAckIdsByChat = new Map<string, Set<string>>();
-const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const ACK_DEBOUNCE_MS = 50;
-
-// Helper to auto-ack incoming messages (Recipient ACK) AND outgoing syncs (Sender ACK)
-export const ackIncomingMessages = (messages: MessageEntry[], options?: { skipSenderSync?: boolean }) => {
+/**
+ * Auto-ACK incoming messages (Recipient ACK) AND outgoing syncs (Sender ACK).
+ * Phase D: This is fire-and-forget — persistence happens BEFORE this is called.
+ * No debounce, no in-memory tracker. Storage is the source of truth.
+ */
+export const ackIncomingMessages = async (messages: MessageEntry[], options?: { skipSenderSync?: boolean }): Promise<void> => {
     if (messages.length === 0) return;
-
-    // 1. Filter out messages already in-flight (shared lock)
-    const candidates = messages.filter(m => !sharedAckTracker.has(m.message_id));
-    if (candidates.length === 0) return;
 
     const isPrimary = authState.isPrimary.peek();
 
-    // 2. Group candidates by chat to ensure we process each affected chat
-    const affectedChatIds = new Set(candidates.map(m => m.chat_id));
+    // --- PART A: Recipient Delivery ACK (Incoming messages we haven't ACK'd) ---
+    const toAck = messages.filter(m =>
+        !m.is_from_me &&
+        (!m.delivered_to_recipient || (isPrimary && !m.delivered_to_recipient_primary))
+    );
 
-    for (const chatId of affectedChatIds) {
-        // Collect new candidates into the pending pool for this chat
-        if (!pendingAckIdsByChat.has(chatId)) {
-            pendingAckIdsByChat.set(chatId, new Set());
-        }
-        const pool = pendingAckIdsByChat.get(chatId)!;
-
-        candidates.filter(c => {
-            if (c.chat_id !== chatId || c.is_from_me) return false;
-            // ACK if not delivered at all OR if we are primary and haven't primary-delivered yet
-            return !c.delivered_to_recipient || (isPrimary && !c.delivered_to_recipient_primary);
-        }).forEach(c => pool.add(c.message_id));
-
-        // Start/Reset debounce timer
-        if (ackTimers.has(chatId)) {
-            clearTimeout(ackTimers.get(chatId)!);
-        }
-
-        const timer = setTimeout(() => {
-            ackTimers.delete(chatId);
-            const idsToAck = Array.from(pendingAckIdsByChat.get(chatId) || []);
-            pendingAckIdsByChat.delete(chatId);
-
-            if (idsToAck.length === 0) return;
-
-            // Mark as in-flight
-            idsToAck.forEach(id => sharedAckTracker.add(id));
-
-            console.log(`[Auto-Ack] Firing DEBOUNCED BATCH delivery ACK for ${chatId} (${idsToAck.length} messages)`);
-
-            ChatTransport.acknowledgeDeliveryBatch({
+    if (toAck.length > 0) {
+        const idsToAck = toAck.map(m => m.message_id);
+        try {
+            console.log(`[Auto-Ack] Firing BATCH delivery ACK (${idsToAck.length} messages)`);
+            await ChatTransport.acknowledgeDeliveryBatch({
                 message_ids: idsToAck,
                 acknowledged_by: 'recipient',
                 success: true,
-            }).then(() => {
-                batch(() => {
-                    idsToAck.forEach(id => {
-                        const msg$ = chatMessages$.chats[chatId].messagesById[id];
-                        if (msg$.peek()) {
-                            msg$.delivered_to_recipient.set(true);
-                            if (isPrimary) {
-                                msg$.delivered_to_recipient_primary.set(true);
-                            }
-                        }
-                        sharedAckTracker.delete(id);
-                    });
-                });
-            }).catch((err) => {
-                console.warn(`[Auto-Ack] Debounced Batch ACK failed for chat ${chatId}`, err);
-                idsToAck.forEach(id => sharedAckTracker.delete(id));
             });
-        }, ACK_DEBOUNCE_MS);
 
-        ackTimers.set(chatId, timer);
+            // Update local storage + in-memory state
+            for (const id of idsToAck) {
+                await ChatStorage.updateMessageStatus(id, {
+                    acked_by_server: true,
+                    delivered_to_recipient: true,
+                    ...(isPrimary ? { delivered_to_recipient_primary: true } : {}),
+                } as any);
+            }
 
-        // --- PART B: Sender Sync ACK (Outgoing Messages from other devices) ---
-        // (Keep individual ACKs for sender sync as they are infrequent and handled differently on backend)
-        const chatCandidates = candidates.filter(c => c.chat_id === chatId);
+            batch(() => {
+                for (const msg of toAck) {
+                    const msg$ = chatMessages$.chats[msg.chat_id]?.messagesById[msg.message_id];
+                    if (msg$?.peek()) {
+                        msg$.delivered_to_recipient.set(true);
+                        if (isPrimary) msg$.delivered_to_recipient_primary.set(true);
+                    }
+                }
+            });
+        } catch (err) {
+            console.warn('[Auto-Ack] Batch ACK failed (will retry on next sync)', err);
+        }
+    }
 
-        if (isPrimary && !options?.skipSenderSync) {
-            const unackedSync = chatCandidates.filter(m =>
-                m.is_from_me &&
-                !m.synced_to_sender_primary &&
-                !sharedAckTracker.has(m.message_id)
-            );
+    // --- PART B: Sender Sync ACK (Messages sent from other devices) ---
+    if (isPrimary && !options?.skipSenderSync) {
+        const unackedSync = messages.filter(m =>
+            m.is_from_me && !m.synced_to_sender_primary
+        );
 
-            if (unackedSync.length > 0) {
-                unackedSync.forEach(m => {
-                    sharedAckTracker.add(m.message_id);
-                    console.log(`[Auto-Ack] Firing SENDER sync ACK for ${m.message_id}`);
-
-                    ChatTransport.acknowledgeDelivery({
-                        message_id: m.message_id,
-                        acknowledged_by: 'sender',
-                        success: true,
-                    }).then(() => {
-                        const msg$ = chatMessages$.chats[chatId].messagesById[m.message_id];
-                        if (msg$.peek()) msg$.synced_to_sender_primary.set(true);
-                        sharedAckTracker.delete(m.message_id);
-                    }).catch((err) => {
-                        console.warn(`[Auto-Ack] Sync ACK failed for ${m.message_id}`, err);
-                        sharedAckTracker.delete(m.message_id);
-                    });
+        for (const m of unackedSync) {
+            try {
+                console.log(`[Auto-Ack] Firing SENDER sync ACK for ${m.message_id}`);
+                await ChatTransport.acknowledgeDelivery({
+                    message_id: m.message_id,
+                    acknowledged_by: 'sender',
+                    success: true,
                 });
+
+                await ChatStorage.updateMessageStatus(m.message_id, {
+                    synced_to_sender_primary: true,
+                } as any);
+
+                const msg$ = chatMessages$.chats[m.chat_id]?.messagesById[m.message_id];
+                if (msg$?.peek()) msg$.synced_to_sender_primary.set(true);
+            } catch (err) {
+                console.warn(`[Auto-Ack] Sync ACK failed for ${m.message_id}`, err);
             }
         }
     }
@@ -323,17 +291,43 @@ const chatActions = {
         ensureChatInternal(chatId).sending.set(value);
     },
 
-    setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
+    async setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
+        const chat = ensureChatInternal(chatId);
+        const existingByIdSnapshot = chat.messagesById.peek();
+
+        // Phase D: Get soft-deleted IDs to prevent resurrection via INSERT OR REPLACE.
+        // Without this, server sync would overwrite deleted_for_me=1 with 0.
+        const deletedIds = await ChatStorage.getDeletedMessageIds(chatId);
+        const deletedSet = new Set(deletedIds);
+
+        // Phase D: Persist entries, preserving local_uri from in-memory state.
+        // Filter out soft-deleted messages to prevent resurrection.
+        if (entries.length > 0) {
+            const entriesToPersist = entries
+                .filter(e => !deletedSet.has(e.message_id))
+                .map(e => ({
+                    ...e,
+                    local_uri: e.local_uri || existingByIdSnapshot[e.message_id]?.local_uri || null,
+                }));
+            if (entriesToPersist.length > 0) {
+                await ChatStorage.insertMessages(entriesToPersist);
+            }
+        }
+
         batch(() => {
-            const chat = ensureChatInternal(chatId);
             const existingById = chat.messagesById.peek();
 
-            // Merge: Keep existing local/promoted messages, update them if server has newer info
+            // Merge: Keep existing local/promoted messages, update them if server has newer info.
+            // IMPORTANT: Preserve local_uri and skip soft-deleted entries.
             const mergedById = { ...existingById };
             for (const entry of entries) {
+                if (deletedSet.has(entry.message_id)) continue;
+                const existing = mergedById[entry.message_id];
                 mergedById[entry.message_id] = {
-                    ...(mergedById[entry.message_id] || {}),
-                    ...entry
+                    ...(existing || {}),
+                    ...entry,
+                    // Preserve local fields that the server never sends
+                    local_uri: entry.local_uri || existing?.local_uri || null,
                 };
             }
 
@@ -345,66 +339,98 @@ const chatActions = {
             chat.messagesById.set(mergedById);
             chat.messageIds.set(mergedList.map((e) => e.message_id));
             chat.offset.set(mergedList.length);
-
-            // Auto-Ack for any new unacknowledged messages in the batch
-            ackIncomingMessages(entries, options);
         });
+
+        // Auto-Ack AFTER persist (fire-and-forget)
+        ackIncomingMessages(entries, options).catch(err =>
+            console.warn('[ChatState] setMessages ACK failed', err)
+        );
     },
 
-    prependMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
+    async prependMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
+        const chat = ensureChatInternal(chatId);
+        const existing = chat.messagesById.peek();
+        const newEntries = entries.filter((e) => !existing[e.message_id]);
+
+        if (newEntries.length === 0) {
+            chat.hasMore.set(false);
+            return;
+        }
+
+        // Phase D: Get soft-deleted IDs to prevent resurrection via INSERT OR REPLACE.
+        // A concurrent delete_for_me WS event could soft-delete a message between the
+        // getMessagesByChat read (in loadMore) and this insertMessages write.
+        const deletedIds = await ChatStorage.getDeletedMessageIds(chatId);
+        const deletedSet = new Set(deletedIds);
+        const safeToPersist = newEntries.filter(e => !deletedSet.has(e.message_id));
+
+        // Phase D: Persist BEFORE ACK (Rule 1)
+        if (safeToPersist.length > 0) {
+            await ChatStorage.insertMessages(safeToPersist);
+        }
+
         batch(() => {
-            const chat = ensureChatInternal(chatId);
-            const existing = chat.messagesById.get();
-            const newEntries = entries.filter((e) => !existing[e.message_id]);
-
-            if (newEntries.length === 0) {
-                chat.hasMore.set(false);
-                return;
-            }
-
             const current = chat.messages.get();
-            const merged = [...current, ...newEntries].sort(
+            const merged = [...current, ...safeToPersist].sort(
                 (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             );
 
             chat.messages.set(merged);
             const byId = { ...existing };
-            for (const entry of newEntries) {
+            for (const entry of safeToPersist) {
                 byId[entry.message_id] = entry;
             }
             chat.messagesById.set(byId);
             chat.messageIds.set(merged.map((e) => e.message_id));
-            chat.messageIds.set(merged.map((e) => e.message_id));
             chat.offset.set(merged.length);
-
-            // Auto-Ack
-            ackIncomingMessages(newEntries, options);
         });
+
+        // Auto-Ack AFTER persist (fire-and-forget)
+        ackIncomingMessages(safeToPersist, options).catch(err =>
+            console.warn('[ChatState] prependMessages ACK failed', err)
+        );
     },
 
     async addMessage(chatId: string, entry: MessageEntry) {
         // Resolve media URLs first (async) before entering synchronous batch
         let resolvedEntry = { ...entry };
-        if (resolvedEntry.file_id) {
+        if (resolvedEntry.file_id && !resolvedEntry.local_uri) {
             await resolveMediaUrls([resolvedEntry]);
         }
 
-        batch(() => {
-            const chat = ensureChatInternal(chatId);
-            const existing = chat.messagesById.peek();
-            if (existing[resolvedEntry.message_id]) return;
+        const chat = ensureChatInternal(chatId);
+        const existing = chat.messagesById.peek();
+        if (existing[resolvedEntry.message_id]) return;
 
+        // Phase D: Check if this message was soft-deleted (e.g., concurrent delete_for_me
+        // event arriving while handleNewMessage is downloading media). Without this guard,
+        // INSERT OR REPLACE would overwrite deleted_for_me = 1 with 0, resurrecting the message.
+        const deletedIds = await ChatStorage.getDeletedMessageIds(chatId);
+        if (deletedIds.includes(resolvedEntry.message_id)) {
+            // Still ACK so the server stops re-delivering (same pattern as syncPendingMessages)
+            ackIncomingMessages([resolvedEntry], { skipSenderSync: true }).catch(err =>
+                console.warn('[ChatState] addMessage ACK (deleted msg) failed', err)
+            );
+            return;
+        }
+
+        // Phase D: Persist BEFORE ACK (Rule 1)
+        await ChatStorage.insertMessage(resolvedEntry);
+
+        batch(() => {
             const current = chat.messages.peek();
             const updated = [resolvedEntry, ...current].slice(0, 1000);
 
             chat.messages.set(updated);
             chat.messagesById[resolvedEntry.message_id].set(resolvedEntry);
             chat.messageIds.set(updated.map((e) => e.message_id));
-
-            // Auto-Ack (Skip sender sync since we just sent it)
-            console.log(`[ChatActions] addMessage: Adding local message ${resolvedEntry.message_id}. Skipping Sender Sync.`);
-            ackIncomingMessages([resolvedEntry], { skipSenderSync: true });
         });
+
+        // Auto-Ack AFTER persist (fire-and-forget, skip sender sync)
+        console.log(`[ChatActions] addMessage: Persisted ${resolvedEntry.message_id}. ACK follows.`);
+        ackIncomingMessages([resolvedEntry], { skipSenderSync: true }).catch(err =>
+            console.warn('[ChatState] addMessage ACK failed', err)
+        );
     },
 
     updateMessageStatus(chatId: string, messageId: string, updates: Partial<MessageEntry>) {
@@ -713,9 +739,62 @@ const chatActions = {
 
             console.log(`[ChatState] syncPendingMessages: Found ${response.messages.length} messages.`);
 
+            // Phase D fix: Get soft-deleted IDs across ALL chats in the batch to
+            // prevent INSERT OR REPLACE from resurrecting deleted_for_me = 1 rows.
+            const chatIds = [...new Set(response.messages.map(m => m.chat_id))];
+            const allDeletedIds = new Set<string>();
+            for (const chatId of chatIds) {
+                const deletedIds = await ChatStorage.getDeletedMessageIds(chatId);
+                for (const id of deletedIds) allDeletedIds.add(id);
+            }
+            const messagesToPersist = response.messages.filter(m => !allDeletedIds.has(m.message_id));
+
+            // Phase D: Persist non-deleted messages to local storage BEFORE any ACK (Rule 1)
+            if (messagesToPersist.length > 0) {
+                await ChatStorage.insertMessages(messagesToPersist);
+            }
+
+            // Phase D fix: Download media files for messages before ACK.
+            // On primary devices, primary ACK triggers backend file deletion (§8.3/§8.7.4),
+            // so files MUST be downloaded first or they'll be permanently lost.
+            const isPrimary = authState.isPrimary.peek() === true;
+            const downloadFailedIds = new Set<string>();
+            for (const msg of response.messages) {
+                // Skip media downloads for soft-deleted messages — we'll ACK them
+                // but not process them, so downloading their files wastes bandwidth
+                // and can trap primary devices in an infinite retry loop.
+                if (allDeletedIds.has(msg.message_id)) continue;
+                if (msg.file_id && msg.download_url && msg.message_type !== 'text' && msg.message_type !== 'unsent') {
+                    try {
+                        const localUri = await downloadIncomingFile(msg);
+                        if (localUri) {
+                            msg.local_uri = localUri; // Mutate so in-memory state gets local_uri
+                            await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: localUri } as any);
+                        }
+                    } catch (err) {
+                        if (isPrimary) {
+                            console.error('[ChatState] syncPendingMessages: Media download failed on PRIMARY — skipping ACK for this message', msg.message_id, err);
+                            // Track failed IDs so they're excluded from ACK and in-memory state
+                            downloadFailedIds.add(msg.message_id);
+                            continue;
+                        }
+                        console.warn('[ChatState] syncPendingMessages: Media download failed on non-primary — proceeding', msg.message_id, err);
+                    }
+                }
+            }
+
+            // Filter out download-failed messages from further processing
+            const messagesToProcess = downloadFailedIds.size > 0
+                ? response.messages.filter(m => !downloadFailedIds.has(m.message_id))
+                : response.messages;
+
+            // Exclude soft-deleted messages from in-memory state (but NOT from ACK —
+            // they must be ACK'd so the server stops re-delivering them).
+            const filteredToProcess = messagesToProcess.filter(m => !allDeletedIds.has(m.message_id));
+
             batch(() => {
                 const messagesByChat: Record<string, MessageEntry[]> = {};
-                for (const msg of response.messages) {
+                for (const msg of filteredToProcess) {
                     if (!messagesByChat[msg.chat_id]) messagesByChat[msg.chat_id] = [];
                     messagesByChat[msg.chat_id].push(msg);
                 }
@@ -726,31 +805,32 @@ const chatActions = {
                     const chatStore = chatMessages$.chats[chatId];
                     const chatStoreData = chatStore.peek();
 
-                    // 1. Add messages to active chat store (if loaded)
+                    // 1. Add messages to active chat store (if loaded) — inline to avoid double persist
                     if (activeChatId === chatId || chatStoreData) {
-                        chatMsgs.forEach(m => chatActions.addMessage(chatId, m));
+                        chatMsgs.forEach(m => {
+                            const chat = ensureChatInternal(chatId);
+                            const existing = chat.messagesById.peek();
+                            if (existing[m.message_id]) return;
+                            const current = chat.messages.peek();
+                            const updated = [m, ...current].slice(0, 1000);
+                            chat.messages.set(updated);
+                            chat.messagesById[m.message_id].set(m);
+                            chat.messageIds.set(updated.map(e => e.message_id));
+                        });
                     }
 
                     // 2. Update Chat List previews (Only update UI/Previews, TRUST server unread_count)
                     const currentEntry = $chatListState.chatsById[chatId]?.peek();
                     if (currentEntry) {
-                        // Sort synced messages chronologically (backend SHOULD return them sorted, but let's be safe)
                         const sortedSynced = [...chatMsgs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
                         const lastMsg = sortedSynced[sortedSynced.length - 1];
 
-                        // PROTECTION: Trust server's authoritative preview state. 
-                        // If the server explicitly says a chat has no preview (content is empty/null),
-                        // we MUST NOT allow historical sync data to re-populate it. This honors "Delete for me".
                         const serverPreview = currentEntry.last_message_content;
-
                         if (serverPreview === null || serverPreview === '') {
-                            // Authoritative server state says this chat is empty. Stop sync from overwriting.
-                            return;
+                            continue; // Phase D fix: was `return` which broke the entire for loop
                         }
 
-                        // Only update preview if the sync found a NEWER message than what we currently show
                         const isNewer = !currentEntry.last_message_created_at || (new Date(lastMsg.created_at).getTime() > new Date(currentEntry.last_message_created_at).getTime());
-
                         if (isNewer) {
                             $chatListState.upsertChat({
                                 ...currentEntry,
@@ -766,9 +846,12 @@ const chatActions = {
                 }
             });
 
-            // Delegate standard Delivery ACKs and Sender-Sync ACKs to the shared debounce flow.
-            // This ensures messages synced in the background are properly marked as received.
-            ackIncomingMessages(response.messages);
+            // ACK all successfully-downloaded messages (including soft-deleted ones)
+            // so the server stops re-delivering them. filteredToProcess excludes deleted
+            // from in-memory state, but messagesToProcess includes them for ACK.
+            ackIncomingMessages(messagesToProcess).catch(err =>
+                console.warn('[ChatState] syncPendingMessages ACK failed', err)
+            );
 
             console.log('[ChatState] syncPendingMessages: DONE');
         } catch (err) {

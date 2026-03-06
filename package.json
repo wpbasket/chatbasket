@@ -10,7 +10,7 @@
     "lint": "expo lint",
     "test": "jest --forceExit",
     "build-web": "npx expo export -p web -c",
-    "deploy-web": "npm run build-web && npx wrangler pages deploy dist"
+    "deploy-web": "npm run build-web && npx tsx scripts/fix-cloudflare-pages.ts && npx wrangler pages deploy dist"
   },
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^13.0.0",

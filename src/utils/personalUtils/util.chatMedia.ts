@@ -10,6 +10,7 @@ export async function resolveMediaUrls(messages: MessageEntry[]) {
         .filter(m =>
             (m.message_type === 'image' || m.message_type === 'file' || m.message_type === 'video' || m.message_type === 'audio') &&
             m.file_id &&
+            !m.local_uri &&  // Skip if file is already stored locally
             (!m.file_url || m.file_url.includes('/download'))
         )
         .map(async (m) => {

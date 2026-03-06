@@ -6,6 +6,9 @@ import { PersonalStorageRemoveContactRequests, PersonalStorageRemoveContacts } f
 import { PersonalStorageRemoveUser } from "../personalStorage/personal.storage.user";
 import { PreferencesStorage } from "./storage.preferences";
 import { PersonalStorageGetDeviceStatus, PersonalStorageRemoveDeviceStatus } from '@/lib/storage/personalStorage/personal.storage.device';
+import { clearAllChatStorage } from '@/lib/storage/personalStorage/chat/chat.storage';
+// NOTE: connectionWatcher is lazy-imported in logout() to avoid require cycle:
+// constantLib → client.ts → storage.auth.ts → connection.watcher → outbox.queue → chat.transport → personal.api.chat → constantLib
 import { appMode$ } from "@/state/appMode/state.appMode";
 import { $contactRequestsState, $contactsState } from "@/state/personalState/contacts/personal.state.contacts";
 import { $personalStateUser } from "@/state/personalState/user/personal.state.user";
@@ -103,6 +106,18 @@ export const getSession = async () => {
 export const clearSession = async () => {
   const storage = getStorage();
 
+  // Phase D: Stop outbox queue + connection watcher FIRST — before clearing auth tokens.
+  // In-flight outbox messages need valid auth tokens to complete; clearing storage first
+  // would cause them to fail with auth errors and potentially corrupt retry state.
+  try {
+    const { connectionWatcher } = await import('@/lib/personalLib/chatApi/connection.watcher');
+    const { outboxQueue } = await import('@/lib/personalLib/chatApi/outbox.queue');
+    outboxQueue.pause();
+    connectionWatcher.stop();
+  } catch (error) {
+    console.log('Failed to stop outbox/connection watcher:', error);
+  }
+
   // Clear all session data in this scope
   await storage.clearAll();
 
@@ -122,6 +137,13 @@ export const clearSession = async () => {
     await PersonalStorageRemoveDeviceStatus();
   } catch (error) {
     console.log('Failed to clear personal user storage:', error);
+  }
+
+  // Clear chat storage BEFORE auth state is cleared (Rule 10 — Phase D)
+  try {
+    await clearAllChatStorage();
+  } catch (error) {
+    console.error('[StorageAuth] Failed to clear chat storage (continuing logout):', error);
   }
 
   // Clear auth state for both platforms (Exhaustive)
@@ -154,6 +176,15 @@ export const clearSession = async () => {
     $personalStateUser.avatarUri.set(null);
   } catch (error) {
     console.log('Failed to reset domain observables:', error);
+  }
+
+  // Phase D: Reset chat in-memory state — prevents previous user's data from being visible
+  try {
+    const { $chatMessagesState, $chatListState } = await import('@/state/personalState/chat/personal.state.chat');
+    $chatMessagesState.reset();
+    ($chatListState as any).reset();
+  } catch (error) {
+    console.log('Failed to reset chat state observables:', error);
   }
 };
 
