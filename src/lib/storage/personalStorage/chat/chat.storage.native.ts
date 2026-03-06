@@ -4,7 +4,6 @@ import * as SQLite from 'expo-sqlite';
 import { File, Directory, Paths } from 'expo-file-system';
 import type { MessageEntry } from '@/lib/personalLib';
 import type { LocalMessageEntry } from './chat.storage.schema';
-import { cleanupOrphanedFiles } from '@/lib/personalLib/fileSystem/file.copy';
 
 const DB_NAME = 'chatMessages.db';
 let db: SQLite.SQLiteDatabase | null = null;
@@ -418,4 +417,38 @@ function sqliteRowToLocal(row: Record<string, any>): LocalMessageEntry {
         last_retry_at: row.last_retry_at || null,
         error_message: row.error_message || null,
     } as LocalMessageEntry;
+}
+
+/**
+ * Removes files in `chatFiles/` that are NOT in the provided active set.
+ *
+ * Called periodically or on boot to reclaim space from files whose
+ * messages have been deleted.
+ */
+function cleanupOrphanedFiles(activeUris: string[]): void {
+    try {
+        const dir = new Directory(Paths.document, 'chatFiles');
+
+        if (!dir.exists) return;
+
+        const activeSet = new Set(activeUris.map(u => u.toLowerCase()));
+        const entries = dir.list();
+        let removed = 0;
+
+        for (const entry of entries) {
+            // Only clean up files, not subdirectories
+            if (entry instanceof File) {
+                if (!activeSet.has(entry.uri.toLowerCase())) {
+                    entry.delete();
+                    removed++;
+                }
+            }
+        }
+
+        if (removed > 0) {
+            console.log('[ChatStorage:Native]', `Cleaned up ${removed} orphaned file(s)`);
+        }
+    } catch (err) {
+        console.warn('[ChatStorage:Native]', 'Orphan cleanup failed:', err);
+    }
 }

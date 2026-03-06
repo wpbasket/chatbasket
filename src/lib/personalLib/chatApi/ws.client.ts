@@ -258,8 +258,15 @@ class WSClientManager {
             }
         };
 
-        this.ws.onerror = (e) => {
-            console.error('[WS Client] WebSocket Error:', e);
+        this.ws.onerror = (e: any) => {
+            // React Native dumps a massive Event object on network failure.
+            // The actual reason is typically captured nicely in `onclose`.
+            const msg = e?.message || e?.error?.message;
+            if (msg) {
+                console.log(`[WS Client] WebSocket Error: ${msg}`);
+            } else {
+                console.log('[WS Client] WebSocket Error encountered (see onclose for details)');
+            }
         };
 
         this.ws.onclose = (event: CloseEvent) => {

@@ -971,7 +971,7 @@ const ChatContentContainer = React.memo(({
                 <ThemedView
                     style={[
                         styles.content,
-                        { transform: [{ translateY: -$uiState.keyboardHeight.get() }] }
+                        { transform: [{ translateY: -$uiState.keyboardHeight.get() -4 }] }
                     ]}
                 >
                     <Memo>
