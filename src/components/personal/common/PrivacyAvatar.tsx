@@ -48,7 +48,7 @@ export function PrivacyAvatar({ uri, name, size = 48, colorKey }: PrivacyAvatarP
   } as const;
 
   if (uri) {
-    return <Image source={{ uri }} style={[styles.image, dimensionStyle]} {...({ pointerEvents: 'none' } as any)} />;
+    return <Image source={{ uri }} style={[styles.image, dimensionStyle]} />;
   }
 
   const backgroundColor = getAvatarColor(colorKey || name);

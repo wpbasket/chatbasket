@@ -35,7 +35,7 @@ export const initializeAppStorage = async (): Promise<void> => {
             connectionWatcher.start();
             outboxQueue.processQueue();
 
-            // Phase D: Purge soft-deleted rows 60s after network is confirmed online.
+            // Phase D: Purge soft-deleted rows 30s after network is confirmed online.
             // This ensures initial sync + WebSocket events have been processed first,
             // so getDeletedMessageIds guards are no longer needed for those messages.
             const schedulePurge = () => {
@@ -46,13 +46,13 @@ export const initializeAppStorage = async (): Promise<void> => {
                     cleanupOrphanedMedia().catch(err =>
                         console.warn('[StorageInit] cleanupOrphanedMedia failed:', err)
                     );
-                }, 60_000);
+                }, 30_000);
             };
 
             if (connectionWatcher.isOnline) {
                 schedulePurge();
             } else {
-                // Wait for the first online transition, then start the 60s timer
+                // Wait for the first online transition, then start the 30s timer
                 const unsub = connectionWatcher.subscribe((isOnline) => {
                     if (isOnline) {
                         unsub();

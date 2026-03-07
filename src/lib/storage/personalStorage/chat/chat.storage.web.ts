@@ -317,6 +317,11 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
 
 export async function deleteMessage(messageId: string): Promise<void> {
     await updateMessageStatus(messageId, { deleted_for_me: true });
+
+    // Schedule a hard-delete and media cleanup 10 seconds after "Delete for me"
+    setTimeout(() => {
+        purgeDeletedMessages().catch(err => console.warn('[ChatStorage] Delayed purge failed', err));
+    }, 10_000);
 }
 
 export async function getDeletedMessageIds(chatId: string): Promise<string[]> {
