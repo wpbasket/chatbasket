@@ -978,13 +978,18 @@ const chatActions = {
             clearTimeout(timers.get(chatId)!);
         }
 
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
             timers.delete(chatId);
             console.log(`[ChatState] debouncedMarkRead: Firing for ${chatId}`);
-            ChatTransport.markChatRead({ chat_id: chatId }).catch((err) => {
+            try {
+                const response = await ChatTransport.markChatRead({ chat_id: chatId });
+                if (response?.status === true) {
+                    $chatListState.markChatRead(chatId);
+                }
+            } catch (err) {
                 console.warn(`[ChatState] debouncedMarkRead: FAILED for ${chatId}`, err);
-            });
-        }, 2000);
+            }
+        }, 1000);
 
         timers.set(chatId, timer);
     },

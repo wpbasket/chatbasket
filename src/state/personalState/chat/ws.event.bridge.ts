@@ -111,7 +111,6 @@ async function handleNewMessage(payload: any): Promise<void> {
         if (!msg.is_from_me) {
             dbg(`[WS Bridge] new_message: AUTO-READING message (debounced) because chat is open`);
             $chatMessagesState.debouncedMarkRead(msg.chat_id);
-            $chatListState.markChatRead(msg.chat_id);
         }
     } else {
         dbg(`[WS Bridge] new_message: chat is NOT active, triggering background auto-ack`);
@@ -146,7 +145,7 @@ async function handleNewMessage(payload: any): Promise<void> {
             last_message_is_unsent: msg.message_type === 'unsent',
             unread_count: shouldIncrementUnread
                 ? (currentEntry.unread_count || 0) + 1
-                : (isChatActive ? 0 : currentEntry.unread_count),
+                : currentEntry.unread_count,
             updated_at: msg.created_at,
         };
         dbg(`[WS Bridge] new_message: UPSERTING chat list - unread_count=${updatedEntry.unread_count}`);
@@ -190,7 +189,7 @@ async function handleNewMessage(payload: any): Promise<void> {
             last_message_status: msg.status ?? 'sent',
             last_message_sender_id: msg.is_from_me ? (currentUserId || null) : otherUserId,
             last_message_is_unsent: msg.message_type === 'unsent',
-            unread_count: shouldIncrementUnread ? 1 : 0,
+            unread_count: !msg.is_from_me ? 1 : 0,
             created_at: msg.created_at,
             updated_at: msg.created_at,
             other_user_last_read_at: '',

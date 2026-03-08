@@ -383,7 +383,6 @@ const ChatContentContainer = React.memo(({
                         // Delay slightly to ensure UI has rendered new messages before marking read
                         setTimeout(() => {
                             $chatMessagesState.debouncedMarkRead(chat_id);
-                            $chatListState.markChatRead(chat_id);
                         }, 500);
                     }
                 });
