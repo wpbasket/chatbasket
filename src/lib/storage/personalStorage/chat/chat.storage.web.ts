@@ -1,7 +1,8 @@
 // lib/storage/personalStorage/chat/chat.storage.web.ts
 
-import type { MessageEntry } from '@/lib/personalLib';
-import type { LocalMessageEntry } from './chat.storage.schema';
+import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
+import type { LocalChatEntry, LocalMessageEntry } from './chat.storage.schema';
+import { normalizeChatEntries } from './chat.storage.normalize';
 
 // ─── Encryption Layer (matches WebVault from storage.wrapper.ts) ────────────
 
@@ -72,8 +73,9 @@ async function decrypt(packed: ArrayBuffer): Promise<string> {
 // ─── IndexedDB Data Store ───────────────────────────────────────────────────
 
 const DATA_DB_NAME = 'ChatStorage';
-const DATA_DB_VERSION = 2;  // v2: renamed cached_at → stored_at in media store
+const DATA_DB_VERSION = 3;  // v3: add chats store for chat-list persistence
 const MESSAGES_STORE = 'messages';
+const CHATS_STORE = 'chats';
 const MEDIA_STORE = 'media';  // File blobs (per §8.6.3 / §8.5.7)
 // NOTE: No separate outbox store — outbox is a logical query on MESSAGES_STORE
 // (WHERE status IN ('pending','sending') AND is_from_me = true)
@@ -96,6 +98,16 @@ function openDataDb(): Promise<IDBDatabase> {
                 msgStore.createIndex('idx_status', 'status', { unique: false });
                 msgStore.createIndex('idx_temp_id', 'temp_id', { unique: false });
                 msgStore.createIndex('idx_created_at', 'created_at', { unique: false });
+            }
+
+            if (!db.objectStoreNames.contains(CHATS_STORE)) {
+                const chatStore = db.createObjectStore(CHATS_STORE, { keyPath: 'chat_id' });
+                chatStore.createIndex('idx_activity', 'activity_at', { unique: false });
+            } else {
+                const chatStore = request.transaction!.objectStore(CHATS_STORE);
+                if (!chatStore.indexNames.contains('idx_activity')) {
+                    chatStore.createIndex('idx_activity', 'activity_at', { unique: false });
+                }
             }
 
             // Media file store — keyed by message_id
@@ -140,6 +152,20 @@ async function encryptEntry(entry: LocalMessageEntry): Promise<{ message_id: str
 async function decryptEntry(record: any): Promise<LocalMessageEntry> {
     const json = await decrypt(record.blob);
     return JSON.parse(json) as LocalMessageEntry;
+}
+
+async function encryptChatEntry(entry: LocalChatEntry): Promise<{ chat_id: string; activity_at: string; blob: ArrayBuffer }> {
+    const blob = await encrypt(JSON.stringify(entry));
+    return {
+        chat_id: entry.chat_id,
+        activity_at: entry.last_message_created_at || entry.created_at,
+        blob,
+    };
+}
+
+async function decryptChatEntry(record: any): Promise<LocalChatEntry> {
+    const json = await decrypt(record.blob);
+    return JSON.parse(json) as LocalChatEntry;
 }
 
 function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: string }): LocalMessageEntry {
@@ -208,6 +234,14 @@ function idbCount(store: IDBObjectStore, query?: IDBValidKey | IDBKeyRange): Pro
     });
 }
 
+function idbClear(store: IDBObjectStore): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function initChatStorage(): Promise<void> {
@@ -238,6 +272,56 @@ export async function insertMessages(messages: Array<MessageEntry & { tempId?: s
     for (const entry of encrypted) {
         await idbPut(store, entry);
     }
+}
+
+function chatToLocal(chat: ChatEntry): LocalChatEntry {
+    return {
+        ...chat,
+        avatar_url: chat.avatar_url ?? null,
+        last_message_content: chat.last_message_content ?? null,
+        last_message_created_at: chat.last_message_created_at ?? null,
+        last_message_type: chat.last_message_type ?? null,
+        last_message_sender_id: chat.last_message_sender_id ?? null,
+        last_message_id: chat.last_message_id ?? null,
+        last_message_is_unsent: !!chat.last_message_is_unsent,
+    };
+}
+
+export async function insertChats(chats: ChatEntry[]): Promise<void> {
+    const normalized = normalizeChatEntries(chats).map(chatToLocal);
+    if (normalized.length === 0) return;
+    const encrypted = await Promise.all(normalized.map(chat => encryptChatEntry(chat)));
+    const db = await openDataDb();
+    const tx = db.transaction(CHATS_STORE, 'readwrite');
+    const store = tx.objectStore(CHATS_STORE);
+    for (const entry of encrypted) {
+        await idbPut(store, entry);
+    }
+}
+
+export async function replaceChats(chats: ChatEntry[]): Promise<void> {
+    const normalized = normalizeChatEntries(chats).map(chatToLocal);
+    const encrypted = await Promise.all(normalized.map(chat => encryptChatEntry(chat)));
+    const db = await openDataDb();
+    const tx = db.transaction(CHATS_STORE, 'readwrite');
+    const store = tx.objectStore(CHATS_STORE);
+    await idbClear(store);
+    for (const entry of encrypted) {
+        await idbPut(store, entry);
+    }
+}
+
+export async function getChats(): Promise<LocalChatEntry[]> {
+    const db = await openDataDb();
+    const tx = db.transaction(CHATS_STORE, 'readonly');
+    const store = tx.objectStore(CHATS_STORE);
+    const records = await idbGetAll<any>(store);
+    const decrypted = await Promise.all(records.map(r => decryptChatEntry(r)));
+    return decrypted.sort((a, b) => {
+        const aTime = a.last_message_created_at || a.created_at;
+        const bTime = b.last_message_created_at || b.created_at;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
 }
 
 export async function getMessagesByChat(chatId: string, limit: number = 50, offset: number = 0): Promise<LocalMessageEntry[]> {
@@ -449,18 +533,19 @@ export function recordFailedInsert() { _failedInserts++; }
 
 export async function getStorageStats(): Promise<{ totalMessages: number; pendingMessages: number; chatsCount: number; failedInserts: number }> {
     const db = await openDataDb();
-    const tx = db.transaction(MESSAGES_STORE, 'readonly');
-    const store = tx.objectStore(MESSAGES_STORE);
-    const all = await idbGetAll<any>(store);
+    const tx = db.transaction([MESSAGES_STORE, CHATS_STORE], 'readonly');
+    const messageStore = tx.objectStore(MESSAGES_STORE);
+    const chatStore = tx.objectStore(CHATS_STORE);
+    const all = await idbGetAll<any>(messageStore);
+    const chatsCount = await idbCount(chatStore);
 
     let total = 0;
     let pending = 0;
-    const chatIds = new Set<string>();
     for (const r of all) {
-        if (!r.deleted_for_me) { total++; chatIds.add(r.chat_id); }
+        if (!r.deleted_for_me) total++;
         if (r.status === 'pending' || r.status === 'sending') pending++;
     }
-    return { totalMessages: total, pendingMessages: pending, chatsCount: chatIds.size, failedInserts: _failedInserts };
+    return { totalMessages: total, pendingMessages: pending, chatsCount, failedInserts: _failedInserts };
 }
 
 // ─── Media Blob Storage (per §8.6.3 / §8.5.7) ─────────────────────────────

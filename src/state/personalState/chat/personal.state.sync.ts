@@ -63,6 +63,7 @@ export const $syncEngine = {
                                     $chatMessagesState.unsendMessages(chat_id, message_ids);
                                 } else {
                                     $chatMessagesState.removeMessages(chat_id, message_ids);
+                                    $chatListState.clearPreviewIfLastMessage(chat_id, message_ids);
                                 }
                             }
                         }

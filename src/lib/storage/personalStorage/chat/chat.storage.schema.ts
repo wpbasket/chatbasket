@@ -44,13 +44,22 @@ export interface LocalMessageEntry {
  */
 export interface LocalChatEntry {
     chat_id: string;
-    recipient_id: string;
-    last_message_id: string | null;
-    last_message_content: string | null;
-    last_message_type: string | null;
-    last_message_created_at: string | null;
-    last_read_at: string | null;
+    other_user_id: string;
+    other_user_name: string;
+    other_user_username: string;
+    avatar_url: string | null;
+    created_at: string;
     unread_count: number;
+    other_user_last_read_at: string;
+    other_user_last_delivered_at: string;
+    last_message_content: string | null;
+    last_message_created_at: string | null;
+    last_message_type: string | null;
+    last_message_is_from_me: boolean;
+    last_message_status: string;
+    last_message_sender_id: string | null;
+    last_message_id: string | null;
+    last_message_is_unsent: boolean;
     updated_at: string;
 }
 

@@ -36,6 +36,12 @@ export const insertMessage: typeof import('./chat.storage.native').insertMessage
     (...args: any[]) => (ChatStorageImpl.insertMessage as any)(...args);
 export const insertMessages: typeof import('./chat.storage.native').insertMessages =
     (...args: any[]) => (ChatStorageImpl.insertMessages as any)(...args);
+export const insertChats: typeof import('./chat.storage.native').insertChats =
+    (...args: any[]) => (ChatStorageImpl.insertChats as any)(...args);
+export const replaceChats: typeof import('./chat.storage.native').replaceChats =
+    (...args: any[]) => (ChatStorageImpl.replaceChats as any)(...args);
+export const getChats: typeof import('./chat.storage.native').getChats =
+    (...args: any[]) => (ChatStorageImpl.getChats as any)(...args);
 export const getMessagesByChat: typeof import('./chat.storage.native').getMessagesByChat =
     (...args: any[]) => (ChatStorageImpl.getMessagesByChat as any)(...args);
 export const updateMessageStatus: typeof import('./chat.storage.native').updateMessageStatus =

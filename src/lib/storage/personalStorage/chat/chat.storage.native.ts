@@ -2,8 +2,9 @@
 
 import * as SQLite from 'expo-sqlite';
 import { File, Directory, Paths } from 'expo-file-system';
-import type { MessageEntry } from '@/lib/personalLib';
-import type { LocalMessageEntry } from './chat.storage.schema';
+import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
+import type { LocalChatEntry, LocalMessageEntry } from './chat.storage.schema';
+import { normalizeChatEntries } from './chat.storage.normalize';
 
 const DB_NAME = 'chatMessages.db';
 let db: SQLite.SQLiteDatabase | null = null;
@@ -26,6 +27,30 @@ export async function initChatStorage(): Promise<void> {
 
     // Create tables
     await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS chats (
+            chat_id TEXT PRIMARY KEY,
+            other_user_id TEXT NOT NULL,
+            other_user_name TEXT NOT NULL DEFAULT '',
+            other_user_username TEXT NOT NULL DEFAULT '',
+            avatar_url TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            other_user_last_read_at TEXT NOT NULL DEFAULT '',
+            other_user_last_delivered_at TEXT NOT NULL DEFAULT '',
+            last_message_content TEXT,
+            last_message_created_at TEXT,
+            last_message_type TEXT,
+            last_message_is_from_me INTEGER NOT NULL DEFAULT 0,
+            last_message_status TEXT NOT NULL DEFAULT 'sent',
+            last_message_sender_id TEXT,
+            last_message_id TEXT,
+            last_message_is_unsent INTEGER NOT NULL DEFAULT 0,
+            unread_count INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_chats_activity
+            ON chats(COALESCE(last_message_created_at, created_at) DESC);
+
         CREATE TABLE IF NOT EXISTS messages (
             message_id TEXT PRIMARY KEY,
             chat_id TEXT NOT NULL,
@@ -132,6 +157,73 @@ export async function insertMessages(messages: Array<MessageEntry & { tempId?: s
             await insertMessage(msg);
         }
     });
+}
+
+function chatBindings(chat: ChatEntry): any[] {
+    return [
+        chat.chat_id,
+        chat.other_user_id,
+        chat.other_user_name,
+        chat.other_user_username,
+        chat.avatar_url,
+        chat.created_at,
+        chat.updated_at,
+        chat.other_user_last_read_at,
+        chat.other_user_last_delivered_at,
+        chat.last_message_content,
+        chat.last_message_created_at,
+        chat.last_message_type,
+        chat.last_message_is_from_me ? 1 : 0,
+        chat.last_message_status,
+        chat.last_message_sender_id,
+        chat.last_message_id,
+        chat.last_message_is_unsent ? 1 : 0,
+        chat.unread_count,
+    ];
+}
+
+async function upsertChatRow(d: SQLite.SQLiteDatabase, chat: ChatEntry): Promise<void> {
+    await d.runAsync(
+        `INSERT OR REPLACE INTO chats (
+            chat_id, other_user_id, other_user_name, other_user_username, avatar_url,
+            created_at, updated_at, other_user_last_read_at, other_user_last_delivered_at,
+            last_message_content, last_message_created_at, last_message_type,
+            last_message_is_from_me, last_message_status, last_message_sender_id,
+            last_message_id, last_message_is_unsent, unread_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        chatBindings(chat)
+    );
+}
+
+export async function insertChats(chats: ChatEntry[]): Promise<void> {
+    const normalized = normalizeChatEntries(chats);
+    if (normalized.length === 0) return;
+    const d = getDb();
+    await d.withTransactionAsync(async () => {
+        for (const chat of normalized) {
+            await upsertChatRow(d, chat);
+        }
+    });
+}
+
+export async function replaceChats(chats: ChatEntry[]): Promise<void> {
+    const normalized = normalizeChatEntries(chats);
+    const d = getDb();
+    await d.withTransactionAsync(async () => {
+        await d.runAsync(`DELETE FROM chats`);
+        for (const chat of normalized) {
+            await upsertChatRow(d, chat);
+        }
+    });
+}
+
+export async function getChats(): Promise<LocalChatEntry[]> {
+    const d = getDb();
+    const rows = await d.getAllAsync<Record<string, any>>(
+        `SELECT * FROM chats ORDER BY COALESCE(last_message_created_at, created_at) DESC`,
+        []
+    );
+    return (rows || []).map(sqliteChatRowToLocal);
 }
 
 export async function getMessagesByChat(chatId: string, limit: number = 50, offset: number = 0): Promise<LocalMessageEntry[]> {
@@ -310,7 +402,7 @@ export async function getStorageStats(): Promise<{ totalMessages: number; pendin
     const d = getDb();
     const total = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM messages WHERE deleted_for_me = 0`, []);
     const pending = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM messages WHERE status IN ('pending', 'sending')`, []);
-    const chats = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(DISTINCT chat_id) as count FROM messages WHERE deleted_for_me = 0`, []);
+    const chats = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM chats`, []);
     return {
         totalMessages: total?.count || 0,
         pendingMessages: pending?.count || 0,
@@ -422,6 +514,22 @@ function sqliteRowToLocal(row: Record<string, any>): LocalMessageEntry {
         last_retry_at: row.last_retry_at || null,
         error_message: row.error_message || null,
     } as LocalMessageEntry;
+}
+
+/** Convert SQLite INTEGER row to LocalChatEntry booleans */
+function sqliteChatRowToLocal(row: Record<string, any>): LocalChatEntry {
+    return {
+        ...row,
+        avatar_url: row.avatar_url || null,
+        last_message_content: row.last_message_content || null,
+        last_message_created_at: row.last_message_created_at || null,
+        last_message_type: row.last_message_type || null,
+        last_message_is_from_me: row.last_message_is_from_me === 1,
+        last_message_sender_id: row.last_message_sender_id || null,
+        last_message_id: row.last_message_id || null,
+        last_message_is_unsent: row.last_message_is_unsent === 1,
+        unread_count: Number(row.unread_count) || 0,
+    } as LocalChatEntry;
 }
 
 /**

@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect } from 'react';
-import { batch } from '@legendapp/state';
 import { FlatList, Pressable } from 'react-native';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
@@ -50,16 +49,12 @@ const PersonalHome = React.memo(() => {
     $chatListState.setLoading(true);
     try {
       const response = await ChatTransport.getUserChats();
-      batch(() => {
-        $chatListState.setChats(response?.chats ?? []);
-        $chatListState.markFetched();
-        $chatListState.setLoading(false);
-      });
+      await $chatListState.setChats(response?.chats ?? []);
+      $chatListState.markFetched();
     } catch (err: any) {
-      batch(() => {
-        $chatListState.setError(getChatErrorMessage(err, 'Could not load conversations.'));
-        $chatListState.setLoading(false);
-      });
+      $chatListState.setError(getChatErrorMessage(err, 'Could not load conversations.'));
+    } finally {
+      $chatListState.setLoading(false);
     }
   }, []);
 
@@ -156,10 +151,10 @@ export default PersonalHome;
 
 // -------- Sub-components to isolate logic --------
 
-const HomeLogic = React.memo(({ fetchChats }: { fetchChats: () => void }) => {
+const HomeLogic = React.memo(({ fetchChats }: { fetchChats: () => Promise<void> }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchChats();
+      void fetchChats();
     }, 1000);
     return () => clearTimeout(timer);
   }, [fetchChats]);

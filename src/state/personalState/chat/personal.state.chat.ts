@@ -8,6 +8,7 @@ import { $personalStateUser } from '../user/personal.state.user';
 import { authState } from '../../auth/state.auth';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
+import { normalizeChatEntries, normalizeChatEntry } from '@/lib/storage/personalStorage/chat/chat.storage.normalize';
 
 /**
  * Auto-ACK incoming messages (Recipient ACK) AND outgoing syncs (Sender ACK).
@@ -97,18 +98,40 @@ interface ChatListState {
     loading: boolean;
     error: string | null;
     lastFetchedAt: number | null;
+    hydratingFromStorage: boolean;
+    hydratedFromStorage: boolean;
     chatsById: Record<string, ChatEntry>;
     chatIds: string[];
     totalUnreadCount: number;
     hasChats: boolean;
     setLoading: (value: boolean) => void;
     setError: (value: string | null) => void;
-    setChats: (entries: ChatEntry[]) => void;
+    setChats: (entries: ChatEntry[]) => Promise<void>;
+    loadChatsFromStorage: () => Promise<void>;
     upsertChat: (entry: ChatEntry) => void;
+    persistChat: (chatId: string) => void;
+    clearPreviewIfLastMessage: (chatId: string, messageIds: string[]) => void;
     updateUnreadCount: (chatId: string, count: number) => void;
     markChatRead: (chatId: string) => void;
     markFetched: () => void;
     reset: () => void;
+}
+
+function sortChatsByActivity(a: ChatEntry, b: ChatEntry): number {
+    const aTime = a.last_message_created_at ?? a.created_at;
+    const bTime = b.last_message_created_at ?? b.created_at;
+    if (!aTime || !bTime) return 0;
+    return new Date(bTime).getTime() - new Date(aTime).getTime();
+}
+
+function toChatMap(entries: ChatEntry[]): Record<string, ChatEntry> {
+    const byId: Record<string, ChatEntry> = {};
+    for (const entry of entries) {
+        if (entry?.chat_id) {
+            byId[entry.chat_id] = entry;
+        }
+    }
+    return byId;
 }
 
 const state$ = observable({
@@ -116,18 +139,15 @@ const state$ = observable({
     loading: false,
     error: null as string | null,
     lastFetchedAt: null as number | null,
+    hydratingFromStorage: false,
+    hydratedFromStorage: false,
 
     // Computeds (Functions in 3.0 observables are lazy computeds)
     chats() {
         const byId = state$.chatsById.get();
         return Object.values(byId)
             .filter(c => c && c.chat_id)
-            .sort((a, b) => {
-                const aTime = a.last_message_created_at ?? a.created_at;
-                const bTime = b.last_message_created_at ?? b.created_at;
-                if (!aTime || !bTime) return 0;
-                return new Date(bTime).getTime() - new Date(aTime).getTime();
-            });
+            .sort(sortChatsByActivity);
     },
     chatIds() {
         return state$.chats.get().map((c: ChatEntry) => c.chat_id);
@@ -147,38 +167,104 @@ const state$ = observable({
     setError(value: string | null) {
         state$.error.set(value);
     },
-    setChats(entries: ChatEntry[]) {
+    async setChats(entries: ChatEntry[]) {
+        const normalized = normalizeChatEntries(entries);
+        try {
+            await ChatStorage.replaceChats(normalized);
+        } catch (err) {
+            console.warn('[ChatListState] replaceChats failed; continuing with in-memory set', err);
+        }
+
         batch(() => {
-            if (!Array.isArray(entries)) {
-                state$.chatsById.set({});
+            state$.chatsById.set(toChatMap(normalized));
+            state$.error.set(null);
+            state$.hydratingFromStorage.set(false);
+            state$.hydratedFromStorage.set(true);
+        });
+
+        // Proactively fetch all pending messages and ACK them
+        chatActions.syncPendingMessages().catch(err =>
+            console.warn('[ChatListState] syncPendingMessages after setChats failed', err)
+        );
+    },
+    async loadChatsFromStorage() {
+        if (state$.hydratedFromStorage.peek() || state$.hydratingFromStorage.peek()) return;
+        if (Object.keys(state$.chatsById.peek()).length > 0) {
+            state$.hydratedFromStorage.set(true);
+            return;
+        }
+
+        state$.hydratingFromStorage.set(true);
+        try {
+            if (state$.hydratedFromStorage.peek() || Object.keys(state$.chatsById.peek()).length > 0) {
                 return;
             }
-            const byId: Record<string, ChatEntry> = {};
-            for (const entry of entries) {
-                if (entry?.chat_id) {
-                    byId[entry.chat_id] = entry;
-                }
-            }
-            state$.chatsById.set(byId);
-            state$.error.set(null);
 
-            // Proactively fetch all pending messages and ACK them
-            chatActions.syncPendingMessages();
-        });
+            const storedChats = await ChatStorage.getChats();
+
+            // Race guard: skip local apply if network already populated in-memory state.
+            if (state$.hydratedFromStorage.peek() || Object.keys(state$.chatsById.peek()).length > 0) {
+                return;
+            }
+
+            const normalized = normalizeChatEntries(storedChats);
+            if (normalized.length > 0) {
+                state$.chatsById.set(toChatMap(normalized));
+                state$.error.set(null);
+            }
+        } catch (err) {
+            console.warn('[ChatListState] loadChatsFromStorage failed', err);
+        } finally {
+            state$.hydratingFromStorage.set(false);
+            state$.hydratedFromStorage.set(true);
+        }
     },
     upsertChat(entry: ChatEntry) {
-        state$.chatsById[entry.chat_id].set(entry);
-        // We do NOT need to trigger full sync here. 
-        // upsertChat is used for local optimistic updates (sending/receiving).
-        // Background sync interval (or setChats) will handle missing messages.
+        const normalized = normalizeChatEntry(entry);
+        if (!normalized) return;
+        state$.chatsById[normalized.chat_id].set(normalized);
+
+        ChatStorage.insertChats([normalized]).catch(err =>
+            console.warn('[ChatListState] insertChats failed in upsertChat', err)
+        );
+    },
+    persistChat(chatId: string) {
+        const current = state$.chatsById[chatId]?.peek();
+        if (!current) return;
+        const normalized = normalizeChatEntry(current);
+        if (!normalized) return;
+        ChatStorage.insertChats([normalized]).catch(err =>
+            console.warn(`[ChatListState] persistChat failed for ${chatId}`, err)
+        );
+    },
+    clearPreviewIfLastMessage(chatId: string, messageIds: string[]) {
+        if (!chatId || !Array.isArray(messageIds) || messageIds.length === 0) return;
+        const chat$ = state$.chatsById[chatId];
+        const chat = chat$?.peek();
+        if (!chat?.last_message_id || !messageIds.includes(chat.last_message_id)) return;
+
+        chat$.assign({
+            last_message_content: null,
+            last_message_type: null,
+            last_message_id: null,
+            last_message_created_at: null,
+            last_message_status: 'sent',
+            last_message_is_from_me: false,
+            last_message_is_unsent: false,
+            last_message_sender_id: null,
+            updated_at: new Date().toISOString(),
+        } as Partial<ChatEntry>);
+
+        state$.persistChat(chatId);
     },
     updateUnreadCount(chatId: string, count: number) {
         batch(() => {
             const chat$ = state$.chatsById[chatId];
             if (chat$.peek()) {
-                chat$.unread_count.set(count);
+                chat$.unread_count.set(Math.max(0, count));
             }
         });
+        state$.persistChat(chatId);
     },
     markChatRead(chatId: string) {
         state$.updateUnreadCount(chatId, 0);
@@ -192,6 +278,8 @@ const state$ = observable({
             state$.loading.set(false);
             state$.error.set(null);
             state$.lastFetchedAt.set(null);
+            state$.hydratingFromStorage.set(false);
+            state$.hydratedFromStorage.set(false);
         });
     },
 });
@@ -209,9 +297,9 @@ interface ChatMessagesState {
     setLoading: (chatId: string, value: boolean) => void;
     setError: (chatId: string, value: string | null) => void;
     setSending: (chatId: string, value: boolean) => void;
-    setMessages: (chatId: string, entries: MessageEntry[]) => void;
-    prependMessages: (chatId: string, entries: MessageEntry[]) => void;
-    addMessage: (chatId: string, entry: MessageEntry) => void;
+    setMessages: (chatId: string, entries: MessageEntry[]) => Promise<void>;
+    prependMessages: (chatId: string, entries: MessageEntry[]) => Promise<void>;
+    addMessage: (chatId: string, entry: MessageEntry) => Promise<void>;
     updateMessageStatus: (chatId: string, messageId: string, updates: Partial<MessageEntry>) => void;
     markMessagesDelivered: (chatId: string, messageIds: string[]) => void;
     markMessagesDeliveredUpTo: (chatId: string, deliveredAt: string) => void;
@@ -450,6 +538,7 @@ const chatActions = {
     },
 
     markMessagesDelivered(chatId: string, messageIds: string[]) {
+        let shouldPersistChat = false;
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const idSet = new Set(messageIds);
@@ -473,13 +562,18 @@ const chatActions = {
             const chatEntry = chatEntry$?.peek();
             if (chatEntry && chatEntry.last_message_id && idSet.has(chatEntry.last_message_id)) {
                 chatEntry$.last_message_status.set('delivered');
+                shouldPersistChat = true;
             }
         });
+        if (shouldPersistChat) {
+            $chatListState.persistChat(chatId);
+        }
     },
 
     markMessagesDeliveredUpTo(chatId: string, deliveredAt: string) {
         if (!deliveredAt) return;
         console.log(`[ChatState] markMessagesDeliveredUpTo: ENTER chat=${chatId} deliveredAt=${deliveredAt}`);
+        let shouldPersistChat = false;
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const targetTime = new Date(deliveredAt.replace(' ', 'T')).getTime();
@@ -512,6 +606,7 @@ const chatActions = {
                 const chatEntry = chatEntry$.peek();
                 console.log(`[ChatState] markMessagesDeliveredUpTo: Updating ChatEntry in list. Setting other_user_last_delivered_at=${deliveredAt}`);
                 chatEntry$.other_user_last_delivered_at.set(deliveredAt);
+                shouldPersistChat = true;
 
                 // Update preview status if last message is now delivered
                 if (chatEntry.last_message_is_from_me && chatEntry.last_message_created_at) {
@@ -526,11 +621,15 @@ const chatActions = {
                 console.log(`[ChatState] markMessagesDeliveredUpTo: ChatEntry NOT FOUND in list for ${chatId}`);
             }
         });
+        if (shouldPersistChat) {
+            $chatListState.persistChat(chatId);
+        }
     },
 
     markMessagesReadUpTo(chatId: string, readAt: string) {
         if (!readAt) return;
         console.log(`[ChatState] markMessagesReadUpTo: ENTER chat=${chatId} readAt=${readAt}`);
+        let shouldPersistChat = false;
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const targetTime = new Date(readAt.replace(' ', 'T')).getTime();
@@ -567,6 +666,7 @@ const chatActions = {
                 console.log(`[ChatState] markMessagesReadUpTo: Updating ChatEntry in list. Preview was="${chatEntry.last_message_status}"`);
                 // Update the persisted read timestamp
                 chatEntry$.other_user_last_read_at.set(readAt);
+                shouldPersistChat = true;
 
                 // If the last message is from me and was sent before the read time, mark preview as 'read'
                 if (chatEntry.last_message_is_from_me && chatEntry.last_message_created_at) {
@@ -580,6 +680,9 @@ const chatActions = {
                 console.log(`[ChatState] markMessagesReadUpTo: ChatEntry NOT FOUND in list for ${chatId}`);
             }
         });
+        if (shouldPersistChat) {
+            $chatListState.persistChat(chatId);
+        }
     },
 
     removeMessage(chatId: string, messageId: string) {
@@ -832,14 +935,20 @@ const chatActions = {
 
                         const isNewer = !currentEntry.last_message_created_at || (new Date(lastMsg.created_at).getTime() > new Date(currentEntry.last_message_created_at).getTime());
                         if (isNewer) {
+                            const currentUserId = authState.userId.peek();
                             $chatListState.upsertChat({
                                 ...currentEntry,
                                 last_message_content: getPreviewText(lastMsg),
                                 last_message_created_at: lastMsg.created_at,
                                 last_message_type: lastMsg.message_type,
                                 last_message_is_from_me: lastMsg.is_from_me,
+                                last_message_status: lastMsg.status ?? 'sent',
+                                last_message_sender_id: lastMsg.is_from_me
+                                    ? (currentUserId || null)
+                                    : currentEntry.other_user_id,
                                 last_message_id: lastMsg.message_id,
                                 last_message_is_unsent: lastMsg.message_type === 'unsent',
+                                updated_at: lastMsg.created_at,
                             });
                         }
                     }

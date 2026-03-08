@@ -12,15 +12,27 @@
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import type { WSEvent } from '@/lib/personalLib/chatApi/ws.client';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
+import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { $chatMessagesState, $chatListState, ackIncomingMessages } from '@/state/personalState/chat/personal.state.chat';
 import { insertMessage, messageExists, updateMessageStatus, deleteMessage as storageDeleteMessage, recordFailedInsert, cleanupMessageMedia } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
 import { authState } from '@/state/auth/state.auth';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
+import { $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
 
 // Production-safe debug logger — compiled out in release builds
 const dbg = __DEV__ ? console.log.bind(console) : () => { };
+
+async function refreshChatsAuthoritatively(): Promise<void> {
+    try {
+        const response = await ChatTransport.getUserChats();
+        await $chatListState.setChats(response?.chats ?? []);
+        $chatListState.markFetched();
+    } catch (err) {
+        console.warn('[WS Bridge] Failed authoritative chat-list refresh', err);
+    }
+}
 
 // ─── Event Handlers ─────────────────────────────────────────────────────────
 
@@ -119,6 +131,7 @@ async function handleNewMessage(payload: any): Promise<void> {
     const shouldIncrementUnread = !msg.is_from_me && !isChatActive;
 
     if (currentEntry) {
+        const currentUserId = authState.userId.peek();
         const updatedEntry: ChatEntry = {
             ...currentEntry,
             last_message_content: previewContent,
@@ -127,30 +140,55 @@ async function handleNewMessage(payload: any): Promise<void> {
             last_message_is_from_me: msg.is_from_me,
             last_message_id: msg.message_id,
             last_message_status: msg.status ?? 'sent',
+            last_message_sender_id: msg.is_from_me
+                ? (currentUserId || null)
+                : currentEntry.other_user_id,
             last_message_is_unsent: msg.message_type === 'unsent',
             unread_count: shouldIncrementUnread
                 ? (currentEntry.unread_count || 0) + 1
                 : (isChatActive ? 0 : currentEntry.unread_count),
+            updated_at: msg.created_at,
         };
-        dbg(`[WS Bridge] new_message: UPSERTING chat list — unread_count=${updatedEntry.unread_count}`);
+        dbg(`[WS Bridge] new_message: UPSERTING chat list - unread_count=${updatedEntry.unread_count}`);
         $chatListState.upsertChat(updatedEntry);
     } else {
         // Construct a new ChatEntry for previously unknown chats (instantly shows up on Home screen)
-        const otherUserId = msg.is_from_me ? msg.recipient_id : (msg as any).sender_id || msg.recipient_id; // Fallback for sender_id
+        const currentUserId = authState.userId.peek();
+        let otherUserId: string | null = null;
+        if (msg.is_from_me) {
+            otherUserId = msg.recipient_id || null;
+        } else {
+            const senderId = (msg as any).sender_id ? String((msg as any).sender_id) : null;
+            if (senderId && (!currentUserId || senderId !== currentUserId)) {
+                otherUserId = senderId;
+            } else if (currentUserId && msg.recipient_id && msg.recipient_id !== currentUserId) {
+                otherUserId = msg.recipient_id;
+            }
+        }
+
+        if (!otherUserId) {
+            console.warn('[WS Bridge] new_message: Unable to resolve other_user_id for unknown chat. Triggering authoritative refresh.');
+            await refreshChatsAuthoritatively();
+            return;
+        }
+
+        const contact =
+            $contactsState.contactsById[otherUserId]?.peek() ||
+            $contactsState.addedYouById[otherUserId]?.peek();
 
         const newEntry: ChatEntry = {
             chat_id: msg.chat_id,
             other_user_id: otherUserId,
-            other_user_name: '', // Will be updated by contacts or subsequent sync
-            other_user_username: '',
-            avatar_url: '',
+            other_user_name: contact?.nickname ?? contact?.name ?? '',
+            other_user_username: contact?.username ?? '',
+            avatar_url: contact?.avatarUrl ?? null,
             last_message_content: previewContent,
             last_message_created_at: msg.created_at,
             last_message_type: msg.message_type,
             last_message_is_from_me: msg.is_from_me,
             last_message_id: msg.message_id,
             last_message_status: msg.status ?? 'sent',
-            last_message_sender_id: msg.is_from_me ? 'me' : otherUserId, // Placeholder or real ID
+            last_message_sender_id: msg.is_from_me ? (currentUserId || null) : otherUserId,
             last_message_is_unsent: msg.message_type === 'unsent',
             unread_count: shouldIncrementUnread ? 1 : 0,
             created_at: msg.created_at,
@@ -158,10 +196,9 @@ async function handleNewMessage(payload: any): Promise<void> {
             other_user_last_read_at: '',
             other_user_last_delivered_at: '',
         };
-        dbg(`[WS Bridge] new_message: CREATING NEW chat list entry — unread_count=${newEntry.unread_count}`);
+        dbg(`[WS Bridge] new_message: CREATING NEW chat list entry - unread_count=${newEntry.unread_count}`);
         $chatListState.upsertChat(newEntry);
     }
-
     dbg(`[WS Bridge] new_message: DONE — msgID=${msg.message_id} chatID=${msg.chat_id} is_from_me=${msg.is_from_me} content="${msg.content?.substring(0, 50)}"`);
 }
 
@@ -291,15 +328,7 @@ function handleDeleteForMe(payload: any): void {
         dbg(`[WS Bridge] delete_for_me: REMOVING ${message_ids.length} messages from chat ${targetChatId}`);
         $chatMessagesState.removeMessages(targetChatId, message_ids);
 
-        // Clear the chat list preview if the deleted message was the last preview message
-        const chatEntry = $chatListState.chatsById[targetChatId]?.peek();
-        if (chatEntry && message_ids.includes(chatEntry.last_message_id)) {
-            dbg(`[WS Bridge] delete_for_me: Cleared preview for chat ${targetChatId} (was last_message_id=${chatEntry.last_message_id})`);
-            $chatListState.chatsById[targetChatId].assign({
-                last_message_content: null,
-                last_message_type: null,
-            });
-        }
+        $chatListState.clearPreviewIfLastMessage(targetChatId, message_ids);
     } else {
         dbg(`[WS Bridge] delete_for_me: NO chat_id and NO active chat — storage soft-deleted, will be removed from state on next load`);
     }

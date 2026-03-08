@@ -11,6 +11,7 @@ import { ThemedViewWithSidebar } from '@/components/ui/common/ThemedViewWithSide
 import { useUnistyles } from 'react-native-unistyles';
 import { useEffect } from 'react';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
+import { $chatListState } from '@/state/personalState/chat/personal.state.chat';
 import { startWSEventBridge, stopWSEventBridge } from '@/state/personalState/chat/ws.event.bridge';
 import { PersonalUtilRefreshDeviceStatus } from '@/utils/personalUtils/personal.util.device';
 
@@ -20,18 +21,32 @@ export default function PersonalTabLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    setTimeout(() => {
-      $syncEngine.catchUp();
-    }, 3000);
     PersonalUtilRefreshDeviceStatus();
 
-    // Start WebSocket real-time event bridge
-    const wsTimer = setTimeout(() => {
-      startWSEventBridge();
-    }, 2000);
+    let isUnmounted = false;
+    let syncTimer: ReturnType<typeof setTimeout> | null = null;
+    let wsTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const start = async () => {
+      await $chatListState.loadChatsFromStorage();
+      if (isUnmounted) return;
+
+      syncTimer = setTimeout(() => {
+        $syncEngine.catchUp();
+      }, 3000);
+
+      // Start WebSocket real-time event bridge
+      wsTimer = setTimeout(() => {
+        startWSEventBridge();
+      }, 2000);
+    };
+
+    void start();
 
     return () => {
-      clearTimeout(wsTimer);
+      isUnmounted = true;
+      if (syncTimer) clearTimeout(syncTimer);
+      if (wsTimer) clearTimeout(wsTimer);
       stopWSEventBridge();
     };
   }, []);
