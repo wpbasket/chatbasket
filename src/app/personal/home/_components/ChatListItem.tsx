@@ -133,7 +133,7 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                                 }
                             }
 
-                            if (status === 'pending') {
+                            if (status === 'pending' || status === 'sending') {
                                 return <IconSymbol name="clock" size={14} color="#999" style={styles.statusIcon} />;
                             }
 
@@ -147,6 +147,10 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
 
                             if (status === 'sent') {
                                 return <MaterialCommunityIcon name="checkmark" size={15} color="#999" style={styles.statusIcon} />;
+                            }
+
+                            if (status === 'error') {
+                                return <IconSymbol name="alert" size={15} color={theme.colors.errorText} style={styles.statusIcon} />;
                             }
 
                             return null;

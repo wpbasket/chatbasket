@@ -204,7 +204,8 @@ const MessageBubble = memo(
         );
 
         const renderProgressBar = () => {
-            if (isVideo || status !== 'pending' || progress >= 100 || progress <= 0) return null;
+            const isPendingLike = status === 'pending' || status === 'sending';
+            if (isVideo || !isPendingLike || progress >= 100 || progress <= 0) return null;
             return (
                 <View style={[styles.progressContainer, { marginLeft: 20, marginRight: 30 }]}>
                     <View style={[styles.progressBar, { width: `${progress}%` }]} />
@@ -216,7 +217,7 @@ const MessageBubble = memo(
             if (messageType === 'unsent') return isMe ? <View style={styles.statusPlaceholder} /> : null;
             if (!isMe) return null;
 
-            if (status === 'pending') return (
+            if (status === 'pending' || status === 'sending') return (
                 <View style={styles.statusContainer}>
                     <IconSymbol name="clock" size={15} color="#999" />
                 </View>
@@ -239,6 +240,12 @@ const MessageBubble = memo(
             if (status === 'sent') return (
                 <View style={styles.statusContainer}>
                     <MaterialCommunityIcon name="checkmark" size={16} color="#999" />
+                </View>
+            );
+
+            if (status === 'error') return (
+                <View style={styles.statusContainer}>
+                    <IconSymbol name="alert" size={16} color={theme.colors.errorText} />
                 </View>
             );
 
@@ -303,7 +310,7 @@ const MessageBubble = memo(
                                         {formatFileName(fileName || (isVideo ? 'Video' : 'Audio'))}
                                     </ThemedText>
                                     <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
-                                        {status === 'pending' ? 'Preparing...' : 'Resolving...'}
+                                        {(status === 'pending' || status === 'sending') ? 'Preparing...' : 'Resolving...'}
                                     </ThemedText>
                                 </View>
                             </View>
@@ -361,7 +368,7 @@ const MessageBubble = memo(
                                     {formatFileName(fileName || 'Attachment')}
                                 </ThemedText>
                                 <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
-                                    {(!isResolved && status !== 'pending') ? 'Resolving link...' : formatSize(fileSize)}
+                                    {(!isResolved && status !== 'pending' && status !== 'sending') ? 'Resolving link...' : formatSize(fileSize)}
                                 </ThemedText>
                             </View>
                         </View>

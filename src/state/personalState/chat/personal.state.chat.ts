@@ -296,7 +296,6 @@ export { useValue };
 interface ChatMessagesState {
     setLoading: (chatId: string, value: boolean) => void;
     setError: (chatId: string, value: string | null) => void;
-    setSending: (chatId: string, value: boolean) => void;
     setMessages: (chatId: string, entries: MessageEntry[]) => Promise<void>;
     prependMessages: (chatId: string, entries: MessageEntry[]) => Promise<void>;
     addMessage: (chatId: string, entry: MessageEntry) => Promise<void>;
@@ -327,7 +326,6 @@ interface ChatData {
     messageIds: string[];
     loading: boolean;
     error: string | null;
-    sending: boolean;
     hasMore: boolean;
     offset: number;
     inputText: string;
@@ -344,7 +342,6 @@ const createDefaultChatData = (): ChatData => ({
     messageIds: [],
     loading: false,
     error: null,
-    sending: false,
     hasMore: true,
     offset: 0,
     inputText: '',
@@ -374,9 +371,6 @@ const chatActions = {
     },
     setError(chatId: string, value: string | null) {
         ensureChatInternal(chatId).error.set(value);
-    },
-    setSending(chatId: string, value: boolean) {
-        ensureChatInternal(chatId).sending.set(value);
     },
 
     async setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
@@ -539,6 +533,7 @@ const chatActions = {
 
     markMessagesDelivered(chatId: string, messageIds: string[]) {
         let shouldPersistChat = false;
+        const changedMessageIds: string[] = [];
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const idSet = new Set(messageIds);
@@ -547,6 +542,7 @@ const chatActions = {
                 const msg$ = chat.messagesById[id];
                 if (msg$.peek() && !msg$.delivered_to_recipient.peek()) {
                     msg$.delivered_to_recipient.set(true);
+                    changedMessageIds.push(id);
 
                     // Also update in the messages array
                     const currentMessages = chat.messages.peek();
@@ -565,6 +561,13 @@ const chatActions = {
                 shouldPersistChat = true;
             }
         });
+        if (changedMessageIds.length > 0) {
+            Promise.all(changedMessageIds.map(id =>
+                ChatStorage.updateMessageStatus(id, { delivered_to_recipient: true } as any)
+            )).catch(err =>
+                console.warn(`[ChatState] markMessagesDelivered: Storage persist failed for ${chatId}`, err)
+            );
+        }
         if (shouldPersistChat) {
             $chatListState.persistChat(chatId);
         }
@@ -574,6 +577,7 @@ const chatActions = {
         if (!deliveredAt) return;
         console.log(`[ChatState] markMessagesDeliveredUpTo: ENTER chat=${chatId} deliveredAt=${deliveredAt}`);
         let shouldPersistChat = false;
+        const changedMessageIds: string[] = [];
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const targetTime = new Date(deliveredAt.replace(' ', 'T')).getTime();
@@ -595,6 +599,7 @@ const chatActions = {
                 if (m.is_from_me && mTime <= adjustedTargetTime && !m.delivered_to_recipient) {
                     chat.messagesById[m.message_id].delivered_to_recipient.set(true);
                     chat.messages[index].delivered_to_recipient.set(true);
+                    changedMessageIds.push(m.message_id);
                     count++;
                 }
             });
@@ -621,6 +626,13 @@ const chatActions = {
                 console.log(`[ChatState] markMessagesDeliveredUpTo: ChatEntry NOT FOUND in list for ${chatId}`);
             }
         });
+        if (changedMessageIds.length > 0) {
+            Promise.all(changedMessageIds.map(id =>
+                ChatStorage.updateMessageStatus(id, { delivered_to_recipient: true } as any)
+            )).catch(err =>
+                console.warn(`[ChatState] markMessagesDeliveredUpTo: Storage persist failed for ${chatId}`, err)
+            );
+        }
         if (shouldPersistChat) {
             $chatListState.persistChat(chatId);
         }
@@ -630,6 +642,7 @@ const chatActions = {
         if (!readAt) return;
         console.log(`[ChatState] markMessagesReadUpTo: ENTER chat=${chatId} readAt=${readAt}`);
         let shouldPersistChat = false;
+        const changedMessageIds: string[] = [];
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const targetTime = new Date(readAt.replace(' ', 'T')).getTime();
@@ -654,6 +667,7 @@ const chatActions = {
                     // Implicitly delivered if read
                     chat.messagesById[m.message_id].delivered_to_recipient.set(true);
                     chat.messages[index].delivered_to_recipient.set(true);
+                    changedMessageIds.push(m.message_id);
                     count++;
                 }
             });
@@ -680,6 +694,16 @@ const chatActions = {
                 console.log(`[ChatState] markMessagesReadUpTo: ChatEntry NOT FOUND in list for ${chatId}`);
             }
         });
+        if (changedMessageIds.length > 0) {
+            Promise.all(changedMessageIds.map(id =>
+                ChatStorage.updateMessageStatus(id, {
+                    status: 'read',
+                    delivered_to_recipient: true,
+                } as any)
+            )).catch(err =>
+                console.warn(`[ChatState] markMessagesReadUpTo: Storage persist failed for ${chatId}`, err)
+            );
+        }
         if (shouldPersistChat) {
             $chatListState.persistChat(chatId);
         }

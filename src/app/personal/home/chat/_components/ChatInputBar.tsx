@@ -1,38 +1,33 @@
 import React, { useState } from 'react';
-import { TextInput, Pressable, NativeSyntheticEvent, TextInputContentSizeChangeEventData } from 'react-native';
-import { ThemedText, ThemedView } from '@/components/ui/basic';
+import { TextInput, Pressable } from 'react-native';
+import { ThemedView } from '@/components/ui/basic';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { $chatMessagesState, useValue } from '@/state/personalState/chat/personal.state.chat';
 
-import type { ObservablePrimitive } from '@legendapp/state';
-
 type ChatInputBarProps = {
     chatId: string;
     onSend: () => void;
     onAttach?: (event: import('react-native').GestureResponderEvent) => void;
-    sendingObs?: ObservablePrimitive<boolean>;
 };
 
 export default function ChatInputBar({
     chatId,
     onSend,
     onAttach,
-    sendingObs,
 }: ChatInputBarProps) {
     const { theme } = useUnistyles();
     const { handlePressIn } = pressableAnimation();
     const [inputHeight, setInputHeight] = useState(48);
 
     const text = useValue(() => $chatMessagesState.chats[chatId]?.inputText.get() || '');
-    const sending = useValue(() => sendingObs?.get() || false);
 
     const onChangeText = (val: string) => {
         $chatMessagesState.updateInputText(chatId, val);
     };
 
-    const canSend = text.trim().length > 0 && !sending;
+    const canSend = text.trim().length > 0;
 
     const handleSend = () => {
         onSend();
@@ -83,8 +78,8 @@ export default function ChatInputBar({
                 onPressIn={handlePressIn}
                 disabled={!canSend}
                 accessibilityRole="button"
-                accessibilityLabel={sending ? "Sending message" : "Send message"}
-                accessibilityState={{ disabled: !canSend, busy: sending }}
+                accessibilityLabel="Send message"
+                accessibilityState={{ disabled: !canSend }}
                 style={({ pressed }) => [
                     styles.sendBtn,
                     !canSend && styles.sendBtnDisabled,

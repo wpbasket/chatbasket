@@ -18,6 +18,7 @@ import { $contactsState } from '@/state/personalState/contacts/personal.state.co
 import { authState } from '@/state/auth/state.auth';
 import { $uiState } from '@/state/ui/state.ui';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
+import { outboxQueue } from '@/lib/personalLib/chatApi/outbox.queue';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { showAlert, showControllersModal, showConfirmDialog, hideModal } from '@/utils/commonUtils/util.modal';
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
@@ -26,8 +27,6 @@ import { batch } from '@legendapp/state';
 import { useValue, Memo } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
-import { copyFileToPrivateDir } from '@/lib/personalLib/fileSystem/file.copy';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
@@ -229,6 +228,42 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
             }
         ];
 
+        if (message.is_from_me && status === 'error' && message.message_type !== 'unsent') {
+            controllers.unshift({
+                id: 'retry',
+                label: 'Retry Send',
+                onPress: async () => {
+                    try {
+                        await ChatStorage.updateMessageStatus(messageId, {
+                            status: 'pending',
+                            retry_count: 0,
+                            last_retry_at: null,
+                            error_message: null,
+                        } as any);
+
+                        $chatMessagesState.updateMessageStatus(chatId, messageId, {
+                            status: 'pending',
+                            progress: 0,
+                        });
+
+                        const chatEntry = $chatListState.chatsById[chatId]?.peek();
+                        if (chatEntry?.last_message_id === messageId) {
+                            $chatListState.upsertChat({
+                                ...chatEntry,
+                                last_message_status: 'pending',
+                                updated_at: new Date().toISOString(),
+                            } as ChatEntry);
+                        }
+
+                        void outboxQueue.processQueue();
+                    } catch (err) {
+                        console.error('[UI] Retry enqueue failed', err);
+                        showAlert(getChatErrorMessage(err, 'Could not retry message.'));
+                    }
+                }
+            });
+        }
+
         if (message.is_from_me && status !== 'read' && message.message_type !== 'unsent') {
             controllers.unshift({
                 id: 'unsend',
@@ -340,6 +375,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 status={status}
                 delivered={delivered}
                 createdAt={message.created_at}
+                progress={message.progress}
                 onLongPress={handleLongPress}
                 onContextMenu={handleLongPress}
                 onPress={handlePress}
@@ -563,36 +599,6 @@ const ChatContentContainer = React.memo(({
         }
     };
 
-    const rollbackChatPreviewForFailedTemp = useCallback((tempMessageId: string) => {
-        const chatEntry = $chatListState.chatsById[chat_id]?.peek();
-        if (!chatEntry || chatEntry.last_message_id !== tempMessageId) return;
-
-        const latestMessageId = $chatMessagesState.chats[chat_id]?.messageIds.peek()?.[0];
-        const latestMsg = latestMessageId
-            ? $chatMessagesState.chats[chat_id]?.messagesById[latestMessageId]?.peek()
-            : null;
-
-        if (!latestMsg) {
-            $chatListState.clearPreviewIfLastMessage(chat_id, [tempMessageId]);
-            return;
-        }
-
-        $chatListState.upsertChat({
-            ...chatEntry,
-            last_message_content: getPreviewText(latestMsg),
-            last_message_created_at: latestMsg.created_at,
-            last_message_status: latestMsg.status ?? 'sent',
-            last_message_is_from_me: latestMsg.is_from_me,
-            last_message_type: latestMsg.message_type,
-            last_message_id: latestMsg.message_id,
-            last_message_sender_id: latestMsg.is_from_me
-                ? (authState.userId.peek() || null)
-                : chatEntry.other_user_id,
-            last_message_is_unsent: latestMsg.message_type === 'unsent',
-            updated_at: new Date().toISOString(),
-        } as ChatEntry);
-    }, [chat_id]);
-
     const sendMessage = useCallback(async () => {
         const currentChat = $chatMessagesState.chats[chat_id];
         const chatData = currentChat.peek();
@@ -642,92 +648,21 @@ const ChatContentContainer = React.memo(({
         const recipId = chatData.recipientId;
         if (!trimmed || !recipId || !chat_id) return;
 
-        const tempId = `temp-${Date.now()}`;
-        const now = new Date().toISOString();
-        const optimisticMsg: MessageEntry = {
-            message_id: tempId,
-            chat_id: chat_id as string,
-            is_from_me: true,
-            recipient_id: recipId,
-            content: trimmed,
-            message_type: 'text',
-            created_at: now,
-            expires_at: now,
-            status: 'pending',
-            delivered_to_recipient: false,
-            synced_to_sender_primary: true,
-        };
-
-        const existingChat = $chatListState.chatsById[chat_id]?.peek();
-        const optimisticChat: ChatEntry = {
-            ...existingChat,
-            chat_id,
-            other_user_id: recipId,
-            other_user_name: recipient_name || existingChat?.other_user_name || 'User',
-            other_user_username: existingChat?.other_user_username || '',
-            avatar_url: existingChat?.avatar_url ?? null,
-            last_message_content: trimmed,
-            last_message_created_at: now,
-            last_message_type: 'text',
-            last_message_status: 'pending',
-            last_message_is_from_me: true,
-            last_message_id: tempId,
-            last_message_sender_id: authState.userId.peek() || null,
-            last_message_is_unsent: false, // Clear stale unsend flag
-            unread_count: existingChat?.unread_count || 0,
-            created_at: existingChat?.created_at || now,
-            other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(),
-            other_user_last_delivered_at: existingChat?.other_user_last_delivered_at || '',
-            updated_at: now,
-        } as ChatEntry;
-
-        $chatMessagesState.chats[chat_id].inputText.set('');
-        await $chatMessagesState.addMessage(chat_id, optimisticMsg);
-        $chatListState.upsertChat(optimisticChat);
-
         try {
-            const response = await ChatTransport.sendMessage({
-                recipient_id: recipId,
+            await outboxQueue.enqueueTextMessage({
+                chatId: chat_id as string,
+                recipientId: recipId,
+                recipientName: recipient_name,
                 content: trimmed,
-                message_type: 'text',
             });
-
-            // Phase D: Swap temp row → real row so no orphan temp lingers in storage
-            await ChatStorage.swapTempIdToRealId(tempId, response.message_id);
-
-            $chatMessagesState.removeMessage(chat_id, tempId);
-            const sentMessage: MessageEntry = { ...response, status: 'sent' };
-            await $chatMessagesState.addMessage(chat_id, sentMessage);
-
-            $chatListState.upsertChat({
-                ...optimisticChat,
-                last_message_content: getPreviewText(sentMessage),
-                last_message_created_at: response.created_at,
-                last_message_status: 'sent',
-                last_message_is_from_me: response.is_from_me,
-                last_message_type: response.message_type,
-                last_message_id: response.message_id,
-                last_message_sender_id: response.is_from_me
-                    ? (authState.userId.peek() || null)
-                    : recipId,
-                last_message_is_unsent: false,
-                created_at: optimisticChat?.created_at || response.created_at,
-                updated_at: response.created_at,
-            } as ChatEntry);
-
         } catch (err: unknown) {
-            // Phase D: Clean up temp message from storage to prevent zombie on next load
-            await ChatStorage.deleteMessage(tempId).catch(() => { });
-
-            $chatMessagesState.removeMessage(chat_id, tempId);
-            rollbackChatPreviewForFailedTemp(tempId);
-
+            console.error('[UI] Queue text enqueue failed', err);
             batch(() => {
                 $chatMessagesState.chats[chat_id].inputText.set(trimmed);
                 $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Message could not be sent.', { name: recipient_name }));
             });
         }
-    }, [chat_id, recipient_name, displayName, theme, rollbackChatPreviewForFailedTemp]);
+    }, [chat_id, recipient_name, displayName, theme]);
 
     const sendFile = useCallback(async (asset: any, type: 'image' | 'video' | 'audio' | 'file') => {
         const currentChat = $chatMessagesState.chats[chat_id];
@@ -743,113 +678,21 @@ const ChatContentContainer = React.memo(({
             return;
         }
 
-        const tempId = `temp-${Date.now()}`;
-        const now = new Date().toISOString();
-
-        const optimisticMsg: MessageEntry = {
-            message_id: tempId,
-            chat_id,
-            is_from_me: true,
-            recipient_id: recipId,
-            content: '',
-            message_type: type,
-            file_mime_type: fileMimeType,
-            created_at: now,
-            expires_at: now,
-            status: 'pending',
-            delivered_to_recipient: false,
-            synced_to_sender_primary: true,
-            // @ts-ignore - file_url set to local copy below after copyFileToPrivateDir
-            file_url: asset.uri,
-            file_name: fileName,
-            file_size: fileSize,
-            progress: 0,
-        };
-
-        // Phase 4a: Persist the file locally before upload.
-        // On native: copies to chatFiles/. On web: stores blob in encrypted IDB.
-        // This ensures the outbox queue can retry if upload fails after restart.
         try {
-            const copyResult = await copyFileToPrivateDir(
-                asset.uri,
-                tempId,
-                fileName,
-                fileMimeType ?? undefined,
-            );
-            optimisticMsg.local_uri = copyResult.localUri;
-            // Use local copy path for immediate display (picker URI may not persist)
-            optimisticMsg.file_url = copyResult.localUri;
-            console.log('[sendFile] File persisted locally ->', copyResult.localUri);
-        } catch (err) {
-            console.warn('[sendFile] Local file persist failed, proceeding with upload:', err);
-        }
-
-        await $chatMessagesState.addMessage(chat_id, optimisticMsg);
-
-        try {
-            const formData = await buildFormDataFromAsset(asset, { fieldName: 'file' });
-            formData.append('recipient_id', recipId);
-            formData.append('message_type', type);
-            formData.append('caption', '');
-
-            const response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
-                $chatMessagesState.updateMessageStatus(chat_id, tempId, { progress });
+            await outboxQueue.enqueueFileMessage({
+                chatId: chat_id as string,
+                recipientId: recipId,
+                recipientName: recipient_name,
+                asset,
+                messageType: type,
             });
-
-            // Phase D: Swap temp row -> real row so no orphan temp lingers in storage
-            await ChatStorage.swapTempIdToRealId(tempId, response.message_id);
-
-            $chatMessagesState.removeMessage(chat_id, tempId);
-            const finalMsg: MessageEntry = {
-                ...response as any,
-                // Phase D: prefer local_uri for display; server URLs are ephemeral
-                view_url: response.view_url || optimisticMsg.local_uri || asset.uri,
-                local_uri: optimisticMsg.local_uri,
-                download_url: response.download_url,
-                file_mime_type: response.file_mime_type || fileMimeType,
-                chat_id,
-                recipient_id: recipId,
-                is_from_me: true,
-                message_type: type,
-                content: '',
-                status: 'sent',
-                delivered_to_recipient: false,
-                synced_to_sender_primary: true,
-                progress: 100,
-            };
-            await $chatMessagesState.addMessage(chat_id, finalMsg);
-
-            const existingChat = $chatListState.chatsById[chat_id]?.peek();
-            $chatListState.upsertChat({
-                ...existingChat,
-                chat_id,
-                other_user_id: existingChat?.other_user_id || recipId,
-                other_user_name: existingChat?.other_user_name || recipient_name || 'User',
-                other_user_username: existingChat?.other_user_username || '',
-                avatar_url: existingChat?.avatar_url ?? null,
-                created_at: existingChat?.created_at || response.created_at,
-                other_user_last_read_at: existingChat?.other_user_last_read_at || '',
-                other_user_last_delivered_at: existingChat?.other_user_last_delivered_at || '',
-                unread_count: existingChat?.unread_count || 0,
-                last_message_content: getPreviewText(finalMsg),
-                last_message_created_at: response.created_at,
-                last_message_status: 'sent',
-                last_message_is_from_me: true,
-                last_message_type: type,
-                last_message_id: response.message_id,
-                last_message_sender_id: authState.userId.peek() || null,
-                last_message_is_unsent: false,
-                updated_at: response.created_at,
-            } as ChatEntry);
         } catch (err: unknown) {
-            // Phase D: Clean up temp message from storage to prevent zombie on next load
-            await ChatStorage.deleteMessage(tempId).catch(() => { });
-
-            $chatMessagesState.removeMessage(chat_id, tempId);
-            rollbackChatPreviewForFailedTemp(tempId);
+            console.error('[UI] Queue file enqueue failed', err);
             $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'File could not be sent.', { name: recipient_name }));
+            return;
         }
-    }, [chat_id, recipient_name, rollbackChatPreviewForFailedTemp]);
+
+    }, [chat_id, recipient_name]);
     const handleAttach = useCallback((event: any) => {
         const currentChat = $chatMessagesState.chats[chat_id];
         const chatData = currentChat.peek();
@@ -1046,7 +889,7 @@ const ChatContentContainer = React.memo(({
                 <ThemedView
                     style={[
                         styles.content,
-                        { transform: [{ translateY: -$uiState.keyboardHeight.get() -4 }] }
+                        { transform: [{ translateY: -$uiState.keyboardHeight.get() - 4 }] }
                     ]}
                 >
                     <Memo>
@@ -1109,7 +952,6 @@ const ChatContentContainer = React.memo(({
                                     chatId={chat_id}
                                     onSend={sendMessage}
                                     onAttach={handleAttach}
-                                    sendingObs={$chatMessagesState.chats[chat_id]?.sending}
                                 />
                             );
                         }}
