@@ -38,8 +38,8 @@ async function createChat(payload: CreateChatPayload): Promise<ChatEntry> {
 }
 
 /** POST /personal/chat/send → returns the created MessageEntry */
-async function sendMessage(payload: SendMessagePayload): Promise<MessageEntry> {
-    return apiClient.post<MessageEntry>('/personal/chat/send', payload);
+async function sendMessage(payload: SendMessagePayload, signal?: AbortSignal): Promise<MessageEntry> {
+    return apiClient.post<MessageEntry>('/personal/chat/send', payload, { signal });
 }
 
 /**
@@ -83,13 +83,14 @@ async function uploadFile(formData: FormData): Promise<UploadFileResponse> {
     return apiClient.post<UploadFileResponse>('/personal/chat/upload', formData);
 }
 
-/** 
+/**
  * POST /personal/chat/upload with progress tracking using XMLHttpRequest.
  * fetch() does not support upload progress tracking.
  */
 function uploadFileWithProgress(
     formData: FormData,
-    onProgress: (progress: number) => void
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
 ): Promise<UploadFileResponse> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -112,6 +113,15 @@ function uploadFileWithProgress(
         // Web credentials mode
         if (isWeb) {
             xhr.withCredentials = true;
+        }
+
+        // Handle abort signal
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                console.log('[API] Upload aborted by signal');
+                xhr.abort();
+                reject(new Error('Upload aborted'));
+            });
         }
 
         xhr.upload.onprogress = (event) => {

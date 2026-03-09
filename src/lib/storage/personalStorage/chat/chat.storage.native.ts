@@ -77,6 +77,7 @@ export async function initChatStorage(): Promise<void> {
             retry_count INTEGER NOT NULL DEFAULT 0,
             last_retry_at TEXT,
             error_message TEXT,
+            error_is_blocking INTEGER,
             inserted_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT
         );
@@ -115,9 +116,9 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             status, is_from_me, delivered_to_recipient, delivered_to_recipient_primary,
             synced_to_sender_primary, created_at, expires_at, file_id, file_name,
             file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
-            acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message,
+            acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
             inserted_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             message.message_id,
             message.chat_id,
@@ -142,10 +143,11 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             message.acked_by_server ? 1 : 0,
             message.deleted_for_me ? 1 : 0,
             0,    // retry_count — default 0
-            null, // last_retry_at
-            null, // error_message
-            new Date().toISOString(), // inserted_at
-            new Date().toISOString(), // updated_at
+            null, // last_retry_at — default null
+            null, // error_message — default null
+            null, // error_is_blocking — default null
+            new Date().toISOString(),
+            new Date().toISOString()
         ]
     );
 }
@@ -250,6 +252,7 @@ export async function updateMessageStatus(messageId: string, updates: Partial<Lo
     if (updates.retry_count !== undefined) { fields.push('retry_count = ?'); values.push(updates.retry_count); }
     if (updates.last_retry_at !== undefined) { fields.push('last_retry_at = ?'); values.push(updates.last_retry_at); }
     if (updates.error_message !== undefined) { fields.push('error_message = ?'); values.push(updates.error_message); }
+    if (updates.error_is_blocking !== undefined) { fields.push('error_is_blocking = ?'); values.push(updates.error_is_blocking ? 1 : 0); }
     if (updates.message_type !== undefined) { fields.push('message_type = ?'); values.push(updates.message_type); }
     if (updates.content !== undefined) { fields.push('content = ?'); values.push(updates.content); }
     if (updates.deleted_for_me !== undefined) { fields.push('deleted_for_me = ?'); values.push(updates.deleted_for_me ? 1 : 0); }
@@ -264,8 +267,11 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
     // Delete any existing row with the target realId to prevent PK collision
     await d.runAsync(`DELETE FROM messages WHERE message_id = ?`, [realId]);
     // Match by temp_id first; fall back to message_id for rows where temp_id is NULL
+    // Also clear error fields on successful send
     await d.runAsync(
-        `UPDATE messages SET message_id = ?, temp_id = NULL, status = 'sent', updated_at = datetime('now') WHERE temp_id = ? OR message_id = ?`,
+        `UPDATE messages SET message_id = ?, temp_id = NULL, status = 'sent', 
+            error_message = NULL, error_is_blocking = NULL, updated_at = datetime('now') 
+         WHERE temp_id = ? OR message_id = ?`,
         [realId, tempId, tempId]
     );
     if (updates) await updateMessageStatus(realId, updates);
@@ -513,6 +519,7 @@ function sqliteRowToLocal(row: Record<string, any>): LocalMessageEntry {
         retry_count: row.retry_count || 0,
         last_retry_at: row.last_retry_at || null,
         error_message: row.error_message || null,
+        error_is_blocking: row.error_is_blocking != null ? row.error_is_blocking === 1 : null,
     } as LocalMessageEntry;
 }
 

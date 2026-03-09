@@ -203,8 +203,12 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                     $chatMessagesState.toggleSelectMode(chatId, true);
                     $chatMessagesState.toggleMessageSelection(chatId, messageId);
                 }
-            },
-            {
+            }
+        ];
+
+        // Only show "Delete for Me" for messages that exist on the server (not temp IDs)
+        if (!messageId.startsWith('temp_') && message.status !== 'pending' && message.status !== 'error') {
+            controllers.push({
                 id: 'delete',
                 label: 'Delete for Me',
                 onPress: async () => {
@@ -225,8 +229,8 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                         showAlert(getChatErrorMessage(err, 'Could not delete message.'));
                     }
                 }
-            }
-        ];
+            });
+        }
 
         if (message.is_from_me && status === 'error' && message.message_type !== 'unsent') {
             controllers.unshift({
@@ -264,7 +268,11 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
             });
         }
 
-        if (message.is_from_me && status !== 'read' && message.message_type !== 'unsent') {
+        // Only show "Unsend" for messages that exist on the server (not temp IDs)
+        // and have been sent/delivered/read (not pending/error)
+        if (message.is_from_me && !messageId.startsWith('temp_') && 
+            message.status !== 'pending' && message.status !== 'error' && 
+            status !== 'read' && message.message_type !== 'unsent') {
             controllers.unshift({
                 id: 'unsend',
                 label: 'Unsend',
@@ -820,29 +828,43 @@ const ChatContentContainer = React.memo(({
         const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
         if (selectedIds.length === 0) return;
 
+        // Filter out messages with temp IDs (pending/error status) - they only exist locally
+        const messagesById = $chatMessagesState.chats[chat_id].messagesById.peek() || {};
+        const validIds = selectedIds.filter(id => {
+            const msg = messagesById[id];
+            // Skip messages with temp IDs (start with 'temp_') or pending/error status
+            return msg && !id.startsWith('temp_') && msg.status !== 'pending' && msg.status !== 'error';
+        });
+
+        if (validIds.length === 0) {
+            $chatMessagesState.toggleSelectMode(chat_id, false);
+            $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
+            return;
+        }
+
         const confirmed = await showConfirmDialog(
-            `Are you sure you want to unsend ${selectedIds.length} messages?`,
+            `Are you sure you want to unsend ${validIds.length} messages?`,
             { confirmText: 'Unsend All', cancelText: 'Cancel', confirmVariant: 'destructive' }
         );
 
         if (confirmed) {
             try {
-                const response = await ChatTransport.unsendMessage({ chat_id, message_ids: selectedIds });
+                const response = await ChatTransport.unsendMessage({ chat_id, message_ids: validIds });
                 if (!response?.status) {
                     throw new Error(response?.message || 'Bulk unsend failed');
                 }
 
                 $chatMessagesState.toggleSelectMode(chat_id, false);
                 $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
-                $chatMessagesState.unsendMessages(chat_id, selectedIds);
+                $chatMessagesState.unsendMessages(chat_id, validIds);
 
                 // Phase D: Persist unsend to storage immediately (don't wait for WS event)
-                Promise.all(selectedIds.map(id =>
+                Promise.all(validIds.map(id =>
                     ChatStorage.updateMessageStatus(id, { message_type: 'unsent', content: 'Message unsent' } as any)
                 )).catch(err => console.warn('[UI] Bulk unsend storage update failed', err));
 
                 // Phase D: Clean up file data (media blob / local file)
-                ChatStorage.cleanupMessageMedia(selectedIds)
+                ChatStorage.cleanupMessageMedia(validIds)
                     .catch(err => console.warn('[UI] Bulk unsend media cleanup failed', err));
             } catch (err) {
                 console.error('[UI] Bulk Unsend failed', err);
@@ -855,19 +877,33 @@ const ChatContentContainer = React.memo(({
         const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
         if (selectedIds.length === 0) return;
 
+        // Filter out messages with temp IDs (pending/error status) - they only exist locally
+        const messagesById = $chatMessagesState.chats[chat_id].messagesById.peek() || {};
+        const validIds = selectedIds.filter(id => {
+            const msg = messagesById[id];
+            // Skip messages with temp IDs (start with 'temp_') or pending/error status
+            return msg && !id.startsWith('temp_') && msg.status !== 'pending' && msg.status !== 'error';
+        });
+
+        if (validIds.length === 0) {
+            $chatMessagesState.toggleSelectMode(chat_id, false);
+            $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
+            return;
+        }
+
         try {
-            const response = await ChatTransport.deleteMessageForMe({ message_ids: selectedIds });
+            const response = await ChatTransport.deleteMessageForMe({ message_ids: validIds });
             if (!response?.status) {
                 throw new Error(response?.message || 'Bulk delete failed');
             }
 
-            $chatMessagesState.removeMessages(chat_id, selectedIds);
-            $chatListState.clearPreviewIfLastMessage(chat_id, selectedIds);
+            $chatMessagesState.removeMessages(chat_id, validIds);
+            $chatListState.clearPreviewIfLastMessage(chat_id, validIds);
             $chatMessagesState.toggleSelectMode(chat_id, false);
             $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
 
             // Phase D: Mark as soft-deleted in local storage so they won't reappear on next load
-            Promise.all(selectedIds.map(id => ChatStorage.deleteMessage(id)))
+            Promise.all(validIds.map(id => ChatStorage.deleteMessage(id)))
                 .catch(err => console.warn('[UI] Storage bulk soft-delete failed', err));
         } catch (err) {
             console.error('[UI] Bulk Delete failed', err);

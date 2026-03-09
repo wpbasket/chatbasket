@@ -195,6 +195,7 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
         retry_count: 0,
         last_retry_at: null,
         error_message: null,
+        error_is_blocking: null,
         inserted_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     };
@@ -378,6 +379,8 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
     entry.message_id = realId;
     entry.temp_id = null;
     entry.status = 'sent';
+    entry.error_message = null;      // Clear error on successful send
+    entry.error_is_blocking = null;  // Clear error flag on successful send
     entry.updated_at = new Date().toISOString();
     if (updates) Object.assign(entry, updates);
     const encrypted = await encryptEntry(entry);

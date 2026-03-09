@@ -38,12 +38,13 @@ import type {
 
 /**
  * Attempt WS first. Falls back to REST only on transport errors (timeout, connection drop).
+ * WS requests now support AbortSignal for logout cancellation.
  * Server errors (4xx/5xx) are re-thrown immediately — REST would fail the same way.
  */
-async function request<T>(type: string, payload: any, restAction: () => Promise<T>): Promise<T> {
+async function request<T>(type: string, payload: any, restAction: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     if (wsClient.isConnected) {
         try {
-            return await wsClient.send<T>(type, payload);
+            return await wsClient.send<T>(type, payload, signal);
         } catch (err) {
             // "[WS Client]" prefix = transport error → safe to retry via REST
             const isTransportError = err instanceof Error && err.message.startsWith('[WS Client]');
@@ -59,8 +60,8 @@ async function request<T>(type: string, payload: any, restAction: () => Promise<
 
 // ─── WS-first Actions ────────────────────────────────────────────────────────
 
-async function sendMessage(payload: SendMessagePayload): Promise<MessageEntry> {
-    return request('send_message', payload, () => PersonalChatApi.sendMessage(payload));
+async function sendMessage(payload: SendMessagePayload, signal?: AbortSignal): Promise<MessageEntry> {
+    return request('send_message', payload, () => PersonalChatApi.sendMessage(payload, signal), signal);
 }
 
 async function acknowledgeDelivery(payload: AckDeliveryPayload): Promise<AckDeliveryResponse> {

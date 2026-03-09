@@ -139,11 +139,12 @@ class WSClientManager {
 
     /**
      * Send a request to the server and wait for a correlated response.
-     * 
+     *
      * @param type The action name (e.g., 'send_message')
      * @param payload The data to send
+     * @param signal Optional AbortSignal to cancel the request
      */
-    async send<T>(type: string, payload: any): Promise<T> {
+    async send<T>(type: string, payload: any, signal?: AbortSignal): Promise<T> {
         if (!this.isConnected) {
             throw new Error(`[WS Client] Cannot send "${type}": WebSocket is not connected`);
         }
@@ -154,9 +155,28 @@ class WSClientManager {
         console.log(`[WS Client] 📤 SENDING request: type=${type} ref=${ref}`);
 
         return new Promise<T>((resolve, reject) => {
+            // Handle abort signal
+            const abortHandler = () => {
+                if (this.pendingRequests.has(ref)) {
+                    this.pendingRequests.delete(ref);
+                    clearTimeout(timeout);
+                    console.log(`[WS Client] Request "${type}" aborted (ref=${ref})`);
+                    reject(new Error(`[WS Client] Request "${type}" aborted`));
+                }
+            };
+
+            if (signal) {
+                if (signal.aborted) {
+                    reject(new Error(`[WS Client] Request "${type}" already aborted`));
+                    return;
+                }
+                signal.addEventListener('abort', abortHandler);
+            }
+
             const timeout = setTimeout(() => {
                 if (this.pendingRequests.has(ref)) {
                     this.pendingRequests.delete(ref);
+                    signal?.removeEventListener('abort', abortHandler);
                     reject(new Error(`[WS Client] Request "${type}" timed out after ${WS_REQUEST_TIMEOUT}ms (ref=${ref})`));
                 }
             }, WS_REQUEST_TIMEOUT);
@@ -168,6 +188,7 @@ class WSClientManager {
             } catch (err) {
                 clearTimeout(timeout);
                 this.pendingRequests.delete(ref);
+                signal?.removeEventListener('abort', abortHandler);
                 reject(err);
             }
         });

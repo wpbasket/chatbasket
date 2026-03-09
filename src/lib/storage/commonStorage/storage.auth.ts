@@ -107,13 +107,13 @@ export const clearSession = async () => {
   const storage = getStorage();
 
   // Phase D: Stop outbox queue + connection watcher FIRST — before clearing auth tokens.
-  // In-flight outbox messages need valid auth tokens to complete; clearing storage first
-  // would cause them to fail with auth errors and potentially corrupt retry state.
+  // Abort in-flight requests immediately to prevent leaked writes after logout.
   try {
     const { connectionWatcher } = await import('@/lib/personalLib/chatApi/connection.watcher');
     const { outboxQueue } = await import('@/lib/personalLib/chatApi/outbox.queue');
-    outboxQueue.pause();
-    connectionWatcher.stop();
+    outboxQueue.abortInFlightRequests(); // Abort active HTTP requests immediately
+    outboxQueue.pause(); // Stop the queue loop
+    connectionWatcher.stop(); // Stop WS connection
   } catch (error) {
     console.log('Failed to stop outbox/connection watcher:', error);
   }

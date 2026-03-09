@@ -37,6 +37,7 @@ export interface LocalMessageEntry {
     retry_count: number;           // Number of send attempts (0 = first attempt)
     last_retry_at: string | null;  // ISO timestamp of last retry attempt
     error_message: string | null;  // Last error message (cleared on successful send)
+    error_is_blocking: boolean | null;  // True if error should block queue (network/server), false if non-blocking (client/business)
 }
 
 /**

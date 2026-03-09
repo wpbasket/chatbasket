@@ -18,6 +18,70 @@ const TAG = '[OutboxQueue]';
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2_000;
 
+/**
+ * Error classification for queue ordering decisions.
+ * - BLOCKING: Network/server errors - keep message at head, block queue
+ * - NON_BLOCKING: Client/business errors - skip message, allow later messages to send
+ */
+type ErrorClassification = 'BLOCKING' | 'NON_BLOCKING' | 'ABORT';
+
+/**
+ * Classifies an error to determine queue behavior.
+ * This is critical for preserving message order while not blocking on permanent failures.
+ */
+export function classifyError(err: unknown): ErrorClassification {
+    // Abort errors - user initiated cancellation (logout/pause)
+    if (err instanceof Error && err.name === 'AbortError') {
+        return 'ABORT';
+    }
+
+    // Network errors - connection failures, timeouts, DNS issues
+    // These should BLOCK the queue to preserve message order
+    if (err instanceof TypeError) {
+        // Network error, fetch failed, CORS error
+        return 'BLOCKING';
+    }
+
+    // ApiError from our apiClient
+    if (err instanceof Error && 'code' in err && 'type' in err) {
+        const apiErr = err as any;
+        const code = apiErr.code;
+        const type = apiErr.type as string;
+
+        // Client errors (4xx) - NON_BLOCKING, skip this message
+        if (code >= 400 && code < 500) {
+            // Auth errors might be temporary (token refresh needed)
+            if (type === 'unauthorized' || type === 'session_invalid') {
+                return 'BLOCKING';
+            }
+            // Business logic errors - permanent failures, skip message
+            return 'NON_BLOCKING';
+        }
+
+        // Server errors (5xx) - BLOCKING, retry later
+        if (code >= 500) {
+            return 'BLOCKING';
+        }
+    }
+
+    // Generic Error with network-related messages
+    if (err instanceof Error) {
+        const msg = err.message.toLowerCase();
+        if (msg.includes('network') || 
+            msg.includes('timeout') || 
+            msg.includes('connection') ||
+            msg.includes('network error')) {
+            return 'BLOCKING';
+        }
+        if (msg.includes('abort')) {
+            return 'ABORT';
+        }
+    }
+
+    // Default: treat as BLOCKING to preserve order (safer)
+    return 'BLOCKING';
+}
+
 type OutboxFileMessageType = 'image' | 'video' | 'audio' | 'file';
 
 type QueueableAsset = {
@@ -52,17 +116,33 @@ class OutboxQueue {
     private _drainRequested = false;
     private _retryTimer: ReturnType<typeof setTimeout> | null = null;
     private _retryDeadline: number | null = null;
+    private _abortController: AbortController | null = null;
+    private _currentAbortController: AbortController | null = null;
 
     pause(): void {
         this._paused = true;
         this.clearRetryTimer();
+        this.abortInFlightRequests();
         console.log(`${TAG} Paused`);
     }
 
     resume(): void {
         this._paused = false;
+        this._abortController = new AbortController();
         console.log(`${TAG} Resumed`);
         void this.processQueue();
+    }
+
+    /**
+     * Abort all in-flight HTTP requests immediately.
+     * Called on logout/pause to prevent leaked writes after user disconnects.
+     */
+    abortInFlightRequests(): void {
+        if (this._currentAbortController) {
+            console.log(`${TAG} Aborting in-flight request`);
+            this._currentAbortController.abort();
+            this._currentAbortController = null;
+        }
     }
 
     get isPaused(): boolean { return this._paused; }
@@ -178,16 +258,31 @@ class OutboxQueue {
 
                 console.log(`${TAG} Found ${pending.length} pending message(s)`);
                 let nextRetryMs: number | null = null;
+                
                 for (const msg of pending) {
                     if (this._paused) {
                         console.log(`${TAG} Paused mid-queue.`);
                         break;
                     }
 
+                    // Skip messages that have terminal error status (non-blocking errors already failed permanently)
+                    if (msg.status === 'error') {
+                        console.log(`${TAG} Skipping ${msg.message_id} (status=error, non-blocking failure)`);
+                        continue;
+                    }
+
                     if (this.isInBackoff(msg)) {
                         const remainingMs = this.getBackoffRemainingMs(msg);
                         nextRetryMs = nextRetryMs == null ? remainingMs : Math.min(nextRetryMs, remainingMs);
-                        console.log(`${TAG} Skipping ${msg.message_id} (backoff active: ${remainingMs}ms remaining)`);
+                        
+                        // Check if this is a BLOCKING error - should block queue
+                        // Non-blocking errors skip without blocking
+                        if (msg.error_is_blocking === false) {
+                            console.log(`${TAG} Skipping ${msg.message_id} (non-blocking error in backoff: ${remainingMs}ms)`);
+                            continue;
+                        }
+                        
+                        console.log(`${TAG} Blocking: ${msg.message_id} in backoff (${remainingMs}ms) - queue blocked`);
                         continue;
                     }
 
@@ -215,27 +310,33 @@ class OutboxQueue {
         const id = msg.message_id;
         console.log(`${TAG} Processing ${id} (type=${msg.message_type}, retry=${msg.retry_count})`);
 
+        // Create new AbortController for this request
+        this._currentAbortController = new AbortController();
+
         await updateMessageStatus(id, { status: 'sending' });
         this.syncInMemoryMessageStatus(msg.chat_id, id, { status: 'sending' });
         this.syncPreviewStatus(msg.chat_id, [id], 'pending');
 
         try {
             if (msg.message_type === 'text') {
-                await this.sendText(msg);
+                await this.sendText(msg, this._currentAbortController.signal);
             } else {
-                await this.sendFile(msg);
+                await this.sendFile(msg, this._currentAbortController.signal);
             }
         } catch (err) {
+            // handleFailure now handles ABORT classification internally
             await this.handleFailure(msg, err);
+        } finally {
+            this._currentAbortController = null;
         }
     }
 
-    private async sendText(msg: LocalMessageEntry): Promise<void> {
+    private async sendText(msg: LocalMessageEntry, signal?: AbortSignal): Promise<void> {
         const response = await ChatTransport.sendMessage({
             recipient_id: msg.recipient_id,
             content: msg.content || '',
             message_type: 'text',
-        });
+        }, signal);
 
         if (!response?.message_id) {
             throw new Error(`Server returned no message_id for ${msg.message_id}`);
@@ -268,14 +369,14 @@ class OutboxQueue {
         console.log(`${TAG} Text sent: ${msg.message_id} -> ${response.message_id}`);
     }
 
-    private async sendFile(msg: LocalMessageEntry): Promise<void> {
+    private async sendFile(msg: LocalMessageEntry, signal?: AbortSignal): Promise<void> {
         const formData = await this.buildFormDataForRetry(msg);
         const response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
             this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
                 status: 'sending',
                 progress,
             });
-        });
+        }, signal);
 
         if (!response?.message_id) {
             throw new Error(`Server returned no message_id for file ${msg.message_id}`);
@@ -374,16 +475,37 @@ class OutboxQueue {
         return formData;
     }
 
+    /**
+     * Handles message send failures with error-classification-based retry logic.
+     * 
+     * Error Classification Impact:
+     * - BLOCKING: Message stays at head of queue, blocks later messages (network/server errors)
+     * - NON_BLOCKING: Message marked as error, skipped in future iterations (client/business errors)
+     * - ABORT: No retry, no state change (user-initiated cancellation)
+     */
     private async handleFailure(msg: LocalMessageEntry, err: unknown): Promise<void> {
+        const classification = classifyError(err);
+        
+        // ABORT: User initiated cancellation (logout/pause) - don't retry, don't update state
+        if (classification === 'ABORT') {
+            console.log(`${TAG} Aborted request for ${msg.message_id} - no retry`);
+            return;
+        }
+
         const retryCount = (msg.retry_count || 0) + 1;
         const errorMessage = err instanceof Error ? err.message : String(err);
-        const terminal = retryCount >= MAX_RETRIES;
+        
+        // NON_BLOCKING errors (4xx client errors, business logic errors):
+        // Mark as terminal immediately - don't waste retries on permanent failures
+        const isNonBlocking = classification === 'NON_BLOCKING';
+        const terminal = isNonBlocking || retryCount >= MAX_RETRIES;
 
         await updateMessageStatus(msg.message_id, {
             status: terminal ? 'error' : 'pending',
             retry_count: retryCount,
-            last_retry_at: new Date().toISOString(),
+            last_retry_at: isNonBlocking ? null : new Date().toISOString(),
             error_message: errorMessage,
+            error_is_blocking: !isNonBlocking, // true for BLOCKING, false for NON_BLOCKING
         });
 
         this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
@@ -397,14 +519,27 @@ class OutboxQueue {
                 msg.message_type === 'text'
                     ? 'Message could not be sent.'
                     : 'File could not be sent.';
-            $chatMessagesState.setError(msg.chat_id, getChatErrorMessage(err, fallback));
-            console.error(`${TAG} Failed permanently (${retryCount}/${MAX_RETRIES}): ${msg.message_id} - ${errorMessage}`);
+            
+            // For non-blocking errors, show specific error message
+            const userMessage = isNonBlocking 
+                ? getChatErrorMessage(err, fallback)
+                : getChatErrorMessage(err, fallback);
+            
+            $chatMessagesState.setError(msg.chat_id, userMessage);
+            
+            if (isNonBlocking) {
+                console.warn(`${TAG} Non-blocking error (${classification}) for ${msg.message_id} - marking as error, will skip: ${errorMessage}`);
+            } else {
+                console.error(`${TAG} Failed permanently (${retryCount}/${MAX_RETRIES}): ${msg.message_id} - ${errorMessage}`);
+            }
             return;
         }
 
+        // BLOCKING errors (network/server): Apply exponential backoff
+        // Message stays at head of queue, blocking later messages
         const backoffMs = BASE_BACKOFF_MS * Math.pow(2, retryCount - 1);
         this.scheduleRetry(backoffMs);
-        console.warn(`${TAG} Attempt ${retryCount}/${MAX_RETRIES} failed: ${msg.message_id} - next retry in ${backoffMs}ms`);
+        console.warn(`${TAG} Blocking error (attempt ${retryCount}/${MAX_RETRIES}) for ${msg.message_id} - retry in ${backoffMs}ms (blocks queue)`);
     }
 
     private isInBackoff(msg: LocalMessageEntry): boolean {
