@@ -4,14 +4,15 @@ Before changing frontend code, follow this checklist to keep routing, state, sto
 
 ## Pre-change review
 - **Locate scope**: Identify impacted areas (screens/routes, state stores, storage, API modules, UI system, modals, app mode/auth guards).
-- **Read docs**: Check `PROJECT_CONSISTENCY.md`, feature READMEs (root architecture, auth, storage, API, UI, modals) relevant to the change.
+- **Read docs**: Check `PROJECT_CONSISTENCY.md`, feature READMEs (root architecture, auth, storage, API, UI, modals, chat/keyboard sync) relevant to the change.
 - **Trace dependencies**: Map flow end-to-end (route → screen → hooks/state → API module → backend contract). Consider web vs native differences.
 
 ## Plan first
 - **Design contracts**: Define request/response shapes and state updates before coding; align with backend API and typed models.
 - **Auth/session rules**: Plan web (cookies, expiry-only storage) vs native (secure storage, bearer header) behaviors and guards.
-- **Storage choice**: Decide AppStorage backend (sync web for flicker-free prefs vs async/native MMKV) and secure vs standard usage.
-- **Modals/UI**: Use global modal utilities and themed components; avoid per-screen modal wiring or raw Text/View.
+- **Storage choice**: Decide AppStorage backend (sync web for flicker-free prefs vs async) and secure vs standard usage.
+- **Modals/UI**: Use global modal utilities and Themed components; avoid per-screen modal wiring or raw Text/View.
+- **Keyboard sync**: If a screen depends on IME translation, prefer `$uiState.keyboardHeight` fed by `KeyboardSync`.
 
 ## Execute carefully
 - **No ad-hoc fetch**: Use typed API modules; do not call fetch directly from components.
@@ -22,3 +23,4 @@ Before changing frontend code, follow this checklist to keep routing, state, sto
 - Test both web and native paths (auth flow, route guards, storage hydration, deep linking, modal flows).
 - Verify state resets/clears (logout, clearSession) still work and primary device metadata remains coherent.
 - Check theme/mode flicker on web if storage/backend changed; ensure sync storage used where needed.
+- Validate keyboard behavior for chat and other IME-sensitive screens.

@@ -1,15 +1,17 @@
 # SaveToDevice Module (Android Only)
 
-Native Android module for saving files from private app storage to public device storage using MediaStore API.
+Native Android module for saving files from private app storage to public device storage using the MediaStore API.
 
+> **Module Location:** `modules/save-to-device/`
 > **Platform Support:** Android only. iOS and Web throw `UnavailabilityError`.
 
 ## ⚠️ Usage Rule
 
 **This module is ONLY used when the user explicitly requests to save a file to the device's public storage (e.g., "Save to Gallery" or "Download").**
 
-- **Public Storage:** Use `SaveToDevice` (User-initiated). Automatically saves to `DCIM` or `Downloads`.
-- **Private Storage:** All other automated media downloads (e.g., message history, auto-downloads) must use `expo-file-system` to download inside the app's **private folders** (`Paths.cache` or `Paths.document`).
+- **Public Storage:** Use `SaveToDevice` (User-initiated). Automatically routes to `DCIM` or `Downloads`.
+- **Private Storage:** Automated media downloads (history, auto-downloads, chat sync) stay in private storage via `expo-file-system`.
+  - Chat media downloads are stored in `Paths.document/chatFiles`.
 
 ---
 
@@ -174,7 +176,7 @@ subscription.remove();
 
 ### Two-Step Process
 
-This module works in conjunction with `expo-file-system` (v17+) to implement a user-controlled save workflow:
+This module works in conjunction with `expo-file-system` (File + Paths API) to implement a user-controlled save workflow:
 
 1. **Step 1: Download to Private Storage** (Automatic, using `expo-file-system`)
 2. **Step 2: Save to Public Storage** (User-initiated, using `SaveToDevice`)
@@ -231,7 +233,7 @@ function ChatMessage() {
         return;
       }
 
-      // Step 1: Download to private storage (expo-file-system v17+)
+      // Step 1: Download to private storage (expo-file-system File + Paths API)
       setActiveDownload(messageId);
       
       const fileName = `image_${Date.now()}.jpg`;
@@ -312,7 +314,7 @@ function ChatMessage() {
 }
 ```
 
-### expo-file-system v17+ API Quick Reference
+### expo-file-system File + Paths API Quick Reference
 
 ```typescript
 import { Paths, File } from 'expo-file-system';

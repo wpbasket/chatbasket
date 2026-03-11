@@ -1,43 +1,50 @@
 # Root Layout & Navigation Architecture
 
-**Core Pattern**: "Smart Layout, dumb Screens"
+**Core Pattern**: Smart layout, thin screens.
 
-## `app/_layout.tsx` (The Brain)
-This file is the most critical engineering component in the Frontend. It orchestrates user flow, initialization, global guards, and **Keyboard Synchronization**.
+## `app/_layout.tsx` (The Orchestrator)
+The root layout coordinates initialization, routing guards, deep-link handling, notifications, and keyboard sync.
 
 ### Responsibilities
 
-1.  **Deep Link Handling (The "Race" Fix)**
-    *   **Cold Start (Native)**: `+native-intent.tsx` handles initial deep links using Expo Router's `redirectSystemPath()` pattern. It sets AppMode synchronously before navigation.
-    *   **Warm Start**: `_layout.tsx` listens to `Linking.addEventListener('url')` for deep links when app is backgrounded.
-    *   **Web**: Handled via `getInitialMode()` checking `window.location.pathname` in `state.appMode.ts`.
-    *   Logic: "If URL starts with 'public', set AppMode='public' *synchronously*.\"
+1. **Initialization & Hydration**
+   - `initializeAppStorage()` in `lib/storage/storage.init.ts` runs once at boot.
+   - Hydrates auth state and, if logged in, personal storage (contacts, user, device, chat).
+   - Root layout waits for hydration (`authLoaded`) to avoid guard flicker.
 
-2.  **App Mode Synchronization**
-    *   We use `useSegments()` to listen to navigation changes.
-    *   **Optimization**: Mode is only set if it differs from current value (prevents redundant state updates).
-    *   **Warm Start Handler**: Uses `useCallback` to memoize the deep link handler, recreating only when mode changes.
-    *   Rule: If the Router says we are in `/public`, we sync the State to `public`.
-    *   *Safety*: We do NOT redirect based on State manual toggles here to avoid infinite loops.
+2. **Splash + Font Loading**
+   - Native: `SplashScreen.preventAutoHideAsync()` until fonts + auth hydration complete.
+   - Font bundles are preloaded via `useFonts()` (including icon fonts).
 
-3.  **Authentication Hydration**
-    *   On mount, it pauses rendering (keeps Splash Screen visible).
-    *   Calls `restoreAuthState()` to decrypt tokens.
-    *   Decides: "Go into App" or "Go to Login".
+3. **Deep Link Handling**
+   - **Cold start (native)**: `+native-intent.tsx` sets `appMode` before navigation.
+   - **Warm start**: `_layout.tsx` listens to `Linking.addEventListener('url')`.
+   - **Web**: `getInitialMode()` in `state.appMode.ts` checks `window.location.pathname`.
+   - Mode updates only when different to avoid redundant state churn.
 
-4.  **Route Guards (Stack.Protected)**
-    *   We wrap the `(app)` folder in a `<Stack.Protected>` component.
-    *   It checks `authState.isLoggedIn`. If false, it redirects to `/login`.
-    *   It checks `appMode`. If user acts in 'personal' but mode is 'public', it blocks access.
+4. **Route Guarding**
+   - `Stack.Protected` guards the `(auth)` and `(app)` stacks.
+   - Guards depend on `authState.isLoggedIn` and `appMode`.
 
-## `app/index.tsx` (The Traffic Cop)
-*   This file is **NOT** a UI screen. It is a logic controller.
-*   **Logic**:
-    *   If `segments` exist (Deep Link active) -> Do Nothing (Let Router handle it).
-    *   If `segments` empty (Root access) -> Redirect to `/public/home` or `/personal/home` based on preference.
+5. **Notifications**
+   - `setupNotificationListeners()` is registered once on mount.
+   - `registerTokenWithBackend()` runs after hydration for logged-in native sessions.
+   - `checkInitialNotification()` handles cold-start notification routing.
+
+6. **Keyboard Synchronization**
+   - `KeyboardSync` writes IME inset values into `state.ui` for zero-render keyboard animations.
+
+7. **Network Tracking**
+   - `initializeGlobalNetworkTracking()` starts once and feeds state/tools tracking.
+
+## `app/index.tsx` (Root Router Gate)
+This file is not a UI screen. It only redirects when no deep-link segments exist.
+
+- If `segments.length > 0`: return `null` (do not hijack deep links).
+- If root (`/`): redirect to `/public/home` or `/personal/home` based on saved preference.
 
 ## Directory Structure
-*   `(auth)`: Publicly accessible Authentication screens (Login/Signup).
-*   `(app)`: Protected application logic.
-    *   `public`: Routes for Public Mode.
-    *   `personal`: Routes for Personal Mode.
+- `(auth)`: Login/signup flows.
+- `(app)`: Protected routes.
+  - `public`: Public mode screens.
+  - `personal`: Personal mode screens.

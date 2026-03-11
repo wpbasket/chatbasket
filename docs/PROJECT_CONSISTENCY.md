@@ -3,54 +3,62 @@
 This document captures the key patterns, conventions, and interdependencies used across the ChatBasket frontend. Use it to keep new code aligned with existing architecture.
 
 ## Architecture & Routing
-- **Expo Router groups**: `(auth)` for public flows, `(app)` for protected flows split into `public/` and `personal/` directories.
-- **Root brain**: `app/_layout.tsx` handles splash gating, deep links, mode sync, and route guards (`Stack.Protected`).
-- **Entry router**: `app/index.tsx` redirects to public/personal home when no deep link segments are present.
-- **Deep linking**: `+native-intent.tsx` (native cold start) + `state/appMode` for web path sniffing. Set `appMode` synchronously to avoid flicker/race.
+- **Expo Router groups**: `(auth)` for auth flows, `(app)` for protected flows split into `public/` and `personal/` directories.
+- **Root orchestrator**: `app/_layout.tsx` handles splash gating, hydration, deep links, notifications, and route guards (`Stack.Protected`).
+- **Entry router**: `app/index.tsx` redirects to public/personal home when no deep-link segments are present.
+- **Deep linking**:
+  - Native cold start: `+native-intent.tsx`
+  - Warm start: `Linking.addEventListener('url')` in `_layout.tsx`
+  - Web initial mode: `state/appMode.ts` checks `window.location.pathname`
 
 ## State Management (Legend-State)
-- **authState** mirrors session and user metadata; never store tokens in observables.
-- **Reset discipline**: use the provided clear/reset helpers (e.g., `clearSession`, `$contactsState.reset`) to avoid stale observables.
+- **authState** mirrors session + user metadata (no tokens in observables).
+- **Reset discipline**: use storage/state helpers (e.g., `clearSession`, contact/chat reset helpers).
 - **Guards**: route protection depends on `authState.isLoggedIn` and `appMode` matching the route segment.
 
 ## Authentication Flow
 - **OTP-based**: no refresh tokens; backend returns `sessionId`, `sessionExpiry`, `isPrimary`, `primaryDeviceName`.
-- **Storage**: web keeps `sessionExpiry` (token in HttpOnly cookie); native stores `sessionId`/`userId`/`sessionExpiry`/`user` in secure MMKV via `setMany`.
+- **Storage**:
+  - Web keeps `sessionExpiry` (token in HttpOnly cookie).
+  - Native stores `sessionId`/`userId`/`sessionExpiry`/`user` in secure MMKV via `setMany`.
 - **Navigation**: `(auth)/auth` → OTP send → `(auth)/auth-verify`; `isSentOtp` gates access to verify screen.
 
 ## Storage Patterns
-- **AppStorage wrapper**: single API across MMKV (native) and AsyncStorage/localStorage (web). Prefer `webBackend: 'sync'` for flicker-free prefs.
-- **Safety**: `_safeParse` for legacy strings; `setMany` filters undefined; `clearAll` is namespace-scoped on web.
-- **Secure storage**: use `AppStorage.createSecure` for sensitive data; verify initialization in native.
+- **AppStorage wrapper**: single API across MMKV (native) and LocalStorage/AsyncStorage (web).
+- **Sync web storage**: prefer `webBackend: 'sync'` for theme/mode to avoid flicker.
+- **Secure storage**: use `AppStorage.createSecure()` for PII.
+- **Hydration**: `initializeAppStorage()` in `lib/storage/storage.init.ts` orchestrates auth + personal data restore.
 
 ## Networking
-- **apiClient** (`lib/constantLib/clients/client.ts`): Expo `fetch` wrapper.
-  - Native: adds `Authorization: Bearer <sessionId>:<userId>` except on auth whitelist.
-  - Web: relies on HttpOnly cookies, uses `credentials: 'include'`.
-  - On `session_invalid`/`missing_auth`, calls `clearSession` to reset state/storage.
+- **ApiClient** (`lib/constantLib/clients/client.ts`): Expo fetch wrapper.
+  - Native: `Authorization: Bearer <sessionId>:<userId>` (non-whitelisted endpoints).
+  - Web: HttpOnly cookies + `credentials: 'include'`.
+  - On `session_invalid`/`missing_auth`/`invalid_user_id`/`user_not_found`, it calls `clearSession()`.
 - **API modules**: public/personal libs export typed functions; components never call fetch directly.
 
 ## UI System
-- **Semantic theming** with `react-native-unistyles`; use `ThemedText`/`ThemedView` instead of raw `Text/View`.
-- **Fonts**: AstaSans (body) and Gantari (headings/brand).
-- **Avoid hardcoded colors**; rely on theme tokens.
+- **Semantic theming** with `react-native-unistyles`.
+- Use `ThemedText`, `ThemedView`, `ThemedViewWithSidebar` instead of raw `Text`/`View`.
+- **Fonts**: AstaSans (body), Gantari (headings/brand).
 
 ## Modal System
-- **Imperative promise modals** via `showConfirmDialog`, `showAlert`, etc.; rendered centrally in `AppModal` and wired in `_layout.tsx`.
-// ...
-- Do not instantiate modals per-screen; use the utilities.
+- **Promise-based modals** via `util.modal.ts` helpers.
+- `AppModal` renders the global modal stack in `_layout.tsx`.
+
+## Keyboard & Zero-Render Patterns
+- `KeyboardSync` writes IME height into `$uiState.keyboardHeight`.
+- Chat and other IME-sensitive screens read that observable directly to avoid rerenders.
 
 ## Performance & Re-renders
-- **Zero-Render Animations**: Use `KeyboardSync` + `$uiState` + `Memo` components for keyboard/layout animations. avoiding React renders entirely.
-- **Prop Firewall**: Use `React.memo` with strict custom comparison for heavy containers (like Chat) to block unstable Router prop changes.
-- **ID-Driven Lists**: Pass IDs, not objects, to FlatLists. Let items observe their own data.
+- **Prop firewall**: use `React.memo` + ID-based comparisons for heavy containers (chat).
+- **ID-driven lists**: pass IDs only to lists, let items observe their own data.
 
 ## Platform Nuances
-- **Web**: prefer sync storage for mode/theme to avoid hydration white flash; cookies carry session token.
-- **Native**: secure MMKV for sensitive data; ensure splash stays until hydration completes.
+- **Web**: sync storage for theme/mode; cookies carry session token.
+- **Native**: secure MMKV for sensitive data; keep splash until hydration completes.
 
 ## Contribution Checklist
-- Follow existing wrappers: storage via `AppStorage`, network via `apiClient`, modals via utilities, routing via Expo Router groups.
+- Follow wrappers: storage via `AppStorage`, network via `ApiClient`, modals via utilities.
 - Add new features with typed APIs (public/personal lib) and avoid direct fetch/AsyncStorage.
 - When adding state: provide reset/clear paths and align with guards.
 - Keep README docs updated when changing flows (auth, storage, networking, routing).

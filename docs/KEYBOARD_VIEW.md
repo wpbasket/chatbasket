@@ -1,144 +1,53 @@
 # 📱 Chat Screen Core Architecture (Zero-Render Edition)
 
----
+This document explains how ChatBasket keeps the chat screen responsive during keyboard animations and high-frequency updates.
 
-# 1️⃣ Design Philosophy
+## 1) Design Philosophy
+- **Keyboard movement:** Avoids full component rerenders.
+- **Typing & list updates:** Only affected rows update.
+- **Routing changes:** Heavy chat containers are shielded from router prop churn.
 
-This chat system is built on **Zero Re-renders** for high-frequency interactions.
+We decouple **interactivity** from **data rendering** by using observables and memoization.
 
-*   **Keyboard Movement:** 0 React Renders.
-*   **Typing:** 0 React Renders (for the list).
-*   **Mode Switching:** 0 Root Re-renders.
+## 2) Render Firewall (ChatContentContainer)
+`ChatContentContainer` is wrapped with `React.memo` and uses strict prop comparisons (IDs only) to avoid rerenders from unstable navigation objects.
 
-We achieve this by decoupling the **Interactivity Layer** from the **Data Layer**.
+## 3) Keyboard Sync (Current Implementation)
+The active path uses `KeyboardSync` + `$uiState.keyboardHeight` rather than the older `useStableIme` hook.
 
----
+### 3.1 Global Sync (`components/tools/KeyboardSync.tsx`)
+`KeyboardSync` is mounted in `app/_layout.tsx` and synchronizes IME height into `state/ui`.
 
-# 2️⃣ The "Firewall" Architecture
+Key behaviors:
+- Tracks keyboard visibility via `keyboardDidShow` / `keyboardDidHide`.
+- Stores a stable IME height to avoid Android flicker.
+- Writes a stable value into `$uiState.keyboardHeight`.
 
-To prevent global state churn from affecting the chat, we use a specialized defense strategy:
-
-### Prop Key Firewall
-The `ChatContentContainer` uses a custom `React.memo` comparison function:
+### 3.2 UI Binding in Chat
+The chat screen reads `$uiState.keyboardHeight` directly for transforms, avoiding local state updates:
 
 ```typescript
-(prev, next) => {
-    return (
-        prev.chat_id === next.chat_id &&
-        prev.recipient_id === next.recipient_id
-        // ... strict string comparison
-    );
-}
+style={{ transform: [{ translateY: -$uiState.keyboardHeight.get() - 4 }] }}
 ```
 
-This blocks unstable Expo Router navigation objects from triggering "junk" re-renders on the chat screen.
+## 4) Legacy IME Stabilizer (`useStableIme`)
+The hook in `hooks/personalHooks/hooks.stableIme.ts` still exists and provides a stable IME height, but the main production path uses `KeyboardSync` instead.
 
----
-
-# 3️⃣ Zero-Render Keyboard (The Core)
-
-## Old Way (Legacy)
-We used a hook `useStableIme` that returned a number.
-*   Problem: Updating the number triggered a React State update → Component Re-render.
-*   Result: Lag during animation.
-
-## New Way (Observable Transform)
-We use **Legend State** + **Unistyles Runtime** to bypass React entirely for animations.
-
-### 1. Global Sync (`KeyboardSync.tsx`)
-A component in `_layout.tsx` listens to the native keyboard height and writes directly to an observable:
+## 5) ID-Driven Virtualization
+Lists pass IDs rather than full objects. Each list item observes its own data:
 
 ```typescript
-// Writes directly to the observable atom
-$uiState.keyboardHeight.set(rt.insets.ime);
-```
-
-### 2. Reactive Component
-The Chat Screen listens to this observable via a `<Memo>` block, which applies the style *directly to the DOM/View node* without running the component function.
-
-```typescript
-<Memo>
-  {() => (
-    <ThemedView 
-      style={{ 
-        transform: [{ translateY: -$uiState.keyboardHeight.get() }] 
-      }} 
-    >
-      {/* List & Input */}
-    </ThemedView>
-  )}
-</Memo>
-```
-
-**Result:** The keyboard slides up, and the view transforms instantly. React does **nothing**.
-
----
-
-# 4️⃣ ID-Driven Virtualization
-
-We never pass full objects to our lists. We only pass **IDs**.
-
-```typescript
-// Bad
-<FlatList data={allMessages} />
-
-// Good
 <FlatList data={messageIds} />
 ```
 
-Each `MessageBubble` or `ChatListItem` observes its own data:
+Only the affected row updates when a message changes.
 
-```typescript
-const MessageBubble = ({ id }) => {
-   const message = useValue($chatMessagesState.chats[currentId].messages[id]);
-   // ...
-}
-```
+## ✅ Performance Summary
+| Interaction | Screen Re-renders | List Re-renders |
+| :--- | :---: | :---: |
+| Typing | ~0 | O(1) |
+| Keyboard Open | ~0 | 0 |
+| Scrolling | ~0 | 0 |
+| New Message | ~0 | O(1) |
 
-**Benefit:**
-*   Receiving a new message = O(1) update (Only the new item renders).
-*   Updating "Read Status" = O(1) update (Only the specific bubble re-renders).
-
----
-
-# 5️⃣ Example Code (Simplified)
-
-```typescript
-import { $uiState } from '@/state/ui/state.ui';
-import { Memo } from '@legendapp/state/react';
-
-const ChatScreen = () => {
-  return (
-    // 1. Memo Block for Animation
-    <Memo>
-      {() => (
-        <ThemedView 
-           style={{ 
-             flex: 1, 
-             // 2. Direct Observable Binding
-             transform: [{ translateY: -$uiState.keyboardHeight.get() }] 
-           }}
-        >
-           {/* 3. ID-Driven List */}
-           <ChatFlatList />
-           
-           <ChatInput />
-        </ThemedView>
-      )}
-    </Memo>
-  );
-};
-```
-
----
-
-# ✅ Final Performance Stats
-
-| Interaction | Screen Re-renders | List Re-renders | FPS |
-| :--- | :---: | :---: | :---: |
-| **Typing** | 0 | 0 | 60/120 |
-| **Keyboard Open** | 0 | 0 | 60/120 |
-| **Scrolling** | 0 | 0 | 60/120 |
-| **New Message** | 0 | 0 | Instant |
-
-This is the standard for all future complex screens in this app.
+This is the default architecture for high-frequency chat interactions.

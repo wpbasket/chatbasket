@@ -1,40 +1,42 @@
 # UI Design System Architecture
 
 **Library:** `react-native-unistyles`
-**Components:** `ThemedText`, `ThemedView`, `IconSymbol`
+**Core Components:** `ThemedText`, `ThemedView`, `ThemedViewWithSidebar`, `IconSymbol`
 
-## Philosophy: "Semantic Theming"
-We do not use hardcoded colors or fonts. We use **Semantic Tokens** provided by `unistyles`.
+## Philosophy: Semantic Theming
+We avoid hardcoded colors and fonts. Components read theme tokens from Unistyles and expose semantic variants that map to typography and color rules.
 
-### 1. `ThemedText`
-This is the core typography component. Never use `<Text>` directly.
+## 1) `ThemedText`
+**File:** `components/ui/common/ThemedText.tsx`
 
-*   **Semantic Types**:
-    *   `default`: Body text (AstaSans).
-    *   `subtitle`: Headers (Gantari).
-    *   `logo`: Special styling for app branding.
-    *   `link`: Blue underlined text.
-*   **Platform Specifics**:
-    *   The component automatically handles `Platform.select` to choose the correct Font Family file names for iOS vs Android (e.g., `Gantari400` vs `Gantari-Regular`).
-*   **Color Resolution**: `color` prop > Theme Color (Dark/Light) > Default.
+`ThemedText` wraps `Text` and applies font + color variants. It also supports an explicit `color` override (highest priority) and optional `lightColor`/`darkColor`.
 
-### 2. `ThemedView`
-*   **Role**: Automatic Background Color management.
-*   **Usage**: Wrapper for screens. Automatically applies `theme.colors.background` so you don't have to handle Dark Mode manually.
+**Supported variants (current):**
+`default`, `title`, `defaultSemiBold`, `subtitle`, `link`, `semibold`, `small`, `smallBold`, `titleSmall`, `logo`, `defaultGantari`, `gantariWithoutColorAndSize`, `astaSansWithoutColorAndSize`.
 
-### 3. Fonts
-*   **Primary**: `AstaSans` (Body / UI).
-*   **Secondary**: `Gantari` (Headings / Branding).
-
-## How to use
+**Usage:**
 ```tsx
-// ✅ Correct
 <ThemedText type="subtitle">Hello World</ThemedText>
-
-// ❌ Avoid
-<Text style={{ fontFamily: 'Gantari', color: 'black' }}>Hello World</Text>
+<ThemedText type="small" color="#ff0066">Inline override</ThemedText>
 ```
 
-## Unistyles Configuration
-*   We use `react-native-unistyles` which is a C++ based styling engine (Zero runtime overhead).
-*   Themes are defined in `theme/` and synced with the device preferences (or user override).
+## 2) `ThemedView`
+**File:** `components/ui/common/ThemedView.tsx`
+
+`ThemedView` applies `theme.colors.background` to the container by default. Use it for screens and layout wrappers to keep dark/light mode consistent.
+
+## 3) `ThemedViewWithSidebar`
+**File:** `components/ui/common/ThemedViewWithSidebar.tsx`
+
+A layout helper for web/tablet layouts with a responsive sidebar. It exposes:
+- `ThemedViewWithSidebar.Sidebar`
+- `ThemedViewWithSidebar.Main`
+
+On smaller breakpoints, the sidebar is hidden and the main view becomes full width.
+
+## 4) Fonts
+- **Primary UI font**: AstaSans (regular + semibold)
+- **Brand/heading font**: Gantari (regular + semibold + extra-light)
+
+## 5) Unistyles Configuration
+Theme tokens are defined in `src/constants/theme.ts` and are used by all Themed components. Avoid hardcoded colors in UI code unless a one-off override is explicitly needed.

@@ -1,50 +1,46 @@
 # Deep Linking & App Mode Architecture
 
-**Date:** 2026-01-09 (Initial implementation) | 2026-01-12 (Performance optimizations)
-**Context:** Fixing Native Deep Links redirecting to wrong Mode + optimizing for zero redundant state updates.
+**Goal:** Keep `appMode` aligned with the active route without race conditions or redundant updates.
 
-## The Problem
-On Native platforms (iOS/Android), `state.appMode` initializes from Persistent Storage (e.g., "Personal") *before* Expo Router processes the Deep Link (e.g., "Public").
-This caused a race condition where the App would initialize in Personal Mode, render the Personal Home, and blocking the Public Deep Link (via Route Guards or Redirects).
+## Key Files
+- `state/appMode/state.appMode.ts`
+- `app/_layout.tsx`
+- `app/index.tsx`
+- `app/+native-intent.tsx` (native cold-start handler)
 
-## The Solution
-We successfully decoupled **Navigation** (Expo Router) from **State** (Legend State) using Expo Router's modern `+native-intent.tsx` pattern.
+## The Problem We Solve
+On native platforms, state can hydrate **before** Expo Router resolves an incoming deep link. If the app initializes in the wrong mode (e.g., Personal) it can block a Public deep link via route guards.
 
-### 1. `+native-intent.tsx` (Cold Start Handler)
-This file uses Expo Router's `redirectSystemPath()` API to intercept deep links **before** navigation.
-*   **Cold Start Only**: Handles links when app is launched from closed state (`initial: true`).
-*   **Synchronous Mode Setting**: Sets `appMode` before the navigation stack renders, preventing race conditions.
-*   **Platform**: Native (iOS/Android) only.
+## Current Solution
+We split deep-link handling into **cold-start** and **warm-start** paths and only mutate `appMode` when needed.
 
-### 2. `_layout.tsx` (Warm Start Handler & Navigation Sync)
-Handles deep links when the app is already running or backgrounded.
-*   **Warm Start**: Listens to `Linking.addEventListener('url')` for background → foreground transitions.
-    *   Uses `useCallback` to memoize the handler, recreating only when mode changes.
-    *   Only sets mode if different from current value (prevents redundant updates).
-*   **Segment Sync**: Uses `useEffect` on `segments` to sync mode during client-side navigation (e.g., `router.push`).
-    *   Checks mode before setting to avoid unnecessary state updates.
-    *   Does **NOT** depend on `mode` in dependency array to prevent infinite loops during manual toggles.
-    
-### Performance Optimizations
-*   **Zero redundant mode changes**: Navigation within same mode triggers no state updates.
-*   **Memoized handlers**: Deep link handler only recreates when mode actually changes.
-*   **Single mode change on deep links**: Cold start sets mode once, segments sync sees it's correct and skips.
+### 1) Cold Start (Native Only)
+`+native-intent.tsx` intercepts deep links before the navigation stack renders and **sets `appMode` synchronously**. This ensures the correct mode is in place before guards run.
 
-### 2. `index.tsx` (The Passive Gatekeeper)
-Previously, `index.tsx` would redirect to `/public/home` or `/personal/home` immediately.
-*   **Fix**: It now checks `if (segments.length > 0)`.
-*   If Route Segments exist (meaning a Deep Link is valid, e.g. `/public/profile`), `index.tsx` returns `null` and does **NOT** redirect.
-*   It only redirects if the user is truly at the Root (`/`).
+### 2) Warm Start / Running App (`app/_layout.tsx`)
+`_layout.tsx` handles runtime updates:
+- Listens to `Linking.addEventListener('url')`.
+- Uses a memoized handler to set `appMode` only when the URL prefix actually changes.
+- Synchronizes `appMode` with `useSegments()` so client-side navigation keeps state and router aligned.
 
-### Flow Diagram (Public Link, Personal Mode)
-1.  **Deep Link**: `chatbasket://public/profile`
-2.  **`+native-intent.tsx`**: Intercepts URL → Sets `appMode = 'public'` (Before navigation)
-3.  **Expo Router**: Navigates to `/public/profile`
-4.  **Route Guard**: Checks `mode === 'public'` → **PASS** (because Step 2 happened first)
-5.  **`index.tsx`**: Checks segments → `['public', 'profile']` → **Returns Null** (No Hijack)
-6.  **Result**: User sees Public Profile.
+### 3) Web Initial Mode
+`state.appMode.ts` runs `getInitialMode()`:
+- If `window.location.pathname` starts with `/public` or `/personal`, that route wins.
+- Otherwise, it falls back to `PreferencesStorage.getMode()`.
 
-## Future Maintenance
-*   **Adding New Modes**: Update the logic in both `+native-intent.tsx` (cold start) and `_layout.tsx` (warm start) to detect new path prefixes.
-*   **Do NOT**: Re-add redirection logic to `index.tsx` without checking `segments.length`.
-*   **Pattern**: `+native-intent.tsx` handles cold starts, `_layout.tsx` handles warm starts and navigation sync.
+### 4) Root Index Guard (`app/index.tsx`)
+`app/index.tsx` redirects only when **no** deep-link segments exist:
+- If `segments.length > 0`, it returns `null` and avoids hijacking deep links.
+- If at root (`/`), it redirects to the last saved mode.
+
+## Performance Optimizations
+- **No redundant updates**: `setAppMode` runs only when the target mode differs.
+- **Memoized deep-link handler**: avoids re-registering listeners unless necessary.
+- **Single state mutation on deep link**: cold-start handler sets it once; segment sync sees it already matches.
+
+## Adding New Modes
+If a new mode is introduced:
+1. Update `getInitialMode()` path matching in `state.appMode.ts`.
+2. Update `_layout.tsx` deep-link parsing and segment sync.
+3. Update `+native-intent.tsx` to map path prefixes.
+4. Ensure `app/index.tsx` default redirects handle the new mode.

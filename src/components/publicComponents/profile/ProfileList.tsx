@@ -2,8 +2,8 @@ import Postcard from '@/components/publicComponents/post/Postcard';
 import FollowerCard from '@/components/publicComponents/profile/FollowerCard';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { Post } from '@/model/Post';
-import { User } from '@/model/User';
+import type { Post } from '@/model/Post';
+import type { PublicProfileUser, User } from '@/model/User';
 import activeUserFollowers from '@/state/publicState/public.state.activeUserFollowers';
 import activeUserFollowing from '@/state/publicState/public.state.activeUserFollowing';
 import activeUserPosts from '@/state/publicState/public.state.activeUserPosts';
@@ -17,19 +17,22 @@ import UserInfoSection from './sections/UserInfoSection';
 
 type TABS = 'Posts' | 'Followers' | 'Following';
 
-// Define a type for the simplified user structure returned by activeUserFollowers/Following
-type SimplifiedUser = {
-  id: string;
-  username: string;
-  first_name: string;
-  last_name: string;
-};
-
 // Union type for content items
-type ContentItem = Post | SimplifiedUser;
+type ContentItem = Post | PublicProfileUser;
+type EmptyItem = { id: string; _isEmpty: true };
+type ListItem = ContentItem | EmptyItem;
 
-// Define a type for list items, including the optional _isEmpty property
-type ListItem = (ContentItem | { id: string; _isEmpty?: true }) & { _isEmpty?: boolean };
+function isEmptyItem(item: ListItem): item is EmptyItem {
+  return '_isEmpty' in item;
+}
+
+function isPostItem(item: ListItem): item is Post {
+  return !isEmptyItem(item) && 'content' in item;
+}
+
+function isProfileUserItem(item: ListItem): item is PublicProfileUser {
+  return !isEmptyItem(item) && 'username' in item;
+}
 
 type ProfileListProps = {
   user: User | null;
@@ -65,7 +68,7 @@ const ProfileList = React.memo(({ user, activeTab, onTabPress }: ProfileListProp
       return [{ id: 'empty-content', _isEmpty: true }];
     }
     
-    return data as ListItem[];
+    return data;
   }, [user?.id, activeTab, postsData, followersData, followingData]);
 
   // Render header components (user info and tabs)
@@ -80,40 +83,36 @@ const ProfileList = React.memo(({ user, activeTab, onTabPress }: ProfileListProp
 
   // Render content items
   const renderItem = useCallback(({ item }: { item: ListItem }) => {
-    // Handle the dummy empty item
-    if (item._isEmpty) {
+    if (isEmptyItem(item)) {
       return (
         <ThemedView style={styles.emptyContainer}>
           <ThemedText type='semibold'>
-            {activeTab === 'Posts' 
-              ? 'No posts available' 
-              : activeTab === 'Followers' 
-                ? 'No followers available' 
+            {activeTab === 'Posts'
+              ? 'No posts available'
+              : activeTab === 'Followers'
+                ? 'No followers available'
                 : 'No following available'}
           </ThemedText>
         </ThemedView>
       );
     }
-    
-    switch (activeTab) {
-      case 'Posts':
-        return <Postcard post={item as Post} interactive={false} />;
-      case 'Followers':
-      case 'Following':
-        return <FollowerCard follower={item as SimplifiedUser} interactive={true} />;
-      default:
-        return null;
+
+    if (activeTab === 'Posts' && isPostItem(item)) {
+      return <Postcard post={item} interactive={false} />;
     }
+
+    if ((activeTab === 'Followers' || activeTab === 'Following') && isProfileUserItem(item)) {
+      return <FollowerCard follower={item} interactive={true} />;
+    }
+
+    return null;
   }, [activeTab]);
 
   // We don't need a separate ListEmptyComponent anymore
   // as we're handling empty states in renderItem with the dummy item
 
   // Key extractor for list items
-  const keyExtractor = useCallback((item: any) => {
-    // Ensure the id is string-safe (handle undefined, null, or other non-string values)
-    return item?.id?.toString() || String(Math.random());
-  }, []);
+  const keyExtractor = useCallback((item: ListItem) => item.id, []);
 
   return (
     <ThemedView style={styles.container}>

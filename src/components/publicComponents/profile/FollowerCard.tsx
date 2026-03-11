@@ -2,7 +2,7 @@ import users from '@/assets/data/users';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
-import { User } from '@/model/User';
+import type { PublicProfileUser, User } from '@/model/User';
 import currentUserStore from '@/state/publicState/public.state.activeUser';
 import { router } from 'expo-router';
 import React from 'react';
@@ -10,12 +10,7 @@ import { Pressable } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 type Props = {
-    follower: {
-        id: string;
-        username: string;
-        first_name: string;
-        last_name: string;
-    };
+    follower: PublicProfileUser;
     interactive?: boolean;
 };
 

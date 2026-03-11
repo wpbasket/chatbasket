@@ -1,50 +1,47 @@
 # Authentication State Architecture
 
-**State Library:** Legend-State
-**File:** `state/auth/state.auth.ts`
+**State Library:** `@legendapp/state`
+**Primary State:** `state/auth/state.auth.ts`
 
-## Core Components
-* `authState`: The main observable object containing:
-  * `isSentOtp`: OTP step flag to gate `(auth)/auth-verify` routing.
-  * `isLoggedIn`: Boolean indicating active session.
-  * `sessionId` / `sessionExpiry`: Session token + expiry (OTP-based, no refresh token).
-  * `userId` / `user`: Profile data (`ProfileResponse`).
-  * `isPrimary` / `primaryDeviceName`: Primary device status from backend session response.
-  * `name` / `email`: Cached identifiers for UI.
-  * `isInTheProfileUpdateMode`: Tracks profile edit mode (navigation guards/UI states).
+## Core State Shape
+`authState` is the single observable for auth/session metadata:
+- `isSentOtp`: gates `(auth)/auth-verify` routing.
+- `isLoggedIn`: current session status.
+- `sessionId` / `sessionExpiry`: session metadata (native stores sessionId, web typically keeps only expiry).
+- `userId` / `user`: cached profile data.
+- `isPrimary` / `primaryDeviceName`: primary-device status from backend session responses.
+- `name` / `email`: cached identifiers for UI.
+- `isInTheProfileUpdateMode`: profile edit guard flag.
 
-## Key Workflows
+## Initialization (Hydration)
+Hydration is orchestrated by `initializeAppStorage()` in `lib/storage/storage.init.ts` and is called once in `app/_layout.tsx`.
 
-### 1. Initialization (Hydration)
-* **Location**: `app/_layout.tsx` → `restoreAuthState()`
-* **Logic (current implementation)**:
-  1. Pause Splash Screen.
-  2. Initialize secure storage (`initializeSecureStorage`).
-     * **Web**: Uses `WebVault` with non-extractable keys in IndexedDB.
-     * **Native**: Uses hardware-backed keys via `expo-secure-store`.
-  3. Read session from storage via `getSession()`:
-     * **Web**: only `sessionExpiry` (no sessionId persisted) plus optional cached user (now encrypted).
-     * **Native**: `sessionId`, `userId`, `sessionExpiry`, `user`.
-  4. Validate expiry; if valid, set `authState` (and fetch device status). Otherwise, `clearSession()` resets storage and state.
-  5. Resume rendering once guards run.
+Sequence:
+1. `initializeSecureStorage()` prepares secure storage providers.
+2. `restoreAuthState()` reads persisted session data.
+3. If logged in, additional personal storage hydration happens (contacts, user, device status, chat storage).
+4. Root layout waits on hydration before rendering to avoid route-guard flicker.
 
-### 2. Login / Signup Flow (OTP-based)
-* **Screens**: `(auth)/auth` → `(auth)/auth-verify`
-* **Logic**:
-  1. User submits email/password (login) or signup form; server sends OTP and sets `isSentOtp` → guards allow `/auth-verify`.
-  2. On successful OTP verification, backend returns `sessionId`, `sessionExpiry`, user info, `isPrimary`, `primaryDeviceName`.
-  3. Storage handling:
-     * **Web**: persist only `sessionExpiry` (cookies carry session token); skip `sessionId`.
-     * **Native**: persist `sessionId`, `userId`, `sessionExpiry`, and optional `user` atomically via `setMany` in secure MMKV.
-  4. `authState` is updated; `(auth)` stack unmounts and `(app)` stack mounts.
+### Storage Notes
+- **Native**: Session identifiers live in encrypted MMKV and are mirrored into `authState` for request headers.
+- **Web**: Session token is expected to live in HttpOnly cookies; `authState.sessionId` is typically `null`, while `sessionExpiry` is persisted.
 
-### 3. Logout
-* Clears all auth-related keys from secure storage (`clearAll`), preferences (theme/mode), personal caches (user, contacts, device status), and resets observables (`authState`, `appMode`, contact/user stores).
-* Server-side: call session invalidation endpoint (see service layer) to revoke the `sessionId`.
+## Login / Signup (OTP Flow)
+1. User submits email + 6-digit numeric password (PIN) → backend sends OTP and sets `authState.isSentOtp = true`.
+2. User verifies OTP in `(auth)/auth-verify`.
+3. Backend returns session payload and user metadata (`sessionId`, `sessionExpiry`, `isPrimary`, `primaryDeviceName`).
+4. Storage and `authState` are updated; `(app)` stack mounts and `(auth)` stack unmounts.
 
-## Security & Storage Notes
-* Session tokens are not stored in observable state; they live in secure storage (native) or cookies (web).
-* **Cross-Platform Security**:
-    * **Web**: PII (User, Contacts, Expiry) is encrypted using AES-256-GCM. The encryption key is marked as **non-extractable** in IndexedDB, preventing theft via XSS.
-    * **Native**: Uses hardware-backed AES-128 via MMKV + Keychain/Keystore.
-* `sessionExpiry` gates hydration; expired sessions trigger `clearSession()` to avoid stale cookies/state.
+## Logout
+`clearSession()` (from `lib/storage/commonStorage/storage.auth.ts`) performs a full teardown:
+- Stops the chat connection watcher + outbox queue (prevents in-flight writes after logout)
+- Clears secure storage keys (session + user data)
+- Clears preferences (theme/mode)
+- Clears personal caches (contacts/user/device) and chat storage
+- Resets auth observables and sets `appMode` back to `public`
+- Resets in-memory domain stores (contacts, chat lists/messages, user cache)
+
+## Guarding & Security
+- `Stack.Protected` guards depend on `authState.isLoggedIn` and the current `appMode`.
+- `sessionExpiry` is enforced during hydration; expired sessions trigger a cleanup.
+- Web security relies on HttpOnly cookies; native uses `Authorization: Bearer <sessionId>:<userId>` headers via the API client.

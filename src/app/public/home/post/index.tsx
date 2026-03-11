@@ -51,7 +51,7 @@ export default function PostDetailsPage() {
                         {/* User Info */}
                         <ThemedView style={styles.userDetailsContainer}>
                             <ThemedText type='semibold' style={{ lineHeight: 16 }}>
-                                {user?.name}{'Dummy' + user?.username[0].toUpperCase()}
+                                {user.first_name} {user.last_name}
                             </ThemedText>
                             <Pressable
                                 onPress={goToUserProfile}

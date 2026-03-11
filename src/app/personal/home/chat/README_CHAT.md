@@ -1,78 +1,66 @@
 # Chat System Architecture
 
 ## Overview
-The chat system in ChatBasket is designed around a **Relay** architecture with a **3-Icon Status System**.
+Chat is designed as a **relay-based** system with a **3-icon status model**. The backend is an ephemeral relay while local device storage is authoritative.
 
-## 1. The 3-Icon Status System
-We use a simplified visual language to represent message states. The explicit "Delivered" state (double tick) is **hidden** from the UI to reduce visual clutter.
+## 1) Status Icons (3-Icon System)
+Delivered is intentionally hidden to reduce UI clutter.
 
-| Icon | Color | Meaning | Implementation Logic |
+| Icon | Color | Meaning | Implementation |
 | :--- | :--- | :--- | :--- |
-| **Clock** 🕒 | Gray | **Pending** | Optimistically added to UI. Waiting for API response. |
-| **Checkmark** ✅ | Yellow | **Sent** | Confirmed by server. Also covers "Delivered" state. |
-| **Checkmark** ✅ | Green | **Read** | Recipient has opened the chat. |
+| 🕒 | Gray | **Pending** | Optimistic message pending server confirmation. |
+| ✅ | Yellow | **Sent** | Confirmed by server; also represents delivered. |
+| ✅ | Green | **Read** | Recipient opened the chat. |
 
-### Why no "Delivered" icon?
-We track delivery internally for auto-deletion (server cleanup), but the user only sees "Sent" (Yellow). The icon only turns Green when the recipient actually reads the message.
+**Why no delivered icon?** Delivery is tracked internally for cleanup and sync; the UI jumps directly from Pending → Sent (yellow) → Read (green).
 
-## 2. Synchronization Flow
-The system differentiates between "Outside" (Delivery) and "Inside" (Read) logic to ensure accurate unread counts and delivery confirmations.
+## 2) Synchronization Flow
+We separate **delivery ACKs** (outside chat) from **read ACKs** (inside chat).
 
-### 2.1 Outside Chat (Inbox / Home Screen) & App Startup
-- **Process**: `syncPendingMessages` runs on boot (bypassing hydration delays), or the `ws.event.bridge.ts` intercepts incoming WebSockets while idling.
-- **Action**: Automatically triggers a "Single ACK" call to `acknowledgeDelivery` for the *latest* message ID.
-- **Result**: The backend uses the timestamp of this single message to bulk-update `delivered = true` for all older pending messages. Sender sees a **Yellow Tick** (Delivered). Recipient's **Unread Count** remains unchanged.
+### 2.1 Outside Chat (Inbox / Home / App Startup)
+- **Process**: Background sync or `ws.event.bridge.ts` observes incoming messages.
+- **Action**: Send a *single* delivery ACK for the latest message (bulk update server-side).
+- **Result**: Sender gets a yellow tick for all older pending messages; recipient unread count is unchanged.
 
-### 2.2 Inside Chat (Active [chat_id])
-- **Process**: `useFocusEffect` triggers `loadMessages` and a delayed `markChatRead`.
-- **Action**: Hits `/personal/chat/mark-read`.
-- **Result**: Sender sees a **Green Tick** (Read). Recipient's **Unread Count** resets to 0. 
-- **Efficiency**: The backend's `mark-read` implicitly performs a bulk delivery ACK for any missing message confirmations in that chat.
+### 2.2 Inside Chat (Active Chat Screen)
+- **Process**: `useFocusEffect` loads messages and triggers `markChatRead` after focus.
+- **Action**: `POST /personal/chat/mark-read` updates `last_read_at` on the backend.
+- **Result**: Sender sees green ticks; recipient unread count resets to 0.
 
-### 2.3 De-duplication Logic
-To prevent redundant API calls when background sync and the chat screen overlap, we use `lastAckedMsgId`. This ensures that even if both processes spot a new message at the same time, only one signal is sent to the server.
+### 2.3 De-duplication
+`lastAckedMsgId` prevents duplicate ACKs when background sync and chat focus overlap.
 
-## 3. Relay & Read Status
-The backend acts as a relay for message delivery and status updates.
+## 3) Relay & Read Status
+- **Recipient delivery**: Delivery ACKs update server state in bulk via timestamps.
+- **Sender update**: A `delivery_ack` websocket event with a single ID drives local bulk updates (`markMessagesDeliveredUpTo`).
+- **Read calculation**: The server stores `last_read_at` per chat; the client computes read state locally by comparing timestamps.
 
--   **Delivery (Recipient)**: When the recipient's app fetches the message or receives it via WebSocket, it auto-acks (`acknowledgeDelivery`). The backend efficiently bulk-marks it and all older messages as delivered via timestamps.
--   **Delivery Update (Sender)**: The sender receives a `delivery_ack` WebSocket event with a single ID. The local store uses `markMessagesDeliveredUpTo` to instantly paint all older messages with Yellow Ticks.
--   **Read Status**:
-    -   **Server**: Does NOT store a per-message "read" flag.
-    -   **Metadata**: When a user opens a chat, `markChatRead` updates their `last_read_at` timestamp.
-    -   **Client**: The sender's client calculates "Read" status locally:
-        ```typescript
-        // MessageItemWrapper.tsx
-        if (message.created_at <= chat.other_user_last_read_at) {
-            status = 'read'; // Green Tick
-        }
-        ```
+```typescript
+if (message.created_at <= chat.other_user_last_read_at) {
+  status = 'read';
+}
+```
 
-## 4. Optimistic UI
-We use `@legendapp/state` to drive immediate UI updates.
-1.  **User sends**: Optimistic message added to Legend State list immediately.
-2.  **Network**: API request fires in background.
-3.  **Success**: Optimistic message replaced with real ID; status updates to 'Sent'.
-4.  **Error**: Message marked as failed; retry option shown.
+## 4) Optimistic UI
+Legend-State drives immediate feedback:
+1. Add optimistic message to local state.
+2. Send API request.
+3. Replace with server ID on success; set status to `sent`.
+4. Mark failed on error with retry affordance.
 
-### 4.1 Large File Support
-The chat system supports files up to **100MB**. The network layer is configured to allow these transfers to take up to **10 minutes**, ensuring that slow connections can still complete large uploads without getting cut off by standard API timeouts.
+## 5) Large File Support
+Chat uploads allow long-running transfers; the API client is configured to tolerate large payloads (up to ~10 minutes) without timing out.
 
-## 5. Components
--   **`[chat_id].tsx`**: Main controller. Handles data fetching and status calculation.
--   **`MessageBubble.tsx`**: Dumb component. Renders text/media and the status icon.
--   **`ChatListItem.tsx`**: In-box row. Shows last message preview and read status.
+## 6) Revocation & Sync (Unsend / Delete for Me)
+### Online
+- Backend broadcasts `unsend` or `delete_for_me` events over websockets.
+- `ws.event.bridge.ts` applies local tombstones immediately.
 
-## 6. Revocation & Offline Sync (The Sync Engine)
-Message Revocation (Unsend) and Local Deletions (Delete for Me) require strict synchronization across devices.
+### Offline
+- Backend records durable sync actions.
+- On boot, `$syncEngine.catchUp()` pulls `/personal/chat/sync-actions` and replays missed revocations.
 
-### 6.1 Online Flow (WebSocket Push)
-When a user unsends a message, the backend broadcasts a `unsend` (or `delete_for_me`) WebSocket event.
-- The `ws.event.bridge.ts` intercepts this instantly.
-- It calls `$chatMessagesState.unsendMessages` to mutate the local Legend State array, immediately removing the payload and replacing it with a "Message unsent" tombstone in the UI.
-
-### 6.2 Offline Flow (The SyncEngine Catch-Up)
-Because WebSockets are volatile, what happens if a device is offline when a message is unsent?
-- The backend always generates a durable `SyncAction` record in Postgres.
-- When the device comes back online and the user enters the app, `app/personal/_layout.tsx` triggers `$syncEngine.catchUp()`.
-- The `SyncEngine` queries `/personal/chat/sync-actions`, retrieves all missed revocation signals, applies them silently to the local state, and acknowledges them with the backend so they are consumed.
+## 7) Core Components
+- **`[chat_id].tsx`**: Controller, fetch + render.
+- **`MessageBubble.tsx`**: Renders message + status icon.
+- **`ChatListItem.tsx`**: Inbox row with preview + read state.

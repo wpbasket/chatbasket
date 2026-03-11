@@ -1,45 +1,45 @@
 # API Layer Architecture
 
-**Pattern:** Typed Singleton Wrapper
-**Locations:** `lib/publicLib`, `lib/personalLib`, `lib/constantLib`
+**Pattern:** Typed API modules over a shared `ApiClient` wrapper.
+**Locations:** `lib/constantLib`, `lib/publicLib`, `lib/personalLib`
 
-## The Strategy
-We decouple the **UI** from the **Network Implementation**. Components never call `fetch()` directly. They call Semantic API Methods.
+## Strategy
+UI components never call `fetch()` directly. They call semantic API functions that live in the domain modules. This keeps routing, auth, and error handling centralized.
 
-### 1. The Base Client (`apiClient`)
-* Located in `lib/constantLib/clients/client.ts` (Expo `fetch` wrapper).
-* **Responsibilities**:
-  * Automatically adds `Authorization: Bearer <sessionId>:<userId>` on **native** (web relies on HttpOnly cookies + `credentials: 'include'`).
-  * Handles Base URL normalization.
-  * Whitelists auth endpoints from auth headers.
-  * Standardizes error handling; clears session when backend returns `session_invalid` / `missing_auth`.
-  * **Timeout Strategy**:
-    * **Standard Requests**: Targeted at **30 seconds** (enforced by backend middleware).
-    * **Data Transfers**: File uploads (Chat, Avatars) support up to **10 minutes** to accommodate large payloads (100MB) on slow connections.
+## 1) Base Client (`ApiClient`)
+**File:** `lib/constantLib/clients/client.ts`
 
-### 2. The API Definition (e.g., `public.api.profile.ts`)
-*   **Role**: Define the Contract.
-*   **Structure**: Pure functions returning Promises of Typed Responses.
+Responsibilities:
+- Builds base URLs from `Url.BASE_API_URL` and appends `/api`.
+- Adds `Authorization: Bearer <sessionId>:<userId>` **only on native** (web relies on HttpOnly cookies).
+- Attaches `credentials: 'include'` on web requests.
+- Normalizes errors into `ApiError` and calls `clearSession()` on `session_invalid`, `missing_auth`, `invalid_user_id`, or `user_not_found` (except auth endpoints).
 
+## 2) API Modules (Contract Layer)
+Each domain exports typed functions that return `Promise<T>`.
+
+Example (public profile):
 ```typescript
-// Define the Request/Response types explicitly
-async function getProfile(): Promise<ProfileResponse> {
-    return apiClient.get<ProfileResponse>('/public/profile/get-profile');
+import { apiClient } from '@/lib/constantLib/clients/client';
+
+export async function getProfile() {
+  return apiClient.get<ProfileResponse>('/public/profile/get-profile');
 }
 ```
 
-### 3. Usage in Components
-Components deal with logic, not URLs.
+## 3) Component Usage
+Components should call semantic APIs, not raw URLs:
 
 ```typescript
 // ✅ Good
 const profile = await profileApi.getProfile();
 
-// ❌ Bad
-const res = await fetch('https://api.chatbasket.live/api/public/profile/get-profile'); // direct URL call bypasses apiClient
+// ❌ Avoid
+await fetch('https://api.chatbasket.live/api/public/profile/get-profile');
 ```
 
 ## Benefits
-1.  **Type Safety**: The return type `ProfileResponse` is guaranteed by TypeScript interfaces shared with the Backend (or defined in `models`).
-2.  **Refactorability**: If the backend URL changes from `/get-profile` to `/me`, we change it in *one* file, and the whole app updates.
-3.  **Mockability**: Easy to swap `profileApi` with a mock object for testing purposes.
+1. **Type safety**: response shapes are defined in model types.
+2. **Refactorability**: route changes are centralized.
+3. **Security**: cookie/header handling stays consistent.
+4. **Consistency**: error handling and session invalidation behave the same across modules.

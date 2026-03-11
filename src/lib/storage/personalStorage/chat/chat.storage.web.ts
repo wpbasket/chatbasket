@@ -201,6 +201,29 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
     };
 }
 
+// ─── Per-message write mutex ────────────────────────────────────────────────
+// Serializes read-modify-write operations on the SAME message_id.
+// Different message IDs are fully concurrent (no global bottleneck).
+// This prevents TOCTOU / lost-update races caused by the split IDB transactions
+// (read+decrypt in one tx, encrypt+write in another) required by async crypto.subtle.
+
+const _messageLocks = new Map<string, Promise<void>>();
+
+function withMessageLock<T>(messageId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = _messageLocks.get(messageId) ?? Promise.resolve();
+    const next = prev.then(fn, fn); // run fn after prev settles (success or failure)
+    // Store the void-projected chain so the next caller waits for us
+    const tail = next.then(() => {}, () => {});
+    _messageLocks.set(messageId, tail);
+    // Clean up the map entry once the chain is idle (prevents unbounded growth)
+    tail.then(() => {
+        if (_messageLocks.get(messageId) === tail) {
+            _messageLocks.delete(messageId);
+        }
+    });
+    return next;
+}
+
 // ─── IDB transaction helpers ────────────────────────────────────────────────
 
 function idbPut(store: IDBObjectStore, value: any): Promise<void> {
@@ -339,7 +362,7 @@ export async function getMessagesByChat(chatId: string, limit: number = 50, offs
         .slice(offset, offset + limit);
 }
 
-export async function updateMessageStatus(messageId: string, updates: Partial<LocalMessageEntry>): Promise<void> {
+async function updateMessageStatusUnlocked(messageId: string, updates: Partial<LocalMessageEntry>): Promise<void> {
     const db = await openDataDb();
 
     // Step 1: Read + decrypt OUTSIDE the write transaction.
@@ -357,49 +380,55 @@ export async function updateMessageStatus(messageId: string, updates: Partial<Lo
     await idbPut(writeTx.objectStore(MESSAGES_STORE), encrypted);
 }
 
+export async function updateMessageStatus(messageId: string, updates: Partial<LocalMessageEntry>): Promise<void> {
+    return withMessageLock(messageId, () => updateMessageStatusUnlocked(messageId, updates));
+}
+
 export async function swapTempIdToRealId(tempId: string, realId: string, updates?: Partial<LocalMessageEntry>): Promise<void> {
-    const db = await openDataDb();
+    return withMessageLock(tempId, () => withMessageLock(realId, async () => {
+        const db = await openDataDb();
 
-    // Step 1: Read + decrypt OUTSIDE the write transaction (crypto awaits cause auto-commit)
-    const readTx = db.transaction(MESSAGES_STORE, 'readonly');
-    const readStore = readTx.objectStore(MESSAGES_STORE);
-    // Try temp_id index first; fall back to message_id (PK) for rows where temp_id is NULL
-    const index = readStore.index('idx_temp_id');
-    let records = await idbGetAll<any>(index, tempId);
-    if (records.length === 0) {
-        const byPk = await idbGet<any>(readStore, tempId);
-        if (byPk) records = [byPk];
-    }
-    if (records.length === 0) return;
+        // Step 1: Read + decrypt OUTSIDE the write transaction (crypto awaits cause auto-commit)
+        const readTx = db.transaction(MESSAGES_STORE, 'readonly');
+        const readStore = readTx.objectStore(MESSAGES_STORE);
+        // Try temp_id index first; fall back to message_id (PK) for rows where temp_id is NULL
+        const index = readStore.index('idx_temp_id');
+        let records = await idbGetAll<any>(index, tempId);
+        if (records.length === 0) {
+            const byPk = await idbGet<any>(readStore, tempId);
+            if (byPk) records = [byPk];
+        }
+        if (records.length === 0) return;
 
-    const entry = await decryptEntry(records[0]);
-    const oldMessageId = entry.message_id;
+        const entry = await decryptEntry(records[0]);
+        const oldMessageId = entry.message_id;
 
-    // Prepare the updated entry
-    entry.message_id = realId;
-    entry.temp_id = null;
-    entry.status = 'sent';
-    entry.error_message = null;      // Clear error on successful send
-    entry.error_is_blocking = null;  // Clear error flag on successful send
-    entry.updated_at = new Date().toISOString();
-    if (updates) Object.assign(entry, updates);
-    const encrypted = await encryptEntry(entry);
+        // Prepare the updated entry
+        entry.message_id = realId;
+        entry.temp_id = null;
+        entry.status = 'sent';
+        entry.error_message = null;      // Clear error on successful send
+        entry.error_is_blocking = null;  // Clear error flag on successful send
+        entry.updated_at = new Date().toISOString();
+        if (updates) Object.assign(entry, updates);
+        const encrypted = await encryptEntry(entry);
 
-    // Step 2: Delete old + insert new in a single synchronous write transaction
-    const writeTx = db.transaction(MESSAGES_STORE, 'readwrite');
-    const writeStore = writeTx.objectStore(MESSAGES_STORE);
-    await new Promise<void>((resolve, reject) => {
-        const delReq = writeStore.delete(oldMessageId);
-        delReq.onsuccess = () => resolve();
-        delReq.onerror = () => reject(delReq.error);
-    });
-    await idbPut(writeStore, encrypted);
+        // Step 2: Delete old + insert new in a single synchronous write transaction
+        const writeTx = db.transaction(MESSAGES_STORE, 'readwrite');
+        const writeStore = writeTx.objectStore(MESSAGES_STORE);
+        await new Promise<void>((resolve, reject) => {
+            const delReq = writeStore.delete(oldMessageId);
+            delReq.onsuccess = () => resolve();
+            delReq.onerror = () => reject(delReq.error);
+        });
+        await idbPut(writeStore, encrypted);
 
-    // Step 3: OMITTED (Phase D Optimization)
-    // We intentionally DO NOT re-key the media blob from temp ID to real ID.
-    // Retaining the original temp ID ensures the local_uri (e.g. idb://temp-12345) 
-    // remains valid for the UI, avoiding a very expensive ~100MB encrypted copy-and-delete.
-    // cleanupMessageMedia() natively handles deleting by temp ID extracted from local_uri.
+        // Step 3: OMITTED (Phase D Optimization)
+        // We intentionally DO NOT re-key the media blob from temp ID to real ID.
+        // Retaining the original temp ID ensures the local_uri (e.g. idb://temp-12345)
+        // remains valid for the UI, avoiding a very expensive ~100MB encrypted copy-and-delete.
+        // cleanupMessageMedia() natively handles deleting by temp ID extracted from local_uri.
+    }));
 }
 
 export async function deleteMessage(messageId: string): Promise<void> {
@@ -639,30 +668,36 @@ export async function deleteMediaBlob(messageId: string): Promise<void> {
  */
 export async function purgeDeletedMessages(): Promise<number> {
     const db = await openDataDb();
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite');
+    const tx = db.transaction(MESSAGES_STORE, 'readonly');
     const store = tx.objectStore(MESSAGES_STORE);
     const all = await idbGetAll<any>(store);
-    const toDelete = all.filter(r => r.deleted_for_me === true);
+    const toDelete = all.filter(r => r.deleted_for_me === true).map(r => r.message_id);
     if (toDelete.length === 0) return 0;
 
-    try {
-        await cleanupMessageMedia(toDelete.map(r => r.message_id));
-    } catch (err) {
-        console.warn('[ChatStorage] Error cleaning up media for purged rows', err);
-    }
+    let purged = 0;
+    for (const messageId of toDelete) {
+        try {
+            await withMessageLock(messageId, async () => {
+                try {
+                    await cleanupMessageMediaUnlocked(messageId);
+                } catch (err) {
+                    console.warn('[ChatStorage] Error cleaning up media for purged row', messageId, err);
+                }
 
-    // Re-open a fresh write transaction (the read above may have auto-committed)
-    const writeTx = db.transaction(MESSAGES_STORE, 'readwrite');
-    const writeStore = writeTx.objectStore(MESSAGES_STORE);
-    for (const record of toDelete) {
-        await new Promise<void>((resolve, reject) => {
-            const req = writeStore.delete(record.message_id);
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
-        });
+                const writeTx = db.transaction(MESSAGES_STORE, 'readwrite');
+                await new Promise<void>((resolve, reject) => {
+                    const req = writeTx.objectStore(MESSAGES_STORE).delete(messageId);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+                purged++;
+            });
+        } catch (err) {
+            console.warn('[ChatStorage] Failed purging soft-deleted row', messageId, err);
+        }
     }
-    console.log(`[ChatStorage] Purged ${toDelete.length} soft-deleted row(s)`);
-    return toDelete.length;
+    console.log(`[ChatStorage] Purged ${purged} soft-deleted row(s)`);
+    return purged;
 }
 
 // ⛔ cleanupExpiredMediaBlobs() REMOVED (March 4, 2026)
@@ -672,35 +707,39 @@ export async function purgeDeletedMessages(): Promise<number> {
 /**
  * Delete media blobs and clear file-related fields for the given message IDs.
  */
+async function cleanupMessageMediaUnlocked(id: string): Promise<void> {
+    // Try deleting blob by message_id (real ID)
+    await deleteMediaBlob(id);
+
+    // Also try deleting by temp ID extracted from local_uri (idb://<tempId>)
+    // — sender's blob may still be keyed under the old temp ID
+    const db = await openDataDb();
+    const readTx = db.transaction(MESSAGES_STORE, 'readonly');
+    const record = await idbGet<any>(readTx.objectStore(MESSAGES_STORE), id);
+    if (record) {
+        try {
+            const entry = await decryptEntry(record);
+            if (entry.local_uri?.startsWith('idb://')) {
+                const tempKey = entry.local_uri.replace('idb://', '');
+                if (tempKey !== id) {
+                    await deleteMediaBlob(tempKey);
+                }
+            }
+        } catch { /* ignore decrypt failures */ }
+    }
+
+    await updateMessageStatusUnlocked(id, {
+        local_uri: null,
+        view_url: null,
+        download_url: null,
+        file_id: null,
+    } as any);
+}
+
 export async function cleanupMessageMedia(messageIds: string[]): Promise<void> {
     for (const id of messageIds) {
         try {
-            // Try deleting blob by message_id (real ID)
-            await deleteMediaBlob(id);
-
-            // Also try deleting by temp ID extracted from local_uri (idb://<tempId>)
-            // — sender's blob may still be keyed under the old temp ID
-            const db = await openDataDb();
-            const readTx = db.transaction(MESSAGES_STORE, 'readonly');
-            const record = await idbGet<any>(readTx.objectStore(MESSAGES_STORE), id);
-            if (record) {
-                try {
-                    const entry = await decryptEntry(record);
-                    if (entry.local_uri?.startsWith('idb://')) {
-                        const tempKey = entry.local_uri.replace('idb://', '');
-                        if (tempKey !== id) {
-                            await deleteMediaBlob(tempKey);
-                        }
-                    }
-                } catch { /* ignore decrypt failures */ }
-            }
-
-            await updateMessageStatus(id, {
-                local_uri: null,
-                view_url: null,
-                download_url: null,
-                file_id: null,
-            } as any);
+            await withMessageLock(id, () => cleanupMessageMediaUnlocked(id));
         } catch (err) {
             console.warn('[ChatStorage] cleanupMessageMedia failed for', id, err);
         }
