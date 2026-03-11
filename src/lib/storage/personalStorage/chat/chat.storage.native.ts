@@ -264,17 +264,82 @@ export async function updateMessageStatus(messageId: string, updates: Partial<Lo
 
 export async function swapTempIdToRealId(tempId: string, realId: string, updates?: Partial<LocalMessageEntry>): Promise<void> {
     const d = getDb();
-    // Delete any existing row with the target realId to prevent PK collision
-    await d.runAsync(`DELETE FROM messages WHERE message_id = ?`, [realId]);
-    // Match by temp_id first; fall back to message_id for rows where temp_id is NULL
-    // Also clear error fields on successful send
-    await d.runAsync(
-        `UPDATE messages SET message_id = ?, temp_id = NULL, status = 'sent', 
-            error_message = NULL, error_is_blocking = NULL, updated_at = datetime('now') 
-         WHERE temp_id = ? OR message_id = ?`,
-        [realId, tempId, tempId]
-    );
-    if (updates) await updateMessageStatus(realId, updates);
+    await d.withTransactionAsync(async () => {
+        const tempRow = await d.getFirstAsync<Record<string, any>>(
+            `SELECT * FROM messages WHERE temp_id = ? OR message_id = ? LIMIT 1`,
+            [tempId, tempId]
+        );
+
+        if (!tempRow) return;
+
+        const realRow = await d.getFirstAsync<Record<string, any>>(
+            `SELECT * FROM messages WHERE message_id = ? LIMIT 1`,
+            [realId]
+        );
+
+        const tempEntry = sqliteRowToLocal(tempRow);
+        const realEntry = realRow ? sqliteRowToLocal(realRow) : null;
+        const base = realEntry ?? tempEntry;
+
+        const promoted: LocalMessageEntry = {
+            ...base,
+            local_uri: tempEntry.local_uri ?? base.local_uri,
+            inserted_at: tempEntry.inserted_at || base.inserted_at,
+            ...(updates || {}),
+            message_id: realId,
+            temp_id: null,
+            status: 'sent',
+            acked_by_server: true,
+            error_message: null,
+            error_is_blocking: null,
+            retry_count: 0,
+            last_retry_at: null,
+            updated_at: new Date().toISOString(),
+        };
+
+        await d.runAsync(`DELETE FROM messages WHERE message_id = ?`, [realId]);
+        await d.runAsync(`DELETE FROM messages WHERE message_id = ?`, [tempEntry.message_id]);
+        await d.runAsync(
+            `INSERT OR REPLACE INTO messages (
+                message_id, chat_id, recipient_id, content, message_type,
+                status, is_from_me, delivered_to_recipient, delivered_to_recipient_primary,
+                synced_to_sender_primary, created_at, expires_at, file_id, file_name,
+                file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
+                acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
+                inserted_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                promoted.message_id,
+                promoted.chat_id,
+                promoted.recipient_id,
+                promoted.content || null,
+                promoted.message_type,
+                promoted.status,
+                promoted.is_from_me ? 1 : 0,
+                promoted.delivered_to_recipient ? 1 : 0,
+                promoted.delivered_to_recipient_primary ? 1 : 0,
+                promoted.synced_to_sender_primary ? 1 : 0,
+                promoted.created_at,
+                promoted.expires_at || null,
+                promoted.file_id || null,
+                promoted.file_name || null,
+                promoted.file_size ?? null,
+                promoted.file_mime_type || null,
+                promoted.view_url ?? null,
+                promoted.download_url ?? null,
+                promoted.local_uri ?? null,
+                promoted.temp_id,
+                promoted.acked_by_server ? 1 : 0,
+                promoted.deleted_for_me ? 1 : 0,
+                promoted.retry_count ?? 0,
+                promoted.last_retry_at ?? null,
+                promoted.error_message ?? null,
+                promoted.error_is_blocking == null ? null : (promoted.error_is_blocking ? 1 : 0),
+                promoted.inserted_at,
+                promoted.updated_at,
+            ]
+        );
+    });
 }
 
 export async function deleteMessage(messageId: string): Promise<void> {
