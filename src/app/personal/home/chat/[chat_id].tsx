@@ -19,7 +19,7 @@ import { authState } from '@/state/auth/state.auth';
 import { $uiState } from '@/state/ui/state.ui';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { outboxQueue } from '@/lib/personalLib/chatApi/outbox.queue';
-import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
+import { getChatErrorMessage, getEligibilityMessage } from '@/utils/personalUtils/util.chatErrors';
 import { showAlert, showControllersModal, showConfirmDialog, hideModal } from '@/utils/commonUtils/util.modal';
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
@@ -612,43 +612,51 @@ const ChatContentContainer = React.memo(({
         const chatData = currentChat.peek();
 
         // Check eligibility before proceeding
-        if (!chatData.isEligible && chatData.eligibilityReason === 'not_in_contacts') {
-            showControllersModal([
-                {
-                    id: 'add_contact_redirect',
-                    content: (
-                        <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
-                            <Pressable
-                                onPress={() => {
-                                    $contactsState.setSelectedTab('addedYou');
-                                    router.push('/personal/contacts');
-                                    hideModal();
-                                }}
-                                style={({ pressed }) => [
-                                    styles.addButton,
-                                    pressed ? styles.addButtonPressed : null,
-                                ]}
-                            >
-                                <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
-                                <ThemedText
-                                    type="small"
-                                    style={styles.addButtonLabel}
-                                    selectable={false}
+        if (!chatData.isEligible) {
+            const reason = chatData.eligibilityReason;
+            
+            if (reason === 'not_in_contacts') {
+                showControllersModal([
+                    {
+                        id: 'add_contact_redirect',
+                        content: (
+                            <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
+                                <Pressable
+                                    onPress={() => {
+                                        $contactsState.setSelectedTab('addedYou');
+                                        router.push('/personal/contacts');
+                                        hideModal();
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.addButton,
+                                        pressed ? styles.addButtonPressed : null,
+                                    ]}
                                 >
-                                    Add to contacts
-                                </ThemedText>
-                            </Pressable>
-                        </View>
-                    )
-                }
-            ], {
-                message: (
-                    <>You cannot send messages to <ThemedText style={{ color: theme.colors.primary }}>{displayName}</ThemedText> until you add them to your contacts.</>
-                ),
-                showConfirmButton: false,
-                showCancelButton: true,
-                cancelText: 'Dismiss'
-            });
+                                    <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
+                                    <ThemedText
+                                        type="small"
+                                        style={styles.addButtonLabel}
+                                        selectable={false}
+                                    >
+                                        Add to contacts
+                                    </ThemedText>
+                                </Pressable>
+                            </View>
+                        )
+                    }
+                ], {
+                    message: (
+                        <>You cannot send messages to <ThemedText style={{ color: theme.colors.primary }}>{displayName}</ThemedText> until you add them to your contacts.</>
+                    ),
+                    showConfirmButton: false,
+                    showCancelButton: true,
+                    cancelText: 'Dismiss'
+                });
+            } else {
+                // For all other reasons, show the specific error message from eligibility helper
+                const errorMsg = getEligibilityMessage(reason as string, { name: displayName });
+                showAlert(errorMsg);
+            }
             return;
         }
 
@@ -706,43 +714,51 @@ const ChatContentContainer = React.memo(({
         const chatData = currentChat.peek();
 
         // Check eligibility before proceeding
-        if (!chatData.isEligible && chatData.eligibilityReason === 'not_in_contacts') {
-            showControllersModal([
-                {
-                    id: 'add_contact_redirect',
-                    content: (
-                        <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
-                            <Pressable
-                                onPress={() => {
-                                    $contactsState.setSelectedTab('addedYou');
-                                    router.push('/personal/contacts');
-                                    hideModal();
-                                }}
-                                style={({ pressed }) => [
-                                    styles.addButton,
-                                    pressed ? styles.addButtonPressed : null,
-                                ]}
-                            >
-                                <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
-                                <ThemedText
-                                    type="small"
-                                    style={styles.addButtonLabel}
-                                    selectable={false}
+        if (!chatData.isEligible) {
+            const reason = chatData.eligibilityReason;
+            
+            if (reason === 'not_in_contacts') {
+                showControllersModal([
+                    {
+                        id: 'add_contact_redirect',
+                        content: (
+                            <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
+                                <Pressable
+                                    onPress={() => {
+                                        $contactsState.setSelectedTab('addedYou');
+                                        router.push('/personal/contacts');
+                                        hideModal();
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.addButton,
+                                        pressed ? styles.addButtonPressed : null,
+                                    ]}
                                 >
-                                    Add to contacts
-                                </ThemedText>
-                            </Pressable>
-                        </View>
-                    )
-                }
-            ], {
-                message: (
-                    <>You cannot send messages to <ThemedText style={{ color: theme.colors.primary }}>{displayName}</ThemedText> until you add them to your contacts.</>
-                ),
-                showConfirmButton: false,
-                showCancelButton: true,
-                cancelText: 'Dismiss'
-            });
+                                    <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
+                                    <ThemedText
+                                        type="small"
+                                        style={styles.addButtonLabel}
+                                        selectable={false}
+                                    >
+                                        Add to contacts
+                                    </ThemedText>
+                                </Pressable>
+                            </View>
+                        )
+                    }
+                ], {
+                    message: (
+                        <>You cannot send messages to <ThemedText style={{ color: theme.colors.primary }}>{displayName}</ThemedText> until you add them to your contacts.</>
+                    ),
+                    showConfirmButton: false,
+                    showCancelButton: true,
+                    cancelText: 'Dismiss'
+                });
+            } else {
+                // For all other reasons, show the specific error message from eligibility helper
+                const errorMsg = getEligibilityMessage(reason as string, { name: displayName });
+                showAlert(errorMsg);
+            }
             return;
         }
 
