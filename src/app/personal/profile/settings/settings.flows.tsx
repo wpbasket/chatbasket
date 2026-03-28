@@ -63,13 +63,15 @@ export default function CreateSettingsFlows({
                         />
                         <TextInput
                             placeholder="Current Password (6 digits)"
-                            secureTextEntry
+                            secureTextEntry={true}
                             value={password ?? ''}
                             onChangeText={t => setting$.currentPassword.set(t.replace(/[^0-9]/g, ''))}
                             placeholderTextColor="gray"
                             keyboardType="numeric"
                             maxLength={6}
                             autoCapitalize="none"
+                            textContentType="password"
+                            autoComplete="current-password"
                             style={[styles.modalInput, submitted && !password && styles.inputError]}
                         />
                     </View>
@@ -305,10 +307,12 @@ export default function CreateSettingsFlows({
                             inputMode='numeric'
                             value={password ?? ''}
                             onChangeText={(t) => setting$.password.set(t.replace(/[^0-9]/g, ''))}
-                            secureTextEntry
+                            secureTextEntry={true}
                             placeholderTextColor="gray"
                             keyboardType="numeric"
                             maxLength={6}
+                            textContentType="newPassword"
+                            autoComplete="new-password"
                             style={[styles.modalInput, submitted && !validPass && styles.inputError]}
                         />
                     </View>
