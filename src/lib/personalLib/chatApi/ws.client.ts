@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { authState } from '@/state/auth/state.auth';
 import { Url } from '@/lib/constantLib/constants/constants';
+import { ApiError } from '@/lib/constantLib/models/model.api';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ export interface WSEvent {
     ref?: string;   // Correlation ID for bidirectional calls
     error?: {       // Server-side error details
         code: number;
+        type: string;
         message: string;
     };
 }
@@ -263,7 +265,12 @@ class WSClientManager {
 
                         if (data.error) {
                             console.error(`[WS Client] ❌ Remote error for ${pending.type}:`, data.error);
-                            pending.reject(new Error(data.error.message || `Server error ${data.error.code}`));
+                            pending.reject(new ApiError(
+                                data.error.message || `Server error ${data.error.code}`,
+                                data.error.code,
+                                data.error.type || 'unknown_error',
+                                null
+                            ));
                         } else {
                             pending.resolve(data.payload);
                         }
