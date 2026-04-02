@@ -287,7 +287,8 @@ const MessageBubble = memo(
                         </View>
                         {renderMediaMeta('Image')}
                         {renderProgressBar()}
-                        {!!text && (
+                        {/* Only show caption if content is different from filename (user-provided caption) */}
+                        {!!text && text !== fileName && (
                             <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
@@ -346,7 +347,8 @@ const MessageBubble = memo(
                         )}
                         {renderMediaMeta(isVideo ? 'Video' : 'Audio')}
                         {!isVideo && renderProgressBar()}
-                        {!!text && (
+                        {/* Only show caption if content is different from filename (user-provided caption) */}
+                        {!!text && text !== fileName && (
                             <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
@@ -373,7 +375,8 @@ const MessageBubble = memo(
                             </View>
                         </View>
                         {renderProgressBar()}
-                        {!!text && (
+                        {/* Only show caption if content is different from filename (user-provided caption) */}
+                        {!!text && text !== fileName && (
                             <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
                                 {text}
                             </ThemedText>

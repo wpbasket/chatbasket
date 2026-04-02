@@ -7,12 +7,14 @@ import {
     swapTempIdToRealId,
     updateMessageStatus,
 } from '@/lib/storage/personalStorage/chat/chat.storage';
+import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import type { LocalMessageEntry } from '@/lib/storage/personalStorage/chat/chat.storage.schema';
 import { $chatMessagesState, $chatListState } from '@/state/personalState/chat/personal.state.chat';
 import { authState } from '@/state/auth/state.auth';
 import { copyFileToPrivateDir } from '@/lib/personalLib/fileSystem/file.copy';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
+import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 
 const TAG = '[OutboxQueue]';
 const MAX_RETRIES = 3;
@@ -422,27 +424,38 @@ class OutboxQueue {
     }
 
     private async promoteTempMessage(msg: LocalMessageEntry, sentMessage: MessageEntry): Promise<void> {
-        $chatMessagesState.removeMessage(msg.chat_id, msg.message_id);
-        await $chatMessagesState.addMessage(msg.chat_id, sentMessage);
+        // Handle async operations BEFORE the synchronous batch
+        let resolvedEntry = { ...sentMessage };
+
+        // Resolve media URLs if needed (async)
+        if (resolvedEntry.file_id && !resolvedEntry.local_uri) {
+            await resolveMediaUrls([resolvedEntry]);
+        }
+
+        // Persist to storage (async)
+        await ChatStorage.insertMessage(resolvedEntry);
+
+        // Atomic UI swap - single render, no flicker (BUG-006 fix)
+        $chatMessagesState.replaceMessage(msg.chat_id, msg.message_id, resolvedEntry);
 
         const currentEntry = $chatListState.chatsById[msg.chat_id]?.peek();
         if (!currentEntry) return;
 
-        if (currentEntry.last_message_id !== msg.message_id && currentEntry.last_message_id !== sentMessage.message_id) {
+        if (currentEntry.last_message_id !== msg.message_id && currentEntry.last_message_id !== resolvedEntry.message_id) {
             return;
         }
 
         $chatListState.upsertChat({
             ...currentEntry,
-            last_message_content: getPreviewText(sentMessage),
-            last_message_created_at: sentMessage.created_at,
+            last_message_content: getPreviewText(resolvedEntry),
+            last_message_created_at: resolvedEntry.created_at,
             last_message_status: 'sent',
             last_message_is_from_me: true,
-            last_message_type: sentMessage.message_type,
-            last_message_id: sentMessage.message_id,
+            last_message_type: resolvedEntry.message_type,
+            last_message_id: resolvedEntry.message_id,
             last_message_sender_id: authState.userId.peek() || null,
             last_message_is_unsent: false,
-            updated_at: sentMessage.created_at,
+            updated_at: resolvedEntry.created_at,
         } as ChatEntry);
     }
 

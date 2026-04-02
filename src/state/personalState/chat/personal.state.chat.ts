@@ -305,6 +305,7 @@ interface ChatMessagesState {
     markMessagesReadUpTo: (chatId: string, readAt: string) => void;
     removeMessage: (chatId: string, messageId: string) => void;
     removeMessages: (chatId: string, messageIds: string[]) => void;
+    replaceMessage: (chatId: string, oldMessageId: string, newMessage: MessageEntry) => void;
     unsendMessages: (chatId: string, messageIds: string[], senderUserId?: string) => void;
     setActiveChatId: (chatId: string | null) => void;
     updateInputText: (chatId: string, text: string) => void;
@@ -728,6 +729,23 @@ const chatActions = {
                 }
             });
             chat.messageIds.set(filtered.map((m: MessageEntry) => m.message_id));
+        });
+    },
+
+    replaceMessage(chatId: string, oldMessageId: string, newMessage: MessageEntry) {
+        batch(() => {
+            const chat = ensureChatInternal(chatId);
+            const currentMessages = chat.messages.peek();
+
+            // Remove old message and add new in single atomic operation
+            const filtered = currentMessages.filter((m: MessageEntry) => m.message_id !== oldMessageId);
+            const updated = [newMessage, ...filtered].slice(0, 1000);
+
+            // Atomic state update - single render, no flicker
+            chat.messages.set(updated);
+            chat.messagesById[oldMessageId]?.delete();
+            chat.messagesById[newMessage.message_id].set(newMessage);
+            chat.messageIds.set(updated.map((m: MessageEntry) => m.message_id));
         });
     },
 
