@@ -270,8 +270,8 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
 
         // Only show "Unsend" for messages that exist on the server (not temp IDs)
         // and have been sent/delivered/read (not pending/error)
-        if (message.is_from_me && !messageId.startsWith('temp_') && 
-            message.status !== 'pending' && message.status !== 'error' && 
+        if (message.is_from_me && !messageId.startsWith('temp_') &&
+            message.status !== 'pending' && message.status !== 'error' &&
             status !== 'read' && message.message_type !== 'unsent') {
             controllers.unshift({
                 id: 'unsend',
@@ -430,26 +430,21 @@ const ChatContentContainer = React.memo(({
                 }
             });
 
-            // Check eligibility on mount (Only if it's the first time or was previously ineligible)
+            // Check eligibility on mount/focus to catch any status changes
             if (recipient_id) {
                 const chat$ = $chatMessagesState.chats[chat_id];
-                const chat = chat$.peek();
-                if (!chat || !chat.isEligible) {
-                    ChatTransport.checkEligibility({ recipient_id: recipient_id as string })
-                        .then(res => {
-                            batch(() => {
-                                if (chat$.peek()) {
-                                    chat$.isEligible.set(res.allowed);
-                                    if (!res.allowed) {
-                                        chat$.eligibilityReason.set(res.reason || null);
-                                    }
-                                }
-                            });
-                        })
-                        .catch(err => {
-                            console.error('[Chat] Eligibility check failed', err);
+                ChatTransport.checkEligibility({ recipient_id: recipient_id as string })
+                    .then(res => {
+                        batch(() => {
+                            if (chat$.peek()) {
+                                chat$.isEligible.set(res.allowed);
+                                chat$.eligibilityReason.set(!res.allowed ? (res.reason || null) : null);
+                            }
                         });
-                }
+                    })
+                    .catch(err => {
+                        console.error('[Chat] Eligibility check failed', err);
+                    });
             }
 
             return () => {
@@ -612,7 +607,7 @@ const ChatContentContainer = React.memo(({
         // Check eligibility before proceeding
         if (!chatData.isEligible) {
             const reason = chatData.eligibilityReason;
-            
+
             if (reason === 'not_in_contacts') {
                 showControllersModal([
                     {
@@ -714,7 +709,7 @@ const ChatContentContainer = React.memo(({
         // Check eligibility before proceeding
         if (!chatData.isEligible) {
             const reason = chatData.eligibilityReason;
-            
+
             if (reason === 'not_in_contacts') {
                 showControllersModal([
                     {

@@ -22,6 +22,9 @@ export default function ChatInputBar({
     const [inputHeight, setInputHeight] = useState(48);
 
     const text = useValue(() => $chatMessagesState.chats[chatId]?.inputText.get() || '');
+    // We still keep the value here in case we want to use it for non-color logic later, 
+    // but we won't use it for any styling as requested.
+    const isEligible = useValue(() => $chatMessagesState.chats[chatId]?.isEligible.get() ?? true);
 
     const onChangeText = (val: string) => {
         $chatMessagesState.updateInputText(chatId, val);
