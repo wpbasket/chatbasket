@@ -416,21 +416,19 @@ const ChatContentContainer = React.memo(({
             const currentChat = $chatMessagesState.chats[chat_id];
             currentChat.recipientId.set(recipient_id ?? null);
 
-            const chatData = currentChat.peek();
-            const hasMessages = chatData.messages.length > 0;
-
-            // OPTIMIZATION: Only load if we have no messages yet, or if there's a significant unread count
             const unreadCount = $chatListState.chatsById[chat_id]?.unread_count.peek() ?? 0;
-            if (!hasMessages || unreadCount > 0) {
-                void loadMessages(chat_id).then(() => {
-                    if (unreadCount > 0) {
-                        // Delay slightly to ensure UI has rendered new messages before marking read
-                        setTimeout(() => {
-                            $chatMessagesState.debouncedMarkRead(chat_id);
-                        }, 500);
-                    }
-                });
-            }
+
+            // Always reload from local DB on chat entry — messages can arrive
+            // (and be unsent) while the user is on the Home Screen, so the
+            // in-memory state may be stale / incomplete.
+            void loadMessages(chat_id).then(() => {
+                if (unreadCount > 0) {
+                    // Delay slightly to ensure UI has rendered new messages before marking read
+                    setTimeout(() => {
+                        $chatMessagesState.debouncedMarkRead(chat_id);
+                    }, 500);
+                }
+            });
 
             // Check eligibility on mount (Only if it's the first time or was previously ineligible)
             if (recipient_id) {
