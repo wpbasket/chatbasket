@@ -772,6 +772,12 @@ export async function cleanupOrphanedMedia(): Promise<void> {
                 validMessageIds.add(tempKey);
             }
 
+            // Race condition fix: Protect message_id (used as tempId) for pending/sending messages
+            // This prevents cleanup from deleting blobs that are being uploaded but not yet in DB
+            if (entry.status === 'pending' || entry.status === 'sending') {
+                validMessageIds.add(entry.message_id);
+            }
+
             if (entry.message_type === 'unsent' && (entry.file_id || entry.local_uri)) {
                 ids.push(entry.message_id);
             }

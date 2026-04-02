@@ -564,7 +564,10 @@ export async function cleanupOrphanedMedia(): Promise<void> {
     // NEW: Clean up orphaned files in chatFiles/ directory
     try {
         const activeRows = await d.getAllAsync<{ local_uri: string }>(
-            `SELECT local_uri FROM messages WHERE local_uri IS NOT NULL`, []
+            `SELECT local_uri FROM messages
+             WHERE local_uri IS NOT NULL
+             AND status NOT IN ('pending', 'sending')`,
+            []
         );
         cleanupOrphanedFiles(activeRows.map(r => r.local_uri));
     } catch (err) {
