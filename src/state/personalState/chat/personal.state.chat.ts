@@ -10,6 +10,7 @@ import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
 import { normalizeChatEntries, normalizeChatEntry } from '@/lib/storage/personalStorage/chat/chat.storage.normalize';
 
+let isSyncingPending = false;
 /**
  * Auto-ACK incoming messages (Recipient ACK) AND outgoing syncs (Sender ACK).
  * Phase D: This is fire-and-forget — persistence happens BEFORE this is called.
@@ -874,6 +875,8 @@ const chatActions = {
      * Fetch all messages that arrived while offline/disconnected.
      */
     async syncPendingMessages() {
+        if (isSyncingPending) return; // Concurrency guard: block duplicate in-flight calls
+        isSyncingPending = true;
         console.log('[ChatState] syncPendingMessages: START');
         try {
             const response = await ChatTransport.getPendingMessages({ limit: 50 });
@@ -1007,6 +1010,8 @@ const chatActions = {
             console.log('[ChatState] syncPendingMessages: DONE');
         } catch (err) {
             console.error('[ChatState] syncPendingMessages: FAILED', err);
+        } finally {
+            isSyncingPending = false;
         }
     },
     debouncedMarkRead(chatId: string) {
