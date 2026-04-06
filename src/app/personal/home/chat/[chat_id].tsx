@@ -72,7 +72,7 @@ const PersonalChatScreen = React.memo(() => {
                                     <Memo>
                                         {() => (
                                             <PrivacyAvatar
-                                                uri={$chatListState.chatsById[chat_id]?.avatar_url.get()}
+                                                uri={$chatListState.chatsById[chat_id]?.is_contactable.get() !== false ? $chatListState.chatsById[chat_id]?.avatar_url.get() : null}
                                                 name={displayName}
                                                 size={50}
                                                 colorKey={recipient_id}

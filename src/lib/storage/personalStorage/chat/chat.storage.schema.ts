@@ -62,6 +62,7 @@ export interface LocalChatEntry {
     last_message_id: string | null;
     last_message_is_unsent: boolean;
     updated_at: string;
+    is_contactable: boolean;
 }
 
 // NOTE: OutboxEntry has been removed. Outbox operations use LocalMessageEntry directly.

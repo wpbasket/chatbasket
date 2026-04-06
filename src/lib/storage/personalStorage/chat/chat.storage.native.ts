@@ -46,7 +46,8 @@ export async function initChatStorage(): Promise<void> {
             last_message_sender_id TEXT,
             last_message_id TEXT,
             last_message_is_unsent INTEGER NOT NULL DEFAULT 0,
-            unread_count INTEGER NOT NULL DEFAULT 0
+            unread_count INTEGER NOT NULL DEFAULT 0,
+            is_contactable INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE INDEX IF NOT EXISTS idx_chats_activity
@@ -182,6 +183,7 @@ function chatBindings(chat: ChatEntry): any[] {
         chat.last_message_id,
         chat.last_message_is_unsent ? 1 : 0,
         chat.unread_count,
+        chat.is_contactable !== false ? 1 : 0,
     ];
 }
 
@@ -192,8 +194,8 @@ async function upsertChatRow(d: SQLite.SQLiteDatabase, chat: ChatEntry): Promise
             created_at, updated_at, other_user_last_read_at, other_user_last_delivered_at,
             last_message_content, last_message_created_at, last_message_type,
             last_message_is_from_me, last_message_status, last_message_sender_id,
-            last_message_id, last_message_is_unsent, unread_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            last_message_id, last_message_is_unsent, unread_count, is_contactable
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         chatBindings(chat)
     );
 }
@@ -605,6 +607,7 @@ function sqliteChatRowToLocal(row: Record<string, any>): LocalChatEntry {
         last_message_id: row.last_message_id || null,
         last_message_is_unsent: row.last_message_is_unsent === 1,
         unread_count: Number(row.unread_count) || 0,
+        is_contactable: row.is_contactable !== 0,
     } as LocalChatEntry;
 }
 

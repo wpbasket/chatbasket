@@ -106,6 +106,7 @@ export function normalizeChatEntry(input: Partial<ChatEntry> | null | undefined)
         last_message_id: lastMessageId,
         last_message_is_unsent: lastMessageIsUnsent,
         unread_count: asUnreadCount(input.unread_count),
+        is_contactable: input.is_contactable !== false, // default true; only false when explicitly set
     };
 
     return normalized;

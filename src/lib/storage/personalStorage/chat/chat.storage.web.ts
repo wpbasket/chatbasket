@@ -213,7 +213,7 @@ function withMessageLock<T>(messageId: string, fn: () => Promise<T>): Promise<T>
     const prev = _messageLocks.get(messageId) ?? Promise.resolve();
     const next = prev.then(fn, fn); // run fn after prev settles (success or failure)
     // Store the void-projected chain so the next caller waits for us
-    const tail = next.then(() => {}, () => {});
+    const tail = next.then(() => { }, () => { });
     _messageLocks.set(messageId, tail);
     // Clean up the map entry once the chain is idle (prevents unbounded growth)
     tail.then(() => {
@@ -308,6 +308,7 @@ function chatToLocal(chat: ChatEntry): LocalChatEntry {
         last_message_sender_id: chat.last_message_sender_id ?? null,
         last_message_id: chat.last_message_id ?? null,
         last_message_is_unsent: !!chat.last_message_is_unsent,
+        is_contactable: chat.is_contactable !== false,
     };
 }
 

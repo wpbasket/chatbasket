@@ -31,6 +31,9 @@ export interface ChatEntry {
     last_message_id: string | null;          // Added Phase 14
     last_message_is_unsent?: boolean;        // Added Phase 5.3
     unread_count: number;
+
+    // Local-only field (not from server) — set by client during sync
+    is_contactable?: boolean;                // false when server omits this chat (blocked/private)
 }
 
 /**

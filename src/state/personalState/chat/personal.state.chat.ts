@@ -170,18 +170,47 @@ const state$ = observable({
     },
     async setChats(entries: ChatEntry[]) {
         const normalized = normalizeChatEntries(entries);
+        // Mark all server-returned chats as contactable
+        for (const chat of normalized) {
+            chat.is_contactable = true;
+        }
+
         try {
-            await ChatStorage.replaceChats(normalized);
+            await ChatStorage.insertChats(normalized);
         } catch (err) {
-            console.warn('[ChatListState] replaceChats failed; continuing with in-memory set', err);
+            console.warn('[ChatListState] insertChats failed; continuing with in-memory set', err);
         }
 
         batch(() => {
-            state$.chatsById.set(toChatMap(normalized));
+            const existing = state$.chatsById.peek();
+            const incoming = toChatMap(normalized);
+
+            // Mark preserved chats (local-only, not in server response) as non-contactable
+            const merged: Record<string, ChatEntry> = {};
+            for (const [id, chat] of Object.entries(existing)) {
+                if (incoming[id]) continue; // will be overwritten by incoming
+                if (chat.is_contactable !== false) {
+                    merged[id] = { ...chat, is_contactable: false };
+                } else {
+                    merged[id] = chat; // already marked
+                }
+            }
+
+            state$.chatsById.set({ ...merged, ...incoming });
             state$.error.set(null);
             state$.hydratingFromStorage.set(false);
             state$.hydratedFromStorage.set(true);
         });
+
+        // Persist is_contactable: false for preserved chats to storage
+        const existing = state$.chatsById.peek();
+        const incoming = toChatMap(normalized);
+        const preservedChats = Object.values(existing).filter(c => !incoming[c.chat_id] && c.is_contactable === false);
+        if (preservedChats.length > 0) {
+            ChatStorage.insertChats(preservedChats).catch(err =>
+                console.warn('[ChatListState] Failed to persist is_contactable flags', err)
+            );
+        }
 
         // Proactively fetch all pending messages and ACK them
         chatActions.syncPendingMessages().catch(err =>

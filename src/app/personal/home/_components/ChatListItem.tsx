@@ -74,7 +74,7 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
         >
             {/* Avatar */}
             <PrivacyAvatar
-                uri={chat.avatar_url}
+                uri={chat.is_contactable !== false ? chat.avatar_url : null}
                 name={displayName}
                 size={50}
                 colorKey={chat.other_user_id}
