@@ -2,6 +2,8 @@ import {
   apiClient,
   type AuthResponse,
   type AuthVerificationPayload,
+  type ForgotPasswordPayload,
+  type ForgotPasswordVerifyPayload,
   type LoginPayload,
   type ResendOTPPayload,
   type SessionResponse,
@@ -53,6 +55,24 @@ async function resendOTP(payload: ResendOTPPayload): Promise<AuthResponse> {
   return apiClient.post<AuthResponse>('/auth/resend-otp', payload);
 }
 
+/**
+ * Initiates forgot password flow by sending OTP to email
+ * @param payload email: string
+ * @returns status: boolean; message: string (updateId)
+ */
+async function forgotPassword(payload: ForgotPasswordPayload): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/forgot-password', payload);
+}
+
+/**
+ * Verifies OTP and sets new password
+ * @param payload updateId: string; otp: string; newPassword: string
+ * @returns status: boolean; message: string
+ */
+async function verifyForgotPassword(payload: ForgotPasswordVerifyPayload): Promise<AuthResponse> {
+  return apiClient.post<AuthResponse>('/auth/forgot-password-verify', payload);
+}
+
 
 export const authApi = {
   signup,
@@ -60,4 +80,6 @@ export const authApi = {
   AuthVerificationSignup,
   AuthVerificationLogin,
   resendOTP,
+  forgotPassword,
+  verifyForgotPassword,
 };

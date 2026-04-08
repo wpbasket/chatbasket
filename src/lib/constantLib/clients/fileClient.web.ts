@@ -4,7 +4,7 @@ import { fetch, FetchRequestInit } from 'expo/fetch';
 import { Url } from '../constants/constants';
 import { ApiError } from '../models/model.api';
 
-const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/signup-verification', '/auth/login-verification', '/auth/resend-otp'];
+const AUTH_WHITELIST = ['/auth/signup', '/auth/login', '/auth/signup-verification', '/auth/login-verification', '/auth/resend-otp', '/auth/forgot-password', '/auth/forgot-password-verify'];
 
 export class FileUploadClient {
     private baseURL = Url.BASE_API_URL ? `${Url.BASE_API_URL.replace(/\/+$/, '')}/api` : ''

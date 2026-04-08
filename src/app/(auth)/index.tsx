@@ -63,7 +63,7 @@ export default function Index() {
             </View>
             {Platform.OS === 'web' && (
               <View style={styles.footer}>
-                <ThemedText color={uniS.theme.colors.lightbackgroundText}>© ChatBasket 2025, All rights reserved.</ThemedText>
+                <ThemedText color={uniS.theme.colors.lightbackgroundText}>© ChatBasket 2026, All rights reserved.</ThemedText>
               </View>
             )}
           </View>

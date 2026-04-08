@@ -40,3 +40,13 @@ export interface ResendOTPPayload {
     type: 'signup' | 'login';
 }
 
+export interface ForgotPasswordPayload {
+    email: string;
+}
+
+export interface ForgotPasswordVerifyPayload {
+    updateId: string;
+    otp: string;
+    newPassword: string;
+}
+

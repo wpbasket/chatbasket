@@ -3,11 +3,12 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ApiError } from '@/lib/constantLib';
 import { authApi } from '@/lib/constantLib/authApi/api.auth';
 import { authState } from '@/state/auth/state.auth';
+import { forgotPassword$ } from '@/state/auth/state.auth.forgotPassword';
 import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup';
-import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
+import { runWithLoading, showAlert, showControllersModal, hideModal } from '@/utils/commonUtils/util.modal';
+import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useValue } from '@legendapp/state/react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
@@ -25,6 +26,9 @@ export default function Auth() {
   const isPasswordValid = useValue(loginOrSignup$.isPasswordValid)
   const isLoginPasswordValid = useValue(loginOrSignup$.isLoginPasswordValid)
 
+  // Reusable cooldown ticker for forgot password
+  useResendCooldown(forgotPassword$);
+
 
 
 
@@ -41,7 +45,6 @@ export default function Auth() {
       }
     };
   }, []);
-
 
   const handleLogin = async () => {
     if (!isLoginValid) {
@@ -124,6 +127,248 @@ export default function Auth() {
 
   }
 
+  const handleForgotPassword = async (event: any) => {
+    forgotPassword$.reset();
+
+    const openEmailInputModal = async () => {
+      const EmailInput = () => {
+        const currentEmail = useValue(forgotPassword$.email);
+        const valid = useValue(forgotPassword$.isEmailValid);
+        const submitted = useValue(forgotPassword$.submitted);
+
+        return (
+          <TextInput
+            inputMode='email'
+            placeholder="Enter your email"
+            value={currentEmail ?? ''}
+            onChangeText={(t) => forgotPassword$.email.set(t)}
+            textContentType='emailAddress'
+            placeholderTextColor="gray"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.input, !valid && submitted && styles.inputError]}
+          />
+        );
+      };
+
+      const ActionButton = () => (
+        <View style={{ alignItems: 'flex-end' }}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.submit,
+              { opacity: pressed ? 0.1 : 1 }
+            ]}
+            onPress={async () => {
+              forgotPassword$.submitted.set(true);
+              const errors: string[] = [];
+
+              if (!forgotPassword$.isEmailValid.get()) {
+                errors.push('Enter a valid email address');
+              }
+
+              if (errors.length > 0) {
+                showAlert(errors.join('\n'));
+                return;
+              }
+
+              try {
+                const r = await runWithLoading(
+                  () => authApi.forgotPassword({
+                    email: forgotPassword$.email.get() ?? ''
+                  }),
+                  { message: 'Sending OTP...' }
+                );
+
+                if (r?.status) {
+                  forgotPassword$.updateId.set(r.message);
+                  forgotPassword$.resendAttempts.set(0);
+                  forgotPassword$.resendExpiryAt.set(Date.now() + 120_000);
+                  forgotPassword$.submitted.set(false);
+                  hideModal();
+
+                  await openOTPVerificationModal(forgotPassword$.email.get() ?? '');
+                }
+              } catch (err) {
+                if (err instanceof ApiError) {
+                  if (err.type === 'conflict') showAlert('Email not found');
+                  else showAlert('Something went wrong try again');
+                } else {
+                  showAlert('Unexpected error occurred try again');
+                }
+              }
+            }}
+          >
+            <ThemedText style={styles.submitText}>Next</ThemedText>
+          </Pressable>
+        </View>
+      );
+
+      await showControllersModal([
+        { id: 'emailInput', content: <EmailInput /> },
+        { id: 'actBtn', content: <ActionButton /> },
+      ], { 
+        title: 'Forgot Password', 
+        showConfirmButton: false, 
+        closeOnBackgroundTap: false,
+        onCancel: () => { forgotPassword$.reset(); }
+      });
+    };
+
+    const openOTPVerificationModal = async (emailToVerify: string) => {
+      const VerifyInfo = () => (
+        <ThemedText>
+          Enter OTP sent to <ThemedText style={{ color: styles.forgotPassword.color }}>{emailToVerify}</ThemedText>
+        </ThemedText>
+      );
+
+      const Inputs = () => {
+        const otp = useValue(forgotPassword$.otp);
+        const password = useValue(forgotPassword$.newPassword);
+        const submitted = useValue(forgotPassword$.submitted);
+        const validOtp = useValue(forgotPassword$.isOtpValid);
+        const validPass = useValue(forgotPassword$.isPasswordValid);
+
+        return (
+          <View style={{ gap: 10 }}>
+            <TextInput
+              placeholder="6 digit OTP"
+              inputMode='numeric'
+              value={otp ?? ''}
+              onChangeText={(t) => forgotPassword$.otp.set(t.replace(/[^0-9]/g, ''))}
+              placeholderTextColor="gray"
+              keyboardType="numeric"
+              maxLength={6}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType='oneTimeCode'
+              style={[styles.input, submitted && !validOtp && styles.inputError]}
+            />
+            <TextInput
+              placeholder="New 6 digit PIN"
+              inputMode='numeric'
+              value={password ?? ''}
+              onChangeText={(t) => forgotPassword$.newPassword.set(t.replace(/[^0-9]/g, ''))}
+              secureTextEntry={true}
+              placeholderTextColor="gray"
+              keyboardType="numeric"
+              maxLength={6}
+              textContentType="newPassword"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.input, submitted && !validPass && styles.inputError]}
+            />
+          </View>
+        );
+      };
+
+      const ResendButton = () => {
+        const attempts = useValue(forgotPassword$.resendAttempts);
+        const cooldown = useValue(forgotPassword$.resendCooldown);
+        return (
+          <Pressable
+            disabled={cooldown > 0 || attempts >= 3}
+            onPress={async () => {
+              forgotPassword$.otp.set(null);
+              const currAttempts = forgotPassword$.resendAttempts.get();
+              if (forgotPassword$.resendCooldown.get() > 0 || currAttempts >= 3) return;
+
+              try {
+                const r = await authApi.forgotPassword({
+                  email: forgotPassword$.email.get() ?? ''
+                });
+                if (r?.status) {
+                  forgotPassword$.updateId.set(r.message);
+                  forgotPassword$.resendAttempts.set(currAttempts + 1);
+                  forgotPassword$.resendExpiryAt.set(Date.now() + 120_000);
+                }
+              } catch (err) {
+                showAlert('Something went wrong try again');
+              }
+            }}
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+          >
+            <ThemedText type="small" style={{ opacity: cooldown > 0 ? 0.5 : 1 }}>
+              {attempts >= 3 ? 'Limit reached' : cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend OTP'}
+            </ThemedText>
+          </Pressable>
+        );
+      };
+
+      const ActionButton = () => (
+        <View style={{ alignItems: 'flex-end' }}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.submit,
+              { opacity: pressed ? 0.1 : 1 }
+            ]}
+            onPress={async () => {
+              forgotPassword$.submitted.set(true);
+              const errors: string[] = [];
+
+              const otp = forgotPassword$.otp.get() || '';
+              const pass = forgotPassword$.newPassword.get() || '';
+
+              if (otp.length !== 6) {
+                errors.push('Enter valid 6-digit OTP');
+              }
+              if (pass.length !== 6) {
+                errors.push('Enter valid 6-digit PIN');
+              }
+
+              if (errors.length > 0) {
+                showAlert(errors.join('\n'));
+                return;
+              }
+
+              try {
+                const r = await runWithLoading(
+                  () => authApi.verifyForgotPassword({
+                    updateId: forgotPassword$.updateId.get() ?? '',
+                    otp: otp,
+                    newPassword: pass
+                  }),
+                  { message: 'Verifying...' }
+                );
+                if (r?.status) {
+                  hideModal();
+                  forgotPassword$.reset();
+                  showAlert('Password updated successfully');
+                }
+              } catch (err) {
+                if (err instanceof ApiError) {
+                  if (err.type === 'otp_expired') showAlert('OTP expired. Please request a new one.');
+                  else if (err.type === 'invalid_otp') showAlert('Invalid code. Please try again.');
+                  else if (err.type === 'flow_error') showAlert('Session timeout. Restart the process.');
+                  else if (err.type === 'unauthorized') showAlert('Invalid input.');
+                  else showAlert('Something went wrong try again');
+                } else {
+                  showAlert('Unexpected error occurred try again');
+                }
+              }
+            }}
+          >
+            <ThemedText style={styles.submitText}>Verify</ThemedText>
+          </Pressable>
+        </View>
+      );
+
+      await showControllersModal([
+        { id: 'info', content: <VerifyInfo /> },
+        { id: 'inputs', content: <Inputs /> },
+        { id: 'resend', content: <ResendButton /> },
+        { id: 'act', content: <ActionButton /> }
+      ], { 
+        title: 'Reset Password', 
+        showConfirmButton: false, 
+        closeOnBackgroundTap: false,
+        onCancel: () => { forgotPassword$.reset(); }
+      });
+    };
+
+    await openEmailInputModal();
+  };
+
 
 
   if (method == 'login') {
@@ -173,7 +418,9 @@ export default function Auth() {
               <ThemedText style={styles.submitText} selectable={false}>Submit</ThemedText>
             </Pressable>
 
-            <ThemedText type='link' style={styles.forgotPassword}>Forgot Password?</ThemedText>
+            <Pressable onPress={handleForgotPassword}>
+              <ThemedText type='link' style={styles.forgotPassword}>Forgot Password?</ThemedText>
+            </Pressable>
           </View>
         </View>
       </ThemedView>
