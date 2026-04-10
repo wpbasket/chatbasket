@@ -48,6 +48,7 @@ class WSClientManager {
     private reconnectAttempts = 0;
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private intentionalClose = false;
+    private _networkOnline = true;
     private _state: WSConnectionState = 'disconnected';
 
     /** Map of correlation ID -> Promise callbacks */
@@ -111,6 +112,36 @@ class WSClientManager {
     }
 
     /**
+     * Notify the client of changes in device connectivity.
+     * Force-closes the socket when offline to prevent "ghost connections".
+     */
+    setNetworkOnline(isOnline: boolean): void {
+        this._networkOnline = isOnline;
+
+        if (!isOnline) {
+            // Kill the socket immediately when offline. 
+            // We don't set intentionalClose=true because we WANT to reconnect when back online.
+            if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
+            }
+            if (this.ws) {
+                try {
+                    this.ws.close(4001, 'network_offline');
+                } catch (err) {
+                    // Already closed
+                }
+            }
+        } else {
+            // Re-connect when back online
+            if (this._state === 'reconnecting' || this._state === 'disconnected') {
+                this.reconnectAttempts = 0; // Reset backoff on network recovery
+                this.connect();
+            }
+        }
+    }
+
+    /**
      * Subscribe to all WebSocket events.
      * Returns an unsubscribe function.
      */
@@ -132,9 +163,6 @@ class WSClientManager {
         };
     }
 
-    /**
-     * Check if the WebSocket is currently connected.
-     */
     get isConnected(): boolean {
         return this.ws?.readyState === WebSocket.OPEN;
     }
@@ -336,6 +364,10 @@ class WSClientManager {
     }
 
     private scheduleReconnect(): void {
+        // Don't waste attempts when the network is known to be offline.
+        // setNetworkOnline(true) will call connect() when connectivity returns.
+        if (!this._networkOnline) return;
+
         if (this.reconnectAttempts >= WS_RECONNECT_MAX_ATTEMPTS) {
             this._state = 'disconnected';
             return;

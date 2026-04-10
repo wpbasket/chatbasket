@@ -5,6 +5,7 @@ import { PersonalStorageGetUser } from './personalStorage/personal.storage.user'
 import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia } from './personalStorage/chat/chat.storage';
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
 import { outboxQueue } from '@/lib/personalLib/chatApi/outbox.queue';
+import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
 import { authState } from '@/state/auth/state.auth';
 
 /**
@@ -31,8 +32,17 @@ export const initializeAppStorage = async (): Promise<void> => {
                 ]))
             ]);
 
-            // Phase 4e: Start connection watcher + drain outbox queue
+            // Phase 4e: Start connection watcher + sync WebSocket state + drain outbox queue
             connectionWatcher.start();
+            
+            // Link WebSocket lifecycle to network connectivity
+            connectionWatcher.subscribe((isOnline) => {
+                wsClient.setNetworkOnline(isOnline);
+            });
+            // Handle initial state
+            wsClient.setNetworkOnline(connectionWatcher.isOnline);
+
+            // Drain any pending outbox messages from previous session
             outboxQueue.processQueue();
 
             // Phase D: Purge soft-deleted rows 30s after network is confirmed online.

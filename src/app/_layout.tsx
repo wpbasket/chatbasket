@@ -6,7 +6,7 @@ import { checkInitialNotification, registerTokenWithBackend, setupNotificationLi
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { initUserPosts } from '@/state/publicState/public.state.initUserPosts';
-import { initializeGlobalNetworkTracking } from '@/state/tools/state.network';
+import { initializeGlobalNetworkTracking, network$ } from '@/state/tools/state.network';
 import { Logger } from '@/utils/personalUtils/logger/logger';
 import Entypo from '@expo/vector-icons/Entypo';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
@@ -40,6 +40,7 @@ export default function RootLayout() {
   const lock = useValue(authState.isLoggedIn);
   const sentOtp = useValue(authState.isSentOtp);
   const mode = useValue(appMode$.mode);
+  const networkLoaded = useValue(network$.isLoaded);
   const segments = useSegments();
 
   // Helper to process deep links (memoized to avoid recreation on every render)
@@ -150,9 +151,9 @@ export default function RootLayout() {
       }
     }, [loaded]);
 
-    // UPDATED: Render nothing until BOTH fonts AND auth state are ready.
+    // UPDATED: Render nothing until fonts, auth, AND first network check are ready.
     // This prevents the flicker by keeping the splash screen visible.
-    if (!loaded || !authLoaded) {
+    if (!loaded || !authLoaded || !networkLoaded) {
       return null;
     }
   }
@@ -175,8 +176,8 @@ export default function RootLayout() {
       initUserPosts();
     }, [loaded]);
 
-    // NEW: Also wait for auth to be loaded on web before rendering the UI.
-    if (!authLoaded) {
+    // NEW: Also wait for auth and network to be loaded on web before rendering the UI.
+    if (!authLoaded || !networkLoaded) {
       return null;
     }
   }

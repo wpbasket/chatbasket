@@ -617,9 +617,10 @@ const chatActions = {
                 return;
             }
 
-            // GRACE PERIOD: Add 10 seconds (increased from 5s) to handle clock drift between client and server.
-            const adjustedTargetTime = targetTime + 10000;
-            console.log(`[ChatState] markMessagesDeliveredUpTo: targetTime=${targetTime} (+10s grace=${adjustedTargetTime})`);
+            // GRACE PERIOD REMOVED: Match messages strictly against the server-provided timestamp.
+            // Previously included + 10000ms offset which caused false positives for subsequent messages.
+            const adjustedTargetTime = targetTime;
+            console.log(`[ChatState] markMessagesDeliveredUpTo: targetTime=${targetTime} (Grace period removed)`);
 
             const currentMessages = chat.messages.peek();
             let count = 0;
@@ -682,8 +683,9 @@ const chatActions = {
                 return;
             }
 
-            // GRACE PERIOD: Add 10 seconds for clock drift
-            const adjustedTargetTime = targetTime + 10000;
+            // GRACE PERIOD REMOVED: Match messages strictly against the server-provided timestamp.
+            // Previously included + 10000ms offset which caused false positives for subsequent messages.
+            const adjustedTargetTime = targetTime;
 
             const currentMessages = chat.messages.peek();
             let count = 0;

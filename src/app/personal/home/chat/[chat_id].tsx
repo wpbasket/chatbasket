@@ -136,12 +136,12 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
 
         // SOURCE OF TRUTH: Compare message time against chat-level persistent delivery/read timestamps
         const readTime = parseDate(otherUserLastReadAt);
-        if (!isNaN(readTime) && msgTime <= readTime + 10000) {
+        if (!isNaN(readTime) && msgTime <= readTime) {
             status = 'read';
             delivered = true;
         } else {
             const deliveredTime = parseDate(otherUserLastDeliveredAt);
-            if (!isNaN(deliveredTime) && msgTime <= deliveredTime + 10000) {
+            if (!isNaN(deliveredTime) && msgTime <= deliveredTime) {
                 delivered = true;
             }
         }
@@ -416,18 +416,15 @@ const ChatContentContainer = React.memo(({
             const currentChat = $chatMessagesState.chats[chat_id];
             currentChat.recipientId.set(recipient_id ?? null);
 
-            const unreadCount = $chatListState.chatsById[chat_id]?.unread_count.peek() ?? 0;
-
             // Always reload from local DB on chat entry — messages can arrive
             // (and be unsent) while the user is on the Home Screen, so the
             // in-memory state may be stale / incomplete.
             void loadMessages(chat_id).then(() => {
-                if (unreadCount > 0) {
-                    // Delay slightly to ensure UI has rendered new messages before marking read
-                    setTimeout(() => {
-                        $chatMessagesState.debouncedMarkRead(chat_id);
-                    }, 500);
-                }
+                // Always mark as read on chat open — the server is the source of truth.
+                // debouncedMarkRead is idempotent, so calling it with nothing to mark is a no-op.
+                setTimeout(() => {
+                    $chatMessagesState.debouncedMarkRead(chat_id);
+                }, 500);
             });
 
             // Check eligibility on mount/focus to catch any status changes

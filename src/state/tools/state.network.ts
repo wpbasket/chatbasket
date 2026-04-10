@@ -5,7 +5,8 @@ import NetInfo from '@react-native-community/netinfo';
 
 
 export const network$ = observable({
-  isConnected: false
+  isConnected: true,
+  isLoaded: false
 });
 
 let isInitialized = false;
@@ -24,7 +25,6 @@ export const testConnectivity = async (): Promise<boolean> => {
       mode: 'no-cors', // Avoid CORS issues
       signal: controller.signal,
     });
-    // console.log("Connectivity test response:", response.ok);
     clearTimeout(timeoutId);
     return true; // If no error thrown, we have connectivity
   } catch (error) {
@@ -34,20 +34,53 @@ export const testConnectivity = async (): Promise<boolean> => {
 
 // Web-specific connectivity tracking
 export const initializeWebConnectivity = () => {
-  // Use browser's native connectivity tracking instead of periodic polling
-  // to avoid Net::ERR_CONNECTION_TIMED_OUT console noise.
-  if (typeof window !== 'undefined' && window.navigator) {
-    network$.isConnected.set(window.navigator.onLine);
+  if (typeof window !== 'undefined') {
 
-    const handleOnline = () => network$.isConnected.set(true);
-    const handleOffline = () => network$.isConnected.set(false);
+    const check = async () => {
+      const result = await testConnectivity();
+      if (result !== network$.isConnected.peek()) {
+        network$.isConnected.set(result);
+      }
+      // Signal that the first thorough check is done
+      if (!network$.isLoaded.peek()) {
+        network$.isLoaded.set(true);
+      }
+    };
+
+    // Dynamic check logic
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNext = () => {
+      if (timerId) clearTimeout(timerId);
+      const delay = network$.isConnected.peek() ? 30000 : 10000;
+      timerId = setTimeout(async () => {
+        await check();
+        scheduleNext();
+      }, delay);
+    };
+
+    const handleOnline = () => {
+      if (timerId) clearTimeout(timerId);
+      network$.isConnected.set(true);
+      check(); // Re-trigger immediate check
+      scheduleNext();
+    };
+    const handleOffline = () => {
+      if (timerId) clearTimeout(timerId);
+      network$.isConnected.set(false);
+      scheduleNext();
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Initial check and start the dynamic loop
+    check();
+    scheduleNext();
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      if (timerId) clearTimeout(timerId);
     };
   }
 
@@ -56,22 +89,15 @@ export const initializeWebConnectivity = () => {
 
 // Native implementation using expo-network
 export const initializeNativeConnectivity = async () => {
-
   // Get initial network state
   const initialState = await NetInfo.fetch();
   network$.isConnected.set((initialState.isInternetReachable && initialState.isConnected) ?? false);
+  network$.isLoaded.set(true); // Native fetch is usually fast enough to call "loaded" immediately
 
   // Listen for network state changes
   NetInfo.addEventListener(state => {
     network$.isConnected.set((state.isInternetReachable && state.isConnected) ?? false);
   });
-
-  // const initialState = await Network.getNetworkStateAsync();
-  // network$.isConnected.set(initialState.isInternetReachable ?? false);
-
-  // Network.addNetworkStateListener((state) => {
-  //   network$.isConnected.set(state.isInternetReachable ?? false);
-  // });
 };
 
 export const initializeGlobalNetworkTracking = async () => {
@@ -84,4 +110,4 @@ export const initializeGlobalNetworkTracking = async () => {
   } else {
     await initializeNativeConnectivity();
   }
-};
+};

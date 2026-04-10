@@ -405,6 +405,14 @@ export function startWSEventBridge(): void {
     // Auto-sync on reconnection
     unsubscribeReconnect = wsClient.onReconnect(() => {
         dbg('[WS Bridge] Reconnected! Triggering sync...');
+        refreshChatsAuthoritatively().then(() => {
+            // If a chat is currently open, mark it as read after syncing.
+            // Catches messages that arrived while we were offline.
+            const activeChatId = $chatMessagesState.activeChatId.peek();
+            if (activeChatId) {
+                $chatMessagesState.debouncedMarkRead(activeChatId);
+            }
+        });
         $syncEngine.fetchAndApply();
         $chatMessagesState.syncPendingMessages();
     });

@@ -122,12 +122,12 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                                 const msgTime = parseDate(chat.last_message_created_at);
                                 const readTime = parseDate(lastReadAt);
 
-                                // GRACE PERIOD: 10s for clock drift
-                                if (!isNaN(readTime) && msgTime <= readTime + 10000) {
+                                // GRACE PERIOD REMOVED: Match messages strictly against server timestamps.
+                                if (!isNaN(readTime) && msgTime <= readTime) {
                                     status = 'read';
                                 } else {
                                     const deliveredTime = parseDate(lastDeliveredAt);
-                                    if (!isNaN(deliveredTime) && msgTime <= deliveredTime + 10000) {
+                                    if (!isNaN(deliveredTime) && msgTime <= deliveredTime ) {
                                         status = 'delivered';
                                     }
                                 }
