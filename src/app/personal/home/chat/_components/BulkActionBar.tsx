@@ -54,10 +54,6 @@ export const BulkActionBar = ({ selectedCount, onUnsend, onDelete, onCancel, sho
 
 const styles = StyleSheet.create((theme, rt) => ({
     container: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
         backgroundColor: theme.colors.card,
         borderTopWidth: 1,
         borderTopColor: theme.colors.border,
@@ -67,7 +63,6 @@ const styles = StyleSheet.create((theme, rt) => ({
         paddingHorizontal: 20,
         paddingVertical: 12,
         paddingBottom: rt.insets.bottom + 12,
-        zIndex: 1000,
     },
     info: {
         flexDirection: 'row',
