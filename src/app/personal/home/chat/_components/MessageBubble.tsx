@@ -606,9 +606,11 @@ const AudioInlinePlayer = memo(({ url, isMe }: { url: string; isMe: boolean }) =
                         <View style={[styles.audioProgressFill, { width: `${progressValue * 100}%` }]} />
                     </View>
                 </View>
-                <ThemedText style={styles.audioTimer}>
-                    {formatDuration(status.currentTime)} / {formatDuration(status.duration)}
-                </ThemedText>
+                {(status.isLoaded && status.duration > 0) && (
+                    <ThemedText style={[styles.audioTimer, isMe ? styles.myTimeText : styles.otherTimeText]}>
+                        {formatDuration(status.currentTime)} / {formatDuration(status.duration)}
+                    </ThemedText>
+                )}
             </View>
         </View>
     );
@@ -630,7 +632,7 @@ const AudioPlaceholder = memo(({ isMe }: { isMe: boolean }) => {
                         <View style={[styles.audioProgressFill, { width: '0%' }]} />
                     </View>
                 </View>
-                <ThemedText style={styles.audioTimer}>{formatDuration(0)} / --</ThemedText>
+                <ThemedText style={[styles.audioTimer, isMe ? styles.myTimeText : styles.otherTimeText]} />
             </View>
         </View>
     );
