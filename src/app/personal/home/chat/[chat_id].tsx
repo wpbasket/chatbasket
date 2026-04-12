@@ -897,23 +897,30 @@ const ChatContentContainer = React.memo(({
             return;
         }
 
-        try {
-            const response = await ChatTransport.deleteMessageForMe({ message_ids: validIds });
-            if (!response?.status) {
-                throw new Error(response?.message || 'Bulk delete failed');
+        const confirmed = await showConfirmDialog(
+            `Are you sure you want to delete ${validIds.length} message${validIds.length > 1 ? 's' : ''} for you?`,
+            { confirmText: 'Delete', cancelText: 'Cancel', confirmVariant: 'destructive' }
+        );
+
+        if (confirmed) {
+            try {
+                const response = await ChatTransport.deleteMessageForMe({ message_ids: validIds });
+                if (!response?.status) {
+                    throw new Error(response?.message || 'Bulk delete failed');
+                }
+
+                $chatMessagesState.removeMessages(chat_id, validIds);
+                $chatListState.clearPreviewIfLastMessage(chat_id, validIds);
+                $chatMessagesState.toggleSelectMode(chat_id, false);
+                $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
+
+                // Phase D: Mark as soft-deleted in local storage so they won't reappear on next load
+                Promise.all(validIds.map(id => ChatStorage.deleteMessage(id)))
+                    .catch(err => console.warn('[UI] Storage bulk soft-delete failed', err));
+            } catch (err) {
+                console.error('[UI] Bulk Delete failed', err);
+                $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Could not delete selected messages.', { name: recipient_name }));
             }
-
-            $chatMessagesState.removeMessages(chat_id, validIds);
-            $chatListState.clearPreviewIfLastMessage(chat_id, validIds);
-            $chatMessagesState.toggleSelectMode(chat_id, false);
-            $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
-
-            // Phase D: Mark as soft-deleted in local storage so they won't reappear on next load
-            Promise.all(validIds.map(id => ChatStorage.deleteMessage(id)))
-                .catch(err => console.warn('[UI] Storage bulk soft-delete failed', err));
-        } catch (err) {
-            console.error('[UI] Bulk Delete failed', err);
-            $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Could not delete selected messages.', { name: recipient_name }));
         }
     }, [chat_id, recipient_name]);
 

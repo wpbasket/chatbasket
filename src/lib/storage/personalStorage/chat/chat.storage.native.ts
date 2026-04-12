@@ -127,7 +127,7 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             message.recipient_id,
             message.content || null,
             message.message_type,
-            message.status || 'pending',
+            message.status || 'sent',
             message.is_from_me ? 1 : 0,
             message.delivered_to_recipient ? 1 : 0,
             (message as any).delivered_to_recipient_primary ? 1 : 0,

@@ -175,7 +175,7 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
         recipient_id: message.recipient_id,
         content: message.content || null,
         message_type: message.message_type as any,
-        status: (message.status || 'pending') as any,
+        status: (message.status || 'sent') as any,
         is_from_me: !!message.is_from_me,
         delivered_to_recipient: !!message.delivered_to_recipient,
         delivered_to_recipient_primary: !!(message as any).delivered_to_recipient_primary,

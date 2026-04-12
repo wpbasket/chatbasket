@@ -928,6 +928,16 @@ const chatActions = {
             }
             const messagesToPersist = response.messages.filter(m => !allDeletedIds.has(m.message_id));
 
+            // Normalize status: server MessageResponse has no 'status' field.
+            // Without this, the storage layer defaults undefined → 'pending',
+            // which hides "Delete for Me" in the UI. These are server-confirmed
+            // messages, so they are at minimum 'sent'.
+            for (const m of messagesToPersist) {
+                if (!m.status) {
+                    m.status = 'sent';
+                }
+            }
+
             // Phase D: Persist non-deleted messages to local storage BEFORE any ACK (Rule 1)
             if (messagesToPersist.length > 0) {
                 await ChatStorage.insertMessages(messagesToPersist);
