@@ -14,6 +14,21 @@ function getDb(): SQLite.SQLiteDatabase {
     return db;
 }
 
+/**
+ * Simple promise-based mutex to serialize all transactional writes.
+ * Prevents "cannot start a transaction within a transaction" errors
+ * when multiple async callers (persistChat, insertMessages, etc.)
+ * fire concurrently on the single shared database connection.
+ */
+let _txQueue: Promise<void> = Promise.resolve();
+function withTxMutex<T>(fn: () => Promise<T>): Promise<T> {
+    const result = _txQueue.then(fn, fn);
+    // Update the queue tail — swallow rejections so one failure
+    // doesn't block subsequent operations.
+    _txQueue = result.then(() => {}, () => {});
+    return result;
+}
+
 export async function initChatStorage(): Promise<void> {
     console.log('[ChatStorage:Native] Initializing SQLite database');
     db = await SQLite.openDatabaseAsync(DB_NAME);
@@ -155,11 +170,13 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
 }
 
 export async function insertMessages(messages: Array<MessageEntry & { tempId?: string; localUri?: string }>): Promise<void> {
-    const d = getDb();
-    await d.withTransactionAsync(async () => {
-        for (const msg of messages) {
-            await insertMessage(msg);
-        }
+    await withTxMutex(async () => {
+        const d = getDb();
+        await d.withTransactionAsync(async () => {
+            for (const msg of messages) {
+                await insertMessage(msg);
+            }
+        });
     });
 }
 
@@ -203,22 +220,26 @@ async function upsertChatRow(d: SQLite.SQLiteDatabase, chat: ChatEntry): Promise
 export async function insertChats(chats: ChatEntry[]): Promise<void> {
     const normalized = normalizeChatEntries(chats);
     if (normalized.length === 0) return;
-    const d = getDb();
-    await d.withTransactionAsync(async () => {
-        for (const chat of normalized) {
-            await upsertChatRow(d, chat);
-        }
+    await withTxMutex(async () => {
+        const d = getDb();
+        await d.withTransactionAsync(async () => {
+            for (const chat of normalized) {
+                await upsertChatRow(d, chat);
+            }
+        });
     });
 }
 
 export async function replaceChats(chats: ChatEntry[]): Promise<void> {
     const normalized = normalizeChatEntries(chats);
-    const d = getDb();
-    await d.withTransactionAsync(async () => {
-        await d.runAsync(`DELETE FROM chats`);
-        for (const chat of normalized) {
-            await upsertChatRow(d, chat);
-        }
+    await withTxMutex(async () => {
+        const d = getDb();
+        await d.withTransactionAsync(async () => {
+            await d.runAsync(`DELETE FROM chats`);
+            for (const chat of normalized) {
+                await upsertChatRow(d, chat);
+            }
+        });
     });
 }
 
@@ -266,6 +287,7 @@ export async function updateMessageStatus(messageId: string, updates: Partial<Lo
 }
 
 export async function swapTempIdToRealId(tempId: string, realId: string, updates?: Partial<LocalMessageEntry>): Promise<void> {
+    await withTxMutex(async () => {
     const d = getDb();
     await d.withTransactionAsync(async () => {
         const tempRow = await d.getFirstAsync<Record<string, any>>(
@@ -342,6 +364,7 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 promoted.updated_at,
             ]
         );
+    });
     });
 }
 
