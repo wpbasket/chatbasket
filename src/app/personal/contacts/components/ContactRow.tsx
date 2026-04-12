@@ -33,6 +33,7 @@ export default function ContactRow({ id, kind, onOpenActions, onMessage }: Conta
 
   const displayName = item.nickname ?? item.name;
   const shouldShowQuickAddButton = kind === 'addedYou' && !item.isMutual;
+  const shouldShowMessageButton = (kind === 'contacts' || (kind === 'addedYou' && item.isMutual)) && onMessage;
 
   return (
     <ThemedView style={styles.row}>
@@ -74,7 +75,7 @@ export default function ContactRow({ id, kind, onOpenActions, onMessage }: Conta
           </ThemedView>
         ) : null}
       </Pressable>
-      {kind === 'contacts' && onMessage ? (
+      {shouldShowMessageButton ? (
         <Pressable
           onPressIn={handlePressIn}
           onPress={() => onMessage(item)}

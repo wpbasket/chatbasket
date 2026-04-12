@@ -223,6 +223,7 @@ export default function ContactsScreen() {
                 id={item.contactId}
                 kind='addedYou'
                 onOpenActions={openActionsFromAddedYou}
+                onMessage={handleMessage}
               />
             </ThemedView>
           );
