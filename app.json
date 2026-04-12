@@ -113,7 +113,8 @@
           "microphonePermission": "Allow Chatbasket to access your microphone for voice and video calls."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
