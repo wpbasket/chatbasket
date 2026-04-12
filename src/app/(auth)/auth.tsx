@@ -560,7 +560,8 @@ const styles = StyleSheet.create((theme) => ({
     borderTopRightRadius: 25,
     paddingHorizontal: 15,
     // marginBottom: 5,
-    color: theme.colors.text
+    color: theme.colors.text,
+    outline:'none'
     // backgroundColor: 'rgb(255, 255, 255)'
   },
   inputError: {

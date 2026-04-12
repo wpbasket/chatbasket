@@ -63,7 +63,7 @@ export default function Index() {
             </View>
             {Platform.OS === 'web' && (
               <View style={styles.footer}>
-                <ThemedText color={uniS.theme.colors.lightbackgroundText}>© ChatBasket 2026, All rights reserved.</ThemedText>
+                <ThemedText color={uniS.theme.colors.lightbackgroundText} type='gantariWithoutColorAndSize'>© ChatBasket 2026, All rights reserved.</ThemedText>
               </View>
             )}
           </View>
@@ -104,7 +104,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
     backgroundColor: theme.colors.primary,
-    paddingBottom: 20,
+    paddingBottom: 3,
     paddingTop: 20,
   },
   buttonView: {

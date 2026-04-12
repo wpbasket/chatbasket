@@ -300,6 +300,7 @@ const styles = StyleSheet.create((theme) => ({
         paddingHorizontal: 10,
         marginBottom: 10,
         color: theme.colors.text,
+        outline: 'none'
         // backgroundColor: 'rgb(255, 255, 255)'
     },
     inputError: {
