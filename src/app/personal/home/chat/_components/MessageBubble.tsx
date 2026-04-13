@@ -400,6 +400,7 @@ const MessageBubble = memo(
                 // @ts-ignore - onContextMenu is web-only
                 onContextMenu={onContextMenu}
                 delayLongPress={300}
+                delayPressIn={150} // Increased delay to further filter out seek taps
                 hitSlop={0}
                 style={({ pressed }) => [
                     { opacity: pressed ? 0.7 : 1 },
@@ -557,10 +558,23 @@ const AudioInlinePlayer = memo(({
     // The single source of truth for rendering.
     const [uiTime, setUiTime] = React.useState(0);
     
+    // ── Hardening Logic ──
+    // We dampen the native status to prevent "flashes" during seeks
+    const [displayPlaying, setDisplayPlaying] = React.useState(false);
+    const [displayLoaded, setDisplayLoaded] = React.useState(false);
+
     // Control refs for the playback loop.
     const lastFrameTimeRef = React.useRef<number | null>(null);
     const rafIdRef = React.useRef<number | null>(null);
     const isBlockingSync = React.useRef(false);
+
+    // Sync display states with dampening
+    React.useEffect(() => {
+        if (!isBlockingSync.current) {
+            setDisplayPlaying(status.playing);
+            if (status.isLoaded) setDisplayLoaded(true);
+        }
+    }, [status.playing, status.isLoaded]);
 
     // ── Playback Loop (60FPS Smoothness) ────────────────────────────────
     const runLoop = useCallback((timestamp: number) => {
@@ -616,19 +630,19 @@ const AudioInlinePlayer = memo(({
     }, [status.currentTime, status.isLoaded]);
 
     const togglePlay = useCallback(() => {
-        if (status.playing) {
+        if (displayPlaying) {
             player.pause();
+            setDisplayPlaying(false);
         } else {
-            // Check both UI time and Native time because Natural End resets uiTime to 0
-            // but the native player stays at the end duration.
             const isAtEnd = uiTime >= duration - 0.1 || status.currentTime >= duration - 0.1;
             if (isAtEnd) {
                 player.seekTo(0);
                 setUiTime(0);
             }
             player.play();
+            setDisplayPlaying(true);
         }
-    }, [status.playing, player, uiTime, duration, status.currentTime]);
+    }, [displayPlaying, player, uiTime, duration, status.currentTime]);
 
     // ── Instant Seek Handler ───────────────────────────────────────────
     const handleSeek = useCallback((e: any) => {
@@ -651,8 +665,8 @@ const AudioInlinePlayer = memo(({
             // 2. Command the native player
             try {
                 await player.seekTo(target);
-                // Hold lock for a moment to clear stale status events
-                setTimeout(() => { isBlockingSync.current = false; }, 450);
+                // Hold lock for 500ms to clear stale status events and prevent button flashes
+                setTimeout(() => { isBlockingSync.current = false; }, 500);
             } catch {
                 isBlockingSync.current = false;
             }
@@ -673,12 +687,12 @@ const AudioInlinePlayer = memo(({
                 onPress={togglePlay} 
                 onLongPress={onLongPress}
                 style={styles.audioPlayButton} 
-                disabled={!status.isLoaded}
+                disabled={!displayLoaded}
             >
                 <IconSymbol
-                    name={status.playing ? 'pause.fill' : 'play.fill'}
+                    name={displayPlaying ? 'pause.fill' : 'play.fill'}
                     size={25}
-                    color={status.isLoaded ? '#6366f1' : 'rgba(99,102,241,0.35)'}
+                    color={displayLoaded ? '#6366f1' : 'rgba(99,102,241,0.35)'}
                 />
             </Pressable>
             <View style={styles.audioWaveform}>
