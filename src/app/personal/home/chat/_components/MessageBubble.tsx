@@ -339,7 +339,7 @@ const MessageBubble = memo(
                             // Audio: show static shell until first tap, then mount real player
                             <View style={{ marginTop: 8 }} pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
-                                    <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} />
+                                    <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} onLongPress={onLongPress} />
                                 ) : (
                                     <AudioPlaceholder isMe={isMe} />
                                 )}
@@ -405,10 +405,9 @@ const MessageBubble = memo(
                     { opacity: pressed ? 0.7 : 1 },
                     !isMe ? styles.myBubbleContainer : styles.otherBubbleContainer,
                 ]}
-                // On native, once media is loaded, we want touches to pass through to the player
-                // unless we are in selection mode.
-                pointerEvents={((isMediaLoaded && isAudio) && !isSelectMode) ? 'box-none' : 'auto'}
-                disabled={((isMediaLoaded && isAudio) && !isSelectMode)}
+                // On native, once media is loaded, touches should still trigger options.
+                // We rely on child Pressables (like play buttons) to handle their own taps.
+
             >
                 <View
                     accessibilityRole="text"
@@ -421,7 +420,7 @@ const MessageBubble = memo(
                         messageType === 'file' && styles.fileBubble,
                         isSelected && styles.selectedBubble,
                     ]}
-                    pointerEvents={((isMediaLoaded && isAudio) && !isSelectMode) ? 'box-none' : 'auto'}
+                    pointerEvents="auto"
                 >
                     {renderContent()}
 
@@ -530,87 +529,173 @@ const VideoInlinePlayer = memo(({ url, onExit }: { url: string; onExit: () => vo
 });
 
 // ─── AudioInlinePlayer ────────────────────────────────────────────────────────
+// "UI-MASTER" Implementation: This player decouples the visual progress bar
+// from the jittery native status updates. It runs a local 60FPS timer for
+// 100% smooth movement and only syncs with the native player to correct drift.
 
-const AudioInlinePlayer = memo(({ url, isMe }: { url: string; isMe: boolean }) => {
-    const player = ExpoAudio.useAudioPlayer(url, { updateInterval: 250 });
+const AudioInlinePlayer = memo(({ 
+    url, 
+    isMe, 
+    onLongPress 
+}: { 
+    url: string; 
+    isMe: boolean; 
+    onLongPress?: (event: any) => void 
+}) => {
+    const player = ExpoAudio.useAudioPlayer(url, { updateInterval: 100 });
     const status = ExpoAudio.useAudioPlayerStatus(player);
     const isDark = UnistylesRuntime.themeName === 'dark';
-    const [trackWidth, setTrackWidth] = useState(0);
     const hasAutoPlayed = React.useRef(false);
+    const trackRef = React.useRef<View>(null);
 
-    // Icon state driven purely by tap — no sync from native status at all.
-    // Native status is only used for: auto-play trigger, progress bar, and
-    // detecting natural end-of-track. The icon never reads status.playing.
-    const [isPlaying, setIsPlaying] = useState(false);
+    // Cache duration for layout stability.
+    const durationRef = React.useRef(0);
+    if (status.duration > 0) durationRef.current = status.duration;
+    const duration = durationRef.current;
 
-    // Auto-play once loaded — set icon to playing at the same time
+    // ── UI MASTER TIMER ──────────────────────────────────────────────────
+    // The single source of truth for rendering.
+    const [uiTime, setUiTime] = React.useState(0);
+    
+    // Control refs for the playback loop.
+    const lastFrameTimeRef = React.useRef<number | null>(null);
+    const rafIdRef = React.useRef<number | null>(null);
+    const isBlockingSync = React.useRef(false);
+
+    // ── Playback Loop (60FPS Smoothness) ────────────────────────────────
+    const runLoop = useCallback((timestamp: number) => {
+        if (lastFrameTimeRef.current !== null) {
+            const delta = (timestamp - lastFrameTimeRef.current) / 1000;
+            setUiTime(prev => {
+                const next = prev + delta;
+                return duration > 0 ? Math.min(next, duration) : next;
+            });
+        }
+        lastFrameTimeRef.current = timestamp;
+        rafIdRef.current = requestAnimationFrame(runLoop);
+    }, [duration]);
+
+    // Start/Stop loop based on playback state
+    React.useEffect(() => {
+        if (status.playing) {
+            lastFrameTimeRef.current = null;
+            rafIdRef.current = requestAnimationFrame(runLoop);
+        } else {
+            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
+        return () => {
+            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+        };
+    }, [status.playing, runLoop]);
+
+    // ── Auto-play ───────────────────────────────────────────────────────
     React.useEffect(() => {
         if (!hasAutoPlayed.current && status.isLoaded) {
             hasAutoPlayed.current = true;
-            setIsPlaying(true);
             player.play();
         }
     }, [status.isLoaded, player]);
 
-    // Detect natural end-of-track: duration known, currentTime reached it
+    // ── Natural End ─────────────────────────────────────────────────────
     React.useEffect(() => {
-        if (status.isLoaded && status.duration > 0 && status.currentTime >= status.duration && !status.playing) {
-            setIsPlaying(false);
+        if (status.isLoaded && duration > 0 && status.currentTime >= duration && !status.playing) {
+            setUiTime(0);
         }
-    }, [status.currentTime, status.duration, status.playing, status.isLoaded]);
+    }, [status.currentTime, duration, status.playing, status.isLoaded]);
 
-    const togglePlay = useCallback(() => {
-        if (isPlaying) {
-            setIsPlaying(false);
-            player.pause();
-        } else {
-            setIsPlaying(true);
-            player.play();
-        }
-    }, [isPlaying, player]);
-
-    const handleSeek = useCallback((event: any) => {
-        if (event.stopPropagation) event.stopPropagation();
-        const x = event.nativeEvent.locationX;
-        if (typeof x === 'number' && Number.isFinite(x) && trackWidth > 0 && status.duration > 0) {
-            const target = (x / trackWidth) * status.duration;
-            if (Number.isFinite(target)) {
-                player.seekTo(Math.max(0, Math.min(target, status.duration)));
+    // ── Drift Correction & Native Sync ──────────────────────────────────
+    // We only snap the UI to the native time if they drift by more than 350ms.
+    React.useEffect(() => {
+        if (!isBlockingSync.current && status.isLoaded) {
+            const drift = Math.abs(status.currentTime - uiTime);
+            if (drift > 0.35) {
+                setUiTime(status.currentTime);
             }
         }
-    }, [trackWidth, status.duration, player]);
+    }, [status.currentTime, status.isLoaded]);
 
-    const handleLayout = useCallback((e: any) => {
-        setTrackWidth(e.nativeEvent.layout.width);
+    const togglePlay = useCallback(() => {
+        if (status.playing) {
+            player.pause();
+        } else {
+            // Check both UI time and Native time because Natural End resets uiTime to 0
+            // but the native player stays at the end duration.
+            const isAtEnd = uiTime >= duration - 0.1 || status.currentTime >= duration - 0.1;
+            if (isAtEnd) {
+                player.seekTo(0);
+                setUiTime(0);
+            }
+            player.play();
+        }
+    }, [status.playing, player, uiTime, duration, status.currentTime]);
+
+    // ── Instant Seek Handler ───────────────────────────────────────────
+    const handleSeek = useCallback((e: any) => {
+        const touchX = e.nativeEvent.pageX;
+        if (!trackRef.current) return;
+
+        trackRef.current.measure(async (_x, _y, width, _h, pageX) => {
+            if (width <= 0) return;
+            
+            const ratio = Math.max(0, Math.min((touchX - pageX) / width, 1));
+            const totalDur = durationRef.current;
+            if (totalDur <= 0) return;
+
+            const target = ratio * totalDur;
+            
+            // 1. Update UI and block external sync
+            setUiTime(target);
+            isBlockingSync.current = true;
+
+            // 2. Command the native player
+            try {
+                await player.seekTo(target);
+                // Hold lock for a moment to clear stale status events
+                setTimeout(() => { isBlockingSync.current = false; }, 450);
+            } catch {
+                isBlockingSync.current = false;
+            }
+        });
+    }, [player]);
+
+    const onTrackLayout = useCallback(() => {
+        if (trackRef.current) {
+            trackRef.current.measure(() => {});
+        }
     }, []);
 
-    const progressValue = status.duration > 0 ? status.currentTime / status.duration : 0;
+    const displayProgress = duration > 0 ? uiTime / duration : 0;
 
     return (
         <View style={styles.inlineAudioPlayer}>
-            <Pressable onPress={togglePlay} style={styles.audioPlayButton} disabled={!status.isLoaded}>
+            <Pressable 
+                onPress={togglePlay} 
+                onLongPress={onLongPress}
+                style={styles.audioPlayButton} 
+                disabled={!status.isLoaded}
+            >
                 <IconSymbol
-                    name={isPlaying ? 'pause.fill' : 'play.fill'}
+                    name={status.playing ? 'pause.fill' : 'play.fill'}
                     size={25}
                     color={status.isLoaded ? '#6366f1' : 'rgba(99,102,241,0.35)'}
                 />
             </Pressable>
             <View style={styles.audioWaveform}>
-                <View
-                    onStartShouldSetResponder={() => true}
-                    onResponderRelease={handleSeek}
+                <Pressable
+                    ref={trackRef}
+                    onPressIn={handleSeek}
+                    onLongPress={onLongPress}
                     style={styles.audioProgressTrack}
-                    onLayout={handleLayout}
+                    onLayout={onTrackLayout}
                 >
                     <View style={[styles.audioProgressInner, isMe && isDark && { backgroundColor: 'black' }]} pointerEvents="none">
-                        <View style={[styles.audioProgressFill, { width: `${progressValue * 100}%` }]} />
+                        <View style={[styles.audioProgressFill, { width: `${displayProgress * 100}%` }]} />
                     </View>
-                </View>
-                {(status.isLoaded && status.duration > 0) && (
-                    <ThemedText style={[styles.audioTimer, isMe ? styles.myTimeText : styles.otherTimeText]}>
-                        {formatDuration(status.currentTime)} / {formatDuration(status.duration)}
-                    </ThemedText>
-                )}
+                </Pressable>
+                <ThemedText style={[styles.audioTimer, isMe ? styles.myTimeText : styles.otherTimeText]}>
+                    {duration > 0 ? `${formatDuration(uiTime)} / ${formatDuration(duration)}` : '-- / --'}
+                </ThemedText>
             </View>
         </View>
     );
@@ -846,7 +931,7 @@ const styles = StyleSheet.create((theme) => ({
         alignItems: 'center',
         borderRadius: 14,
         padding: 10,
-        height: 42,
+        height: 52, // Increased to comfortably fit progress + timer
         justifyContent: 'center',
     },
     audioPlayButton: {
@@ -861,7 +946,7 @@ const styles = StyleSheet.create((theme) => ({
     audioWaveform: {
         flex: 1,
         justifyContent: 'center',
-        height: 36,
+        height: 44, // Increased to fit both children
         backgroundColor: 'transparent',
     },
     audioProgressTrack: {

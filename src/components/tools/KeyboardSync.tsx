@@ -1,27 +1,22 @@
-import React, { useEffect, useRef } from 'react';
-import { Keyboard } from 'react-native';
-import { useUnistyles } from 'react-native-unistyles';
+import React, { useEffect } from 'react';
+import { KeyboardEvents } from 'react-native-keyboard-controller';
 import { $uiState } from '@/state/ui/state.ui';
 
 /**
  * KeyboardSync Component
  * 
- * Synchronizes the Unistyles IME height to the global $uiState observable.
- * Handles the Android IME flicker (288 -> 0 -> 288) by keeping a stable reference.
+ * Synchronizes the keyboard height to the global $uiState observable.
+ * Uses KeyboardEvents (JS Emitter) for stability and to avoid Reanimated 
+ * worklet serialization issues with Legend State observables.
  */
 export const KeyboardSync = React.memo(() => {
-    const { rt } = useUnistyles();
-    const lastIme = useRef(0);
-    const keyboardVisible = useRef(false);
-
     useEffect(() => {
-        const showSub = Keyboard.addListener('keyboardDidShow', () => {
-            keyboardVisible.current = true;
+        // Subscribe to keyboard show event to get the real height natively
+        const showSub = KeyboardEvents.addListener('keyboardDidShow', (e) => {
+            $uiState.setKeyboardHeight(e.height);
         });
 
-        const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-            keyboardVisible.current = false;
-            lastIme.current = 0;
+        const hideSub = KeyboardEvents.addListener('keyboardDidHide', () => {
             $uiState.setKeyboardHeight(0);
         });
 
@@ -30,18 +25,6 @@ export const KeyboardSync = React.memo(() => {
             hideSub.remove();
         };
     }, []);
-
-    useEffect(() => {
-        if (rt.insets.ime > 0) {
-            lastIme.current = rt.insets.ime;
-        }
-
-        const stableIme = keyboardVisible.current
-            ? (rt.insets.ime > 0 ? rt.insets.ime : lastIme.current)
-            : 0;
-
-        $uiState.setKeyboardHeight(stableIme);
-    }, [rt.insets.ime]);
 
     return null;
 });

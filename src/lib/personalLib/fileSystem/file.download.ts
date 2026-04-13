@@ -143,7 +143,10 @@ async function downloadForWeb(msg: MessageEntry): Promise<string | null> {
     }
 
     try {
-        const response = await fetch(msg.download_url!);
+        const projectId = new URL(msg.download_url!).searchParams.get('project');
+        const response = await fetch(msg.download_url!, {
+            headers: projectId ? { 'X-Appwrite-Project': projectId } : {},
+        });
         if (!response.ok) {
             throw new Error(`HTTP ${response.status} downloading ${msg.download_url}`);
         }

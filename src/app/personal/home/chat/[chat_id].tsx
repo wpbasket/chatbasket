@@ -407,7 +407,7 @@ const ChatContentContainer = React.memo(({
     recipient_name,
     displayName
 }: any) => {
-    const { theme } = useUnistyles();
+    const { theme, rt } = useUnistyles();
     useFocusEffect(
         useCallback(() => {
             if (!chat_id) return;
@@ -938,7 +938,14 @@ const ChatContentContainer = React.memo(({
                 <ThemedView
                     style={[
                         styles.content,
-                        { transform: [{ translateY: -$uiState.keyboardHeight.get() - 4 }] }
+                        {
+                            transform: [{
+                                translateY: (() => {
+                                    const h = $uiState.keyboardHeight.get();
+                                    return h > 0 ? -(h - rt.insets.bottom) : 0;
+                                })()
+                            }]
+                        }
                     ]}
                 >
                     <Memo>
