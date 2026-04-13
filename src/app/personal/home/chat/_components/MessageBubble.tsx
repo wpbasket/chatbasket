@@ -1,5 +1,5 @@
-import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
-import { View, Pressable, Modal, TouchableOpacity, Image as RNImage, useWindowDimensions, Platform } from 'react-native';
+import React, { memo, useMemo, useCallback, useEffect } from 'react';
+import { View, Pressable, Modal, TouchableOpacity, Image as RNImage, useWindowDimensions, Platform, ActivityIndicator } from 'react-native';
 import { ThemedText, ThemedView } from '@/components/ui/basic';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
@@ -8,6 +8,8 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ExpoAudio from 'expo-audio';
 import { UnistylesRuntime } from 'react-native-unistyles';
 import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
+import { useObservable, useValue, useObserve } from '@legendapp/state/react';
+import { $uiState, generateMediaId } from '@/state/ui/state.ui';
 
 // ─── Pure helpers — outside component, never recreated on render ──────────────
 
@@ -89,14 +91,30 @@ function useLocalMediaUri(
     localUri: string | null | undefined,
     messageId?: string
 ): string | null {
-    const [resolvedUri, setResolvedUri] = useState<string | null>(null);
+    // Phase 4b optimization: Initialize immediately if it's a native file path.
+    // This avoids the 1-tick flicker of the ActivityIndicator on app boot/scroll.
+    const resolvedUri$ = useObservable<string | null>(
+        (Platform.OS !== 'web' && localUri?.startsWith('file://')) ? localUri : null
+    );
 
     useEffect(() => {
-        if (!localUri) { setResolvedUri(null); return; }
+        if (!localUri) { resolvedUri$.set(null); return; }
 
         if (Platform.OS !== 'web') {
-            // Native: local_uri is already a usable file:// path
-            setResolvedUri(localUri);
+            // Native: local_uri is a file:// path. 
+            // We verify it actually exists on disk before resolving.
+            if (localUri.startsWith('file://')) {
+                import('expo-file-system').then(({ File }) => {
+                    const file = new File(localUri);
+                    if (file.exists) {
+                        resolvedUri$.set(localUri);
+                    } else {
+                        resolvedUri$.set(null);
+                    }
+                }).catch(() => resolvedUri$.set(null));
+            } else {
+                resolvedUri$.set(localUri);
+            }
             return;
         }
 
@@ -108,11 +126,11 @@ function useLocalMediaUri(
             getMediaBlob(msgId).then((result: { blob: Blob; mime: string } | null) => {
                 if (result && !revoked) {
                     blobUrl = URL.createObjectURL(result.blob);
-                    setResolvedUri(blobUrl);
+                    resolvedUri$.set(blobUrl);
                 }
             }).catch(() => {
                 // IDB read failed (corrupt store, etc.) — fall back to server URLs
-                setResolvedUri(null);
+                resolvedUri$.set(null);
             });
             return () => {
                 revoked = true;
@@ -121,10 +139,10 @@ function useLocalMediaUri(
         }
 
         // Other URI (e.g. blob:, data:, etc.)
-        setResolvedUri(localUri);
+        resolvedUri$.set(localUri);
     }, [localUri, messageId]);
 
-    return resolvedUri;
+    return useValue(resolvedUri$);
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -154,14 +172,30 @@ const MessageBubble = memo(
     }: MessageBubbleProps) => {
         // Resolve local_uri to a renderable URI (file:// on native, blob: on web)
         const resolvedLocalUri = useLocalMediaUri(localUri, message_id);
-        const [isLightboxVisible, setIsLightboxVisible] = useState(false);
+        const isLightboxVisible$ = useObservable(false);
+        const isLightboxVisible = useValue(isLightboxVisible$);
         // Lazy load: video and audio players only mount after first tap — avoids
         // auto-buffering all media in the list when the chat screen opens.
-        const [isMediaLoaded, setIsMediaLoaded] = useState(false);
+        const isMediaLoaded$ = useObservable(false);
+        const isMediaLoaded = useValue(isMediaLoaded$);
         const { theme } = useUnistyles();
         // useWindowDimensions responds to orientation changes; Dimensions.get() does not
         const { width: windowWidth, height: windowHeight } = useWindowDimensions();
         const isMe = type === 'me';
+
+        // ── Ready state check ─────────────────────────────────────────────────
+        // A file is ready if we have a resolved local URI and it's not pending or error.
+        const isError = status === 'error';
+        const isReady = useValue(() => {
+            if (messageType === 'text' || messageType === 'unsent') return true;
+            const isPending = status === 'pending' || status === 'sending';
+            // Optimization: Detect if we have an incoming download that hasn't started yet
+            const isIncomingMissing = !isMe && !localUri && !isError;
+            
+            // If we have a localUri (even before resolved) and aren't pending/error, 
+            // we can trust it for the 'Play' icon visibility to avoid flickering.
+            return (!!resolvedLocalUri || !!localUri) && !isPending && !isError && !isIncomingMissing;
+        });
 
         // ── Media type detection — memoized, only recomputes when mime/name/type change ─
         const { isImage, isVideo, isAudio } = useMemo(() => {
@@ -178,16 +212,22 @@ const MessageBubble = memo(
         // ── Stable handler references ─────────────────────────────────────────
         const handlePress = useCallback(() => {
             if (isSelectMode && onPress) { onPress(); return; }
-            if (isImage) { setIsLightboxVisible(true); return; }
+            
+            // Interaction Lock: prevent opening if not ready
+            if (!isReady) return;
+
+            if (isImage) { isLightboxVisible$.set(true); return; }
             if (isAudio || isVideo) {
                 // First tap: load the player. Subsequent taps are handled by player controls.
-                if (!isMediaLoaded) setIsMediaLoaded(true);
+                if (!isMediaLoaded$.get()) {
+                    isMediaLoaded$.set(true);
+                }
                 return;
             }
             if (onPress) onPress();
-        }, [isSelectMode, isImage, isAudio, isVideo, isMediaLoaded, onPress]);
+        }, [isSelectMode, isImage, isAudio, isVideo, onPress, isReady]);
 
-        const closeLightbox = useCallback(() => setIsLightboxVisible(false), []);
+        const closeLightbox = useCallback(() => isLightboxVisible$.set(false), []);
 
         // ── Shared media meta row (filename + size) ───────────────────────────
         const renderMediaMeta = (fallbackLabel: string) => (
@@ -205,7 +245,10 @@ const MessageBubble = memo(
 
         const renderProgressBar = () => {
             const isPendingLike = status === 'pending' || status === 'sending';
-            if (isVideo || !isPendingLike || progress >= 100 || progress <= 0) return null;
+            const isIncomingDownload = !isMe && !resolvedLocalUri && status !== 'error';
+            
+            // Show progress bar for any media while it is downloading or uploading
+            if ((!isPendingLike && !isIncomingDownload) || progress >= 100 || progress <= 0) return null;
             return (
                 <View style={[styles.progressContainer, { marginLeft: 20, marginRight: 30 }]}>
                     <View style={[styles.progressBar, { width: `${progress}%` }]} />
@@ -326,11 +369,23 @@ const MessageBubble = memo(
                             // Video: show tap-to-load thumbnail until first tap, then mount player
                             <View style={styles.mediaFrame} pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
-                                    <VideoInlinePlayer url={activeMediaUrl} onExit={() => setIsMediaLoaded(false)} />
+                                    <VideoInlinePlayer 
+                                        url={activeMediaUrl} 
+                                        isReady={isReady}
+                                        onExit={() => {
+                                            isMediaLoaded$.set(false);
+                                        }} 
+                                    />
                                 ) : (
                                     <View style={styles.videoPlaceholder}>
-                                        <View style={styles.videoPlayButton}>
-                                            <IconSymbol name="play.fill" size={28} color="#FFFFFF" />
+                                        <View style={[styles.videoPlayButton, (!isReady || isError) && { opacity: 0.5 }]}>
+                                            {isError ? (
+                                                <IconSymbol name="alert" size={24} color="#ef4444" />
+                                            ) : !isReady ? (
+                                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                            ) : (
+                                                <IconSymbol name="play.fill" size={28} color="#FFFFFF" />
+                                            )}
                                         </View>
                                     </View>
                                 )}
@@ -339,9 +394,9 @@ const MessageBubble = memo(
                             // Audio: show static shell until first tap, then mount real player
                             <View style={{ marginTop: 8 }} pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
-                                    <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} onLongPress={onLongPress} />
+                                    <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} onLongPress={onLongPress} isReady={isReady} />
                                 ) : (
-                                    <AudioPlaceholder isMe={isMe} />
+                                    <AudioPlaceholder isMe={isMe} isReady={isReady} isError={isError} />
                                 )}
                             </View>
                         )}
@@ -363,7 +418,13 @@ const MessageBubble = memo(
                     <View style={styles.contentPadding}>
                         <View style={styles.fileHeader}>
                             <View style={styles.fileIconBox}>
-                                <IconSymbol name="doc.fill" size={24} color={theme.colors.orange} />
+                                {isError ? (
+                                    <IconSymbol name="alert" size={18} color="#ef4444" />
+                                ) : !isReady ? (
+                                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                                ) : (
+                                    <IconSymbol name="doc.fill" size={24} color={theme.colors.orange} />
+                                )}
                             </View>
                             <View style={styles.fileInfo}>
                                 <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
@@ -484,48 +545,286 @@ const MessageBubble = memo(
         prev.delivered === next.delivered &&
         prev.isSelected === next.isSelected &&
         prev.isSelectMode === next.isSelectMode &&
-        prev.localUri === next.localUri
+        prev.isSelectMode === next.isSelectMode &&
+        prev.localUri === next.localUri &&
+        prev.fileName === next.fileName &&
+        prev.fileSize === next.fileSize
 );
 
 // ─── VideoModalPlayer ─────────────────────────────────────────────────────────
 
 // ─── VideoInlinePlayer ────────────────────────────────────────────────────────
 
-const VideoInlinePlayer = memo(({ url, onExit }: { url: string; onExit: () => void }) => {
+const VideoInlinePlayer = memo((props: { 
+    url: string; 
+    isReady: boolean;
+    onExit: () => void;
+    onLongPress?: (event: any) => void;
+}) => {
+    const { url, onExit, onLongPress } = props;
+    const { rt } = useUnistyles();
     const videoRef = React.useRef<VideoView>(null);
+    const hasAutoFullscreenRef = React.useRef(false);
+    const trackRef = React.useRef<View>(null);
+    const isMountedRef = React.useRef(true);
+    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    const isClosing$ = useObservable(false);
+    const mediaId = React.useRef(generateMediaId('video')).current;
+    
+    const uiTimeRef = React.useRef(0);
+    const uiTime$ = useObservable(0);
+    const uiTime = useValue(uiTime$);
+    const isPlaying$ = useObservable(false);
+    const displayPlaying = useValue(isPlaying$);
+    
+    // Logic refs
+    const lastFrameTimeRef = React.useRef<number | null>(null);
+    const rafIdRef = React.useRef<number | null>(null);
+    const isBlockingSync = React.useRef(false);
 
     const setup = useCallback((player: any) => {
         player.loop = false;
-        player.timeUpdateEventInterval = 0;
+        player.timeUpdateEventInterval = 0.1; // 100ms Native Heartbeat
     }, []);
 
-    const player = useVideoPlayer({ uri: url, useCaching: true }, setup);
+    const videoSource = React.useMemo(() => ({ 
+        uri: url, 
+        useCaching: true 
+    }), [url]);
+    
+    const player = useVideoPlayer(videoSource, setup);
+
+    // ── PROGRESS LOOP (60FPS Smoothness) ────────────────────────────────
+    const runLoop = useCallback((timestamp: number) => {
+        if (lastFrameTimeRef.current !== null) {
+            const delta = (timestamp - lastFrameTimeRef.current) / 1000;
+            const dur = player.duration;
+            const next = uiTimeRef.current + delta;
+            
+            // Auto-detection of video end - proactive trigger 200ms before absolute end
+            if (dur > 0 && next >= dur - 0.2 && !isClosing$.get()) {
+                if (isMountedRef.current) {
+                    uiTimeRef.current = dur;
+                    uiTime$.set(dur);
+                    isClosing$.set(true);
+                    try {
+                        player.pause();
+                    } catch (e) {}
+                    onExit();
+                }
+                return; // Stop animation loop after trigger
+            }
+
+            uiTimeRef.current = dur > 0 ? Math.min(next, dur) : next;
+            uiTime$.set(uiTimeRef.current);
+        }
+        lastFrameTimeRef.current = timestamp;
+        rafIdRef.current = requestAnimationFrame(runLoop);
+    }, [player.duration, onExit]);
+
+    // Start/Stop loop based on playback state
+    React.useEffect(() => {
+        const playing = isPlaying$.get();
+        if (playing) {
+            lastFrameTimeRef.current = null;
+            rafIdRef.current = requestAnimationFrame(runLoop);
+        } else {
+            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
+        return () => {
+            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+        };
+    }, [displayPlaying, runLoop]);
 
     React.useEffect(() => {
-        const sub = player.addListener('statusChange', ({ status }: { status: string }) => {
+        const statusSub = player.addListener('statusChange', ({ status }: { status: string }) => {
             if (status === 'readyToPlay') {
-                player.play();
-                videoRef.current?.enterFullscreen();
+                if (!hasAutoFullscreenRef.current) {
+                    hasAutoFullscreenRef.current = true;
+                    $uiState.claimMediaFocus(mediaId);
+                    player.play();
+                }
             }
         });
-        return () => sub.remove();
+
+        // The native way to detect video end
+        const endSub = player.addListener('playToEnd', () => {
+            if (isMountedRef.current && !isClosing$.get()) {
+                isClosing$.set(true);
+                try {
+                    player.pause();
+                } catch (e) {}
+                onExit();
+            }
+        });
+
+        // Track playing state with heavy dampening to prevent flickering
+        const playingSub = player.addListener('playingChange', ({ isPlaying }) => {
+            // Only sync from native if we are NOT interacting and the state is stable
+            if (!isBlockingSync.current && isMountedRef.current) {
+                if (isPlaying) {
+                    isPlaying$.set(true);
+                } else {
+                    // Ignore brief pause signals (seeking/buffering)
+                    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                    timeoutRef.current = setTimeout(() => {
+                        // CRITICAL: Check if still mounted before accessing player
+                        if (isMountedRef.current && !isBlockingSync.current && !player.playing) {
+                            isPlaying$.set(false);
+                        }
+                    }, 150);
+                }
+            }
+        });
+
+        // Native Heartbeat Monitor
+        const timeSub = player.addListener('timeUpdate', ({ currentTime }) => {
+            const dur = player.duration;
+            if (dur > 0 && currentTime >= dur - 0.2 && !isClosing$.get()) {
+                if (isMountedRef.current) {
+                    isClosing$.set(true);
+                    try {
+                        player.pause();
+                    } catch (e) {}
+                    onExit();
+                }
+            }
+        });
+
+        return () => {
+            isMountedRef.current = false;
+            statusSub.remove();
+            playingSub.remove();
+            endSub.remove();
+            timeSub.remove();
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+    }, [player, onExit]);
+
+
+
+    const togglePlay = useCallback(() => {
+        if (player.playing) {
+            player.pause();
+            isPlaying$.set(false);
+            $uiState.releaseMediaFocus(mediaId);
+        } else {
+            // Replay logic
+            if (uiTime$.get() >= player.duration - 0.2) {
+                player.currentTime = 0;
+                uiTimeRef.current = 0;
+                uiTime$.set(0);
+            }
+            $uiState.claimMediaFocus(mediaId);
+            player.play();
+            isPlaying$.set(true);
+        }
     }, [player]);
 
+    const handleSeek = useCallback((e: any) => {
+        const touchX = e.nativeEvent.pageX;
+        if (!trackRef.current) return;
+
+        trackRef.current.measure(async (_x, _y, width, _h, pageX) => {
+            if (width <= 0) return;
+            const ratio = Math.max(0, Math.min((touchX - pageX) / width, 1));
+            const target = ratio * player.duration;
+            
+            uiTimeRef.current = target;
+            uiTime$.set(target);
+            isBlockingSync.current = true;
+
+            try {
+                player.currentTime = target;
+                setTimeout(() => { isBlockingSync.current = false; }, 1000);
+            } catch {
+                isBlockingSync.current = false;
+            }
+        });
+    }, [player]);
+
+    const displayProgress = player.duration > 0 ? uiTime / player.duration : 0;
+
+    const renderContent = () => (
+        <View style={styles.fullscreenContainer}>
+            <VideoView
+                ref={videoRef}
+                style={styles.fullscreenVideo}
+                player={player}
+                allowsPictureInPicture
+                contentFit="contain"
+                nativeControls={false}
+                onFullscreenExit={onExit}
+                playsInline={true}
+            />
+            
+            {/* Custom Pro HUD Overlay */}
+            <Pressable 
+                onPress={togglePlay} 
+                onLongPress={onLongPress}
+                style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
+            >
+                {!displayPlaying && (
+                    <View style={styles.videoOverlayVisible}>
+                        <View style={styles.videoPlayButton}>
+                            <IconSymbol name="play.fill" size={32} color="#FFFFFF" />
+                        </View>
+                    </View>
+                )}
+            </Pressable>
+
+            {/* Bottom Control Bar */}
+            <View style={[
+                styles.videoBottomBar, 
+                { 
+                    zIndex: 2,
+                    paddingBottom: Math.max(rt.insets.bottom, 20)
+                }
+            ]}>
+                <Pressable onPress={togglePlay} style={styles.videoMiniToggle}>
+                    <IconSymbol 
+                        name={displayPlaying ? 'pause.fill' : 'play.fill'} 
+                        size={18} 
+                        color="#FFF" 
+                    />
+                </Pressable>
+                
+                <Pressable 
+                    ref={trackRef}
+                    onPressIn={handleSeek}
+                    style={styles.videoProgressTrack}
+                >
+                    <View style={styles.videoProgressInner}>
+                        <View style={[styles.videoProgressFill, { width: `${displayProgress * 100}%` }]} />
+                    </View>
+                </Pressable>
+
+                <ThemedText style={styles.videoTimer}>
+                    {formatDuration(uiTime)} / {formatDuration(player.duration)}
+                </ThemedText>
+
+                <Pressable onPress={onExit} style={[styles.videoMiniToggle, { marginLeft: 10 }]}>
+                    <IconSymbol name="xmark" size={18} color="#FFF" />
+                </Pressable>
+            </View>
+        </View>
+    );
+
     return (
-        <VideoView
-            ref={videoRef}
-            style={styles.inlineVideo}
-            player={player}
-            allowsPictureInPicture
-            contentFit="contain"
-            nativeControls
-            onFullscreenExit={onExit}
-            playsInline={false}
-            buttonOptions={{
-                showPlayPause: true,
-                showBottomBar: true,
+        <Modal
+            transparent={false}
+            animationType="fade"
+            visible={!isClosing$.get()}
+            onRequestClose={() => {
+                isClosing$.set(true);
+                onExit();
             }}
-        />
+        >
+            <View style={{ flex: 1, backgroundColor: '#000' }}>
+                {renderContent()}
+            </View>
+        </Modal>
     );
 });
 
@@ -537,17 +836,21 @@ const VideoInlinePlayer = memo(({ url, onExit }: { url: string; onExit: () => vo
 const AudioInlinePlayer = memo(({ 
     url, 
     isMe, 
-    onLongPress 
+    onLongPress,
+    isReady
 }: { 
     url: string; 
     isMe: boolean; 
-    onLongPress?: (event: any) => void 
+    onLongPress?: (event: any) => void;
+    isReady: boolean;
 }) => {
     const player = ExpoAudio.useAudioPlayer(url, { updateInterval: 100 });
     const status = ExpoAudio.useAudioPlayerStatus(player);
     const isDark = UnistylesRuntime.themeName === 'dark';
     const hasAutoPlayed = React.useRef(false);
+    const isMountedRef = React.useRef(true);
     const trackRef = React.useRef<View>(null);
+    const mediaId = React.useRef(generateMediaId('audio')).current;
 
     // Cache duration for layout stability.
     const durationRef = React.useRef(0);
@@ -556,12 +859,14 @@ const AudioInlinePlayer = memo(({
 
     // ── UI MASTER TIMER ──────────────────────────────────────────────────
     // The single source of truth for rendering.
-    const [uiTime, setUiTime] = React.useState(0);
+    const uiTime$ = useObservable(0);
+    const uiTime = useValue(uiTime$);
     
     // ── Hardening Logic ──
     // We dampen the native status to prevent "flashes" during seeks
-    const [displayPlaying, setDisplayPlaying] = React.useState(false);
-    const [displayLoaded, setDisplayLoaded] = React.useState(false);
+    const isPlaying$ = useObservable(false);
+    const displayPlaying = useValue(isPlaying$);
+    const isLoadedRef = React.useRef(false);
 
     // Control refs for the playback loop.
     const lastFrameTimeRef = React.useRef<number | null>(null);
@@ -570,9 +875,10 @@ const AudioInlinePlayer = memo(({
 
     // Sync display states with dampening
     React.useEffect(() => {
+        if (!isMountedRef.current) return;
         if (!isBlockingSync.current) {
-            setDisplayPlaying(status.playing);
-            if (status.isLoaded) setDisplayLoaded(true);
+            isPlaying$.set(status.playing);
+            if (status.isLoaded) isLoadedRef.current = true;
         }
     }, [status.playing, status.isLoaded]);
 
@@ -580,10 +886,9 @@ const AudioInlinePlayer = memo(({
     const runLoop = useCallback((timestamp: number) => {
         if (lastFrameTimeRef.current !== null) {
             const delta = (timestamp - lastFrameTimeRef.current) / 1000;
-            setUiTime(prev => {
-                const next = prev + delta;
-                return duration > 0 ? Math.min(next, duration) : next;
-            });
+            const prev = uiTime$.get();
+            const next = prev + delta;
+            uiTime$.set(duration > 0 ? Math.min(next, duration) : next);
         }
         lastFrameTimeRef.current = timestamp;
         rafIdRef.current = requestAnimationFrame(runLoop);
@@ -607,14 +912,26 @@ const AudioInlinePlayer = memo(({
     React.useEffect(() => {
         if (!hasAutoPlayed.current && status.isLoaded) {
             hasAutoPlayed.current = true;
+            $uiState.claimMediaFocus(mediaId);
             player.play();
         }
     }, [status.isLoaded, player]);
 
+    // ── Media Focus: auto-pause when another player claims focus ─────────
+    useObserve($uiState.activeMediaId, ({ value }) => {
+        if (value !== mediaId && isMountedRef.current) {
+            // Another player took focus — pause this one
+            if (player.playing) {
+                player.pause();
+            }
+            isPlaying$.set(false);
+        }
+    });
+
     // ── Natural End ─────────────────────────────────────────────────────
     React.useEffect(() => {
         if (status.isLoaded && duration > 0 && status.currentTime >= duration && !status.playing) {
-            setUiTime(0);
+            uiTime$.set(0);
         }
     }, [status.currentTime, duration, status.playing, status.isLoaded]);
 
@@ -622,27 +939,32 @@ const AudioInlinePlayer = memo(({
     // We only snap the UI to the native time if they drift by more than 350ms.
     React.useEffect(() => {
         if (!isBlockingSync.current && status.isLoaded) {
-            const drift = Math.abs(status.currentTime - uiTime);
+            const drift = Math.abs(status.currentTime - uiTime$.get());
             if (drift > 0.35) {
-                setUiTime(status.currentTime);
+                uiTime$.set(status.currentTime);
             }
         }
     }, [status.currentTime, status.isLoaded]);
 
     const togglePlay = useCallback(() => {
-        if (displayPlaying) {
+        if (isPlaying$.get()) {
             player.pause();
-            setDisplayPlaying(false);
+            isPlaying$.set(false);
+            $uiState.releaseMediaFocus(mediaId);
         } else {
-            const isAtEnd = uiTime >= duration - 0.1 || status.currentTime >= duration - 0.1;
+            const currentUiTime = uiTime$.get();
+            const dur = durationRef.current;
+            const isAtEnd = dur > 0 && (currentUiTime >= dur - 0.1);
             if (isAtEnd) {
                 player.seekTo(0);
-                setUiTime(0);
+                uiTime$.set(0);
+                lastFrameTimeRef.current = null;
             }
+            $uiState.claimMediaFocus(mediaId);
             player.play();
-            setDisplayPlaying(true);
+            isPlaying$.set(true);
         }
-    }, [displayPlaying, player, uiTime, duration, status.currentTime]);
+    }, [player]);
 
     // ── Instant Seek Handler ───────────────────────────────────────────
     const handleSeek = useCallback((e: any) => {
@@ -659,7 +981,7 @@ const AudioInlinePlayer = memo(({
             const target = ratio * totalDur;
             
             // 1. Update UI and block external sync
-            setUiTime(target);
+            uiTime$.set(target);
             isBlockingSync.current = true;
 
             // 2. Command the native player
@@ -673,10 +995,9 @@ const AudioInlinePlayer = memo(({
         });
     }, [player]);
 
+    // Warm the native measure ref on first layout
     const onTrackLayout = useCallback(() => {
-        if (trackRef.current) {
-            trackRef.current.measure(() => {});
-        }
+        trackRef.current?.measure?.(() => {});
     }, []);
 
     const displayProgress = duration > 0 ? uiTime / duration : 0;
@@ -687,12 +1008,12 @@ const AudioInlinePlayer = memo(({
                 onPress={togglePlay} 
                 onLongPress={onLongPress}
                 style={styles.audioPlayButton} 
-                disabled={!displayLoaded}
+                disabled={!isLoadedRef.current}
             >
                 <IconSymbol
                     name={displayPlaying ? 'pause.fill' : 'play.fill'}
                     size={25}
-                    color={displayLoaded ? '#6366f1' : 'rgba(99,102,241,0.35)'}
+                    color={isLoadedRef.current ? '#6366f1' : 'rgba(99,102,241,0.35)'}
                 />
             </Pressable>
             <View style={styles.audioWaveform}>
@@ -718,12 +1039,18 @@ const AudioInlinePlayer = memo(({
 // ─── AudioPlaceholder ────────────────────────────────────────────────────────
 // Static shell shown before user taps — zero network cost, zero native player init.
 
-const AudioPlaceholder = memo(({ isMe }: { isMe: boolean }) => {
+const AudioPlaceholder = memo(({ isMe, isReady, isError }: { isMe: boolean, isReady: boolean, isError: boolean }) => {
     const isDark = UnistylesRuntime.themeName === 'dark';
     return (
         <View style={styles.inlineAudioPlayer}>
             <View style={[styles.audioPlayButton, { opacity: 0.85 }]}>
-                <IconSymbol name="play.fill" size={25} color="#6366f1" />
+                {isError ? (
+                    <IconSymbol name="alert" size={22} color="#ef4444" />
+                ) : !isReady ? (
+                    <ActivityIndicator size="small" color="#6366f1" />
+                ) : (
+                    <IconSymbol name="play.fill" size={25} color="#6366f1" />
+                )}
             </View>
             <View style={styles.audioWaveform}>
                 <View style={styles.audioProgressTrack}>
@@ -924,11 +1251,74 @@ const styles = StyleSheet.create((theme) => ({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: 'rgba(0,0,0,0.55)',
+        backgroundColor: 'rgba(0,0,0,0.45)',
         justifyContent: 'center',
         alignItems: 'center',
         // Offset play icon visually to center it
         paddingLeft: 4,
+    },
+    videoOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.1)',
+        opacity: 0,
+    },
+    fullscreenContainer: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
+    },
+    fullscreenVideo: {
+        width: '100%',
+        aspectRatio: 16 / 9,
+    },
+    videoOverlayVisible: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.25)',
+    },
+    videoBottomBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingBottom: 8,
+        paddingTop: 8,
+    },
+    videoMiniToggle: {
+        width: 32,
+        height: 32,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
+    },
+    videoProgressTrack: {
+        flex: 1,
+        height: 24, // Increased hit area
+        justifyContent: 'center',
+    },
+    videoProgressInner: {
+        height: 3,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    videoProgressFill: {
+        height: '100%',
+        backgroundColor: theme.colors.primary,
+    },
+    videoTimer: {
+        fontSize: 10,
+        color: '#FFF',
+        marginLeft: 10,
+        fontVariant: ['tabular-nums'],
+        opacity: 0.9,
     },
     inlinePlayerContainer: {
         width: '100%',

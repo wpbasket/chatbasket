@@ -16,16 +16,33 @@ let isSyncingPending = false;
  * Phase D: This is fire-and-forget — persistence happens BEFORE this is called.
  * No debounce, no in-memory tracker. Storage is the source of truth.
  */
-export const ackIncomingMessages = async (messages: MessageEntry[], options?: { skipSenderSync?: boolean }): Promise<void> => {
+export const ackIncomingMessages = async (messages: MessageEntry[], options?: { skipSenderSync?: boolean; skipMediaCheck?: boolean }): Promise<void> => {
     if (messages.length === 0) return;
 
     const isPrimary = authState.isPrimary.peek();
 
     // --- PART A: Recipient Delivery ACK (Incoming messages we haven't ACK'd) ---
-    const toAck = messages.filter(m =>
-        !m.is_from_me &&
-        (!m.delivered_to_recipient || (isPrimary && !m.delivered_to_recipient_primary))
-    );
+    const toAck = messages.filter(m => {
+        if (m.is_from_me) return false;
+
+        // Check if already ACK'd according to our role (Primary vs Non-Primary)
+        const alreadyAcked = m.delivered_to_recipient && (!isPrimary || m.delivered_to_recipient_primary);
+        if (alreadyAcked) return false;
+
+        // --- Safety Filter: NEVER ACK media without local persistence ---
+        // Callers that manage downloads themselves (syncPendingMessages, soft-delete)
+        // pass skipMediaCheck to bypass this guard.
+        if (!options?.skipMediaCheck) {
+            const isMedia = ['image', 'video', 'audio', 'file'].includes(m.message_type);
+            // ONLY block ACK if there is a URL to download and we haven't persisted it yet.
+            // If download_url is missing, it's a broken message—ACK it to stop the loop.
+            if (isMedia && m.download_url && !m.local_uri) {
+                return false;
+            }
+        }
+
+        return true;
+    });
 
     if (toAck.length > 0) {
         const idsToAck = toAck.map(m => m.message_id);
@@ -326,9 +343,9 @@ export { useValue };
 interface ChatMessagesState {
     setLoading: (chatId: string, value: boolean) => void;
     setError: (chatId: string, value: string | null) => void;
-    setMessages: (chatId: string, entries: MessageEntry[]) => Promise<void>;
-    prependMessages: (chatId: string, entries: MessageEntry[]) => Promise<void>;
-    addMessage: (chatId: string, entry: MessageEntry) => Promise<void>;
+    setMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) => Promise<void>;
+    prependMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) => Promise<void>;
+    addMessage: (chatId: string, entry: MessageEntry, options?: { skipAck?: boolean; skipSenderSync?: boolean }) => Promise<void>;
     updateMessageStatus: (chatId: string, messageId: string, updates: Partial<MessageEntry>) => void;
     markMessagesDelivered: (chatId: string, messageIds: string[]) => void;
     markMessagesDeliveredUpTo: (chatId: string, deliveredAt: string) => void;
@@ -339,12 +356,14 @@ interface ChatMessagesState {
     unsendMessages: (chatId: string, messageIds: string[], senderUserId?: string) => void;
     setActiveChatId: (chatId: string | null) => void;
     updateInputText: (chatId: string, text: string) => void;
+    updateMessageProgress: (chatId: string, messageId: string, progress: number) => void;
     toggleSelectMode: (chatId: string, enabled: boolean) => void;
     toggleMessageSelection: (chatId: string, messageId: string) => void;
     clearSelection: (chatId: string) => void;
     reset: (chatId?: string) => void;
     syncPendingMessages: () => Promise<void>;
     debouncedMarkRead: (chatId: string) => void;
+    downloadMediaBatch: (chatId: string, messages: MessageEntry[]) => Promise<Set<string>>;
     activeChatId: Observable<string | null>;
     isChatOpen: Observable<boolean>;
     chats: Observable<Record<string, ChatData>>;
@@ -455,7 +474,14 @@ const chatActions = {
         });
 
         // Auto-Ack AFTER persist (fire-and-forget)
-        ackIncomingMessages(entries, options).catch(err =>
+        // [Phase 4b] Pickup missing media for the newly synced messages before ACK
+        const downloadFailedIds = await this.downloadMediaBatch(chatId, entries);
+
+        // Filter out download-failed messages from ACK batch
+        // (including soft-deleted ones) so the server stops re-delivering SUCCESSES
+        const toAck = entries.filter(m => !downloadFailedIds.has(m.message_id));
+
+        ackIncomingMessages(toAck, options).catch(err =>
             console.warn('[ChatState] setMessages ACK failed', err)
         );
     },
@@ -498,13 +524,74 @@ const chatActions = {
             chat.offset.set(merged.length);
         });
 
-        // Auto-Ack AFTER persist (fire-and-forget)
-        ackIncomingMessages(safeToPersist, options).catch(err =>
+        // [Phase 4b] Pickup missing media for the prepended messages before ACK
+        const downloadFailedIds = await this.downloadMediaBatch(chatId, safeToPersist);
+
+        // Filter out download-failed messages from ACK batch
+        const toAck = safeToPersist.filter(m => !downloadFailedIds.has(m.message_id));
+
+        ackIncomingMessages(toAck, options).catch(err =>
             console.warn('[ChatState] prependMessages ACK failed', err)
         );
     },
 
-    async addMessage(chatId: string, entry: MessageEntry) {
+    /**
+     * Scans a batch of messages and triggers downloads for any missing media.
+     * This covers historical sync, pagination, and boot scenarios.
+     */
+    async downloadMediaBatch(chatId: string, messages: MessageEntry[]): Promise<Set<string>> {
+        const downloadFailedIds = new Set<string>();
+        const mediaMessages = messages.filter(m =>
+            !m.is_from_me &&
+            ['image', 'video', 'audio', 'file'].includes(m.message_type) &&
+            !m.local_uri
+        );
+
+        if (mediaMessages.length === 0) return downloadFailedIds;
+
+        // Process in small serial batches to avoid overwhelming the network
+        // We use a simple loop with await to keep concurrency low (1 at a time per batch call)
+        // because multiple pagination/sync calls might run in parallel.
+        for (const msg of mediaMessages) {
+            try {
+                // If the message is missing a download URL, it's a permanent server-side data error.
+                // Mark it as error immediately so the UI stops spinning and we can ACK it.
+                if (!msg.download_url) {
+                    console.warn(`[ChatActions] downloadMediaBatch: skipping ${msg.message_id} - missing download_url`);
+                    this.updateMessageStatus(chatId, msg.message_id, { status: 'error' });
+                    await ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any);
+                    continue;
+                }
+
+                // Determine if we should show progress (only for Audio/Video/Large Files)
+                const shouldShowProgress = msg.message_type !== 'image';
+
+                const localUri = await downloadIncomingFile(msg, (p) => {
+                    if (shouldShowProgress) {
+                        this.updateMessageProgress(chatId, msg.message_id, p);
+                    }
+                });
+
+                if (localUri) {
+                    msg.local_uri = localUri; // Mutate entry so ACK filter sees local_uri
+                    await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: localUri });
+                    this.updateMessageStatus(chatId, msg.message_id, {
+                        local_uri: localUri,
+                        progress: 100
+                    });
+                }
+            } catch (err) {
+                console.error(`[ChatActions] downloadMediaBatch failed for ${msg.message_id}`, err);
+                downloadFailedIds.add(msg.message_id);
+                // Mark as error so the UI stops any spinners
+                this.updateMessageStatus(chatId, msg.message_id, { status: 'error' });
+                await ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any);
+            }
+        }
+        return downloadFailedIds;
+    },
+
+    async addMessage(chatId: string, entry: MessageEntry, options?: { skipAck?: boolean; skipSenderSync?: boolean }) {
         // Resolve media URLs first (async) before entering synchronous batch
         let resolvedEntry = { ...entry };
         if (resolvedEntry.file_id && !resolvedEntry.local_uri) {
@@ -515,15 +602,15 @@ const chatActions = {
         const existing = chat.messagesById.peek();
         if (existing[resolvedEntry.message_id]) return;
 
-        // Phase D: Check if this message was soft-deleted (e.g., concurrent delete_for_me
-        // event arriving while handleNewMessage is downloading media). Without this guard,
-        // INSERT OR REPLACE would overwrite deleted_for_me = 1 with 0, resurrecting the message.
+        // Phase D: Check if this message was soft-deleted
         const deletedIds = await ChatStorage.getDeletedMessageIds(chatId);
         if (deletedIds.includes(resolvedEntry.message_id)) {
-            // Still ACK so the server stops re-delivering (same pattern as syncPendingMessages)
-            ackIncomingMessages([resolvedEntry], { skipSenderSync: true }).catch(err =>
-                console.warn('[ChatState] addMessage ACK (deleted msg) failed', err)
-            );
+            // Still ACK so the server stops re-delivering
+            if (!options?.skipAck) {
+                ackIncomingMessages([resolvedEntry], { skipSenderSync: options?.skipSenderSync ?? true, skipMediaCheck: true }).catch(err =>
+                    console.warn('[ChatState] addMessage ACK (deleted msg) failed', err)
+                );
+            }
             return;
         }
 
@@ -540,10 +627,12 @@ const chatActions = {
         });
 
         // Auto-Ack AFTER persist (fire-and-forget, skip sender sync)
-        console.log(`[ChatActions] addMessage: Persisted ${resolvedEntry.message_id}. ACK follows.`);
-        ackIncomingMessages([resolvedEntry], { skipSenderSync: true }).catch(err =>
-            console.warn('[ChatState] addMessage ACK failed', err)
-        );
+        if (!options?.skipAck) {
+            console.log(`[ChatActions] addMessage: Persisted ${resolvedEntry.message_id}. ACK follows.`);
+            ackIncomingMessages([resolvedEntry], { skipSenderSync: options?.skipSenderSync ?? true }).catch(err =>
+                console.warn('[ChatState] addMessage ACK failed', err)
+            );
+        }
     },
 
     updateMessageStatus(chatId: string, messageId: string, updates: Partial<MessageEntry>) {
@@ -557,6 +646,22 @@ const chatActions = {
                 const index = currentMessages.findIndex((m: MessageEntry) => m.message_id === messageId);
                 if (index !== -1) {
                     chat.messages[index].assign(updates);
+                }
+            }
+        });
+    },
+
+    updateMessageProgress(chatId: string, messageId: string, progress: number) {
+        batch(() => {
+            const chat = ensureChatInternal(chatId);
+            const message$ = chat.messagesById[messageId];
+            if (message$.peek()) {
+                message$.progress.set(progress);
+
+                const currentMessages = chat.messages.peek();
+                const index = currentMessages.findIndex((m: MessageEntry) => m.message_id === messageId);
+                if (index !== -1) {
+                    chat.messages[index].progress.set(progress);
                 }
             }
         });
@@ -955,10 +1060,18 @@ const chatActions = {
                 if (allDeletedIds.has(msg.message_id)) continue;
                 if (msg.file_id && msg.download_url && msg.message_type !== 'text' && msg.message_type !== 'unsent') {
                     try {
-                        const localUri = await downloadIncomingFile(msg);
+                        // Phase 4b: Provide progress callback for UI if chat is open during sync
+                        const localUri = await downloadIncomingFile(msg, (p) => {
+                            this.updateMessageProgress(msg.chat_id, msg.message_id, p);
+                        });
+
                         if (localUri) {
                             msg.local_uri = localUri; // Mutate so in-memory state gets local_uri
                             await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: localUri } as any);
+                            this.updateMessageStatus(msg.chat_id, msg.message_id, {
+                                local_uri: localUri,
+                                progress: 100
+                            });
                         }
                     } catch (err) {
                         if (isPrimary) {
@@ -967,7 +1080,13 @@ const chatActions = {
                             downloadFailedIds.add(msg.message_id);
                             continue;
                         }
-                        console.warn('[ChatState] syncPendingMessages: Media download failed on non-primary — proceeding', msg.message_id, err);
+                        console.warn('[ChatState] syncPendingMessages: Media download failed on non-primary — skipping ACK for safety', msg.message_id, err);
+                        // Block ACK on non-primary to prevent the server from deleting media 
+                        // before other devices (or the primary) have synced it.
+                        downloadFailedIds.add(msg.message_id);
+                        // Mark as error so UI shows the retry button
+                        this.updateMessageStatus(msg.chat_id, msg.message_id, { status: 'error' });
+                        await ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any);
                     }
                 }
             }
@@ -1044,7 +1163,7 @@ const chatActions = {
             // ACK all successfully-downloaded messages (including soft-deleted ones)
             // so the server stops re-delivering them. filteredToProcess excludes deleted
             // from in-memory state, but messagesToProcess includes them for ACK.
-            ackIncomingMessages(messagesToProcess).catch(err =>
+            ackIncomingMessages(messagesToProcess, { skipMediaCheck: true }).catch(err =>
                 console.warn('[ChatState] syncPendingMessages ACK failed', err)
             );
 

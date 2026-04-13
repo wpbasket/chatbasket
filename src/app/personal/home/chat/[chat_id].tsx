@@ -30,6 +30,48 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
+import mime from 'react-native-mime-types';
+import * as Sharing from 'expo-sharing';
+import * as IntentLauncher from 'expo-intent-launcher';
+import { File } from 'expo-file-system';
+import { downloadIncomingFile, isSupportedMimeType, DEFAULT_MIME_TYPES, FALLBACK_MIME_TYPE } from '@/lib/personalLib/fileSystem/file.download';
+
+const READABLE_MIME_TYPES = new Set([
+    'application/pdf',
+    'text/plain',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+]);
+
+const READABLE_EXTENSIONS = new Set([
+    '.pdf', '.txt', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp',
+    '.mp4', '.mov', '.avi', '.mkv',
+    '.mp3', '.wav', '.m4a', '.ogg'
+]);
+
+const isReadableFile = (activeUrl: string, m: string) => {
+    const lowMime = m.toLowerCase();
+    const isMimeReadable = READABLE_MIME_TYPES.has(lowMime) ||
+        lowMime.startsWith('image/') ||
+        lowMime.startsWith('video/') ||
+        lowMime.startsWith('audio/');
+
+    if (isMimeReadable) return true;
+
+    // Check extension as fallback for generic MIME types (like application/octet-stream)
+    const dotIdx = activeUrl.lastIndexOf('.');
+    if (dotIdx > 0) {
+        const ext = activeUrl.substring(dotIdx).toLowerCase();
+        return READABLE_EXTENSIONS.has(ext);
+    }
+
+    return false;
+};
 
 const PersonalChatScreen = React.memo(() => {
 
@@ -268,6 +310,45 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
             });
         }
 
+        // Retry Download for incoming media that failed
+        const isMedia = ['image', 'video', 'audio', 'file'].includes(message.message_type);
+        if (!message.is_from_me && status === 'error' && isMedia) {
+            controllers.unshift({
+                id: 'retry_download',
+                label: 'Retry Download',
+                onPress: async () => {
+                    try {
+                        // 1. Reset UI to pending to show loader
+                        $chatMessagesState.updateMessageStatus(chatId, messageId, {
+                            status: 'pending',
+                            progress: 1
+                        });
+
+                        // 2. Trigger download
+                        const localUri = await downloadIncomingFile(message, (p) => {
+                            $chatMessagesState.updateMessageProgress(chatId, messageId, p);
+                        });
+
+                        if (localUri) {
+                            // 3. Success: persist to storage and update UI
+                            await ChatStorage.updateMessageStatus(messageId, { local_uri: localUri, status: 'sent' } as any);
+                            $chatMessagesState.updateMessageStatus(chatId, messageId, {
+                                local_uri: localUri,
+                                status: 'sent',
+                                progress: 100
+                            });
+                        }
+                    } catch (err) {
+                        console.error('[UI] Manual retry download failed', err);
+                        // Reset back to error
+                        $chatMessagesState.updateMessageStatus(chatId, messageId, { status: 'error' });
+                        await ChatStorage.updateMessageStatus(messageId, { status: 'error' } as any);
+                        showAlert('Download failed again. Please check your connection.');
+                    }
+                }
+            });
+        }
+
         // Only show "Unsend" for messages that exist on the server (not temp IDs)
         // and have been sent/delivered/read (not pending/error)
         if (message.is_from_me && !messageId.startsWith('temp_') &&
@@ -309,7 +390,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         });
     }, [chatId, messageId, message.is_from_me, status]);
 
-    const handlePress = useCallback(() => {
+    const handlePress = useCallback(async () => {
         // Always check select mode first, regardless of message type.
         const isSelectMode = $chatMessagesState.chats[chatId]?.isSelectMode.peek();
         if (isSelectMode) {
@@ -336,6 +417,9 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         // Phase D: prefer local_uri (persisted file) over server URLs (dead post-ACK)
         const activeUrl = message.local_uri || message.download_url || message.file_url;
         if (message.message_type === 'file' && activeUrl) {
+            const confirmed = await showConfirmDialog('Are you sure you want to open this file?');
+            if (!confirmed) return;
+
             if (Platform.OS === 'web') {
                 // Web: idb:// marker → open blob in new tab
                 if (activeUrl.startsWith('idb://')) {
@@ -354,9 +438,60 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                     window.open(activeUrl, '_blank');
                 }
             } else {
-                Linking.openURL(activeUrl).catch(err => {
-                    console.error('[UI] Failed to open URL:', err);
-                });
+                // Native: use expo-sharing for local files to avoid security exceptions
+                if (activeUrl.startsWith('file://')) {
+                    const inferredMime = activeUrl ? mime.lookup(activeUrl) : null;
+                    const resolvedMime = (message.file_mime_type || inferredMime || 'application/octet-stream') as string;
+
+                    if (Platform.OS === 'android') {
+                        // Android: Direct View Intent (Opens in PDF / Doc reader directly)
+                        try {
+                            const contentUri = new File(activeUrl).contentUri;
+                            const primaryMime = resolvedMime;
+
+                            // Share-first policy: only use viewer for "normal document readable formats"
+                            if (!isReadableFile(activeUrl, primaryMime)) {
+                                return Sharing.shareAsync(activeUrl, { mimeType: primaryMime }).catch(err => {
+                                    console.error('[UI] Failed to share non-readable file:', err);
+                                    Linking.openURL(activeUrl);
+                                });
+                            }
+
+                            IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                                data: contentUri,
+                                flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                type: primaryMime,
+                            }).catch(() => {
+                                // Fallback 1: Try as plain text (works for code/log files)
+                                return IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                                    data: contentUri,
+                                    flags: 1,
+                                    type: 'text/plain',
+                                });
+                            }).catch(() => {
+                                // Fallback 2: Sharing sheet (chooser) as final native attempt
+                                // Ensure share sheet also avoids recommending HTML viewers if possible
+                                const shareMime = resolvedMime === 'text/html' ? 'text/plain' : resolvedMime;
+                                return Sharing.shareAsync(activeUrl, { mimeType: shareMime });
+                            }).catch(() => {
+                                // Final failure: show native URL picker as absolute last resort
+                                Linking.openURL(activeUrl);
+                            });
+                        } catch (err) {
+                            console.error('[UI] Failed to resolve Content URI:', err);
+                            const finalMime = resolvedMime === 'text/html' ? 'text/plain' : resolvedMime;
+                            Sharing.shareAsync(activeUrl, { mimeType: finalMime });
+                        }
+                    } else {
+                        Sharing.shareAsync(activeUrl, { mimeType: resolvedMime }).catch(err => {
+                            console.error('[UI] Failed to share/open file:', err);
+                        });
+                    }
+                } else {
+                    Linking.openURL(activeUrl).catch(err => {
+                        console.error('[UI] Failed to open URL:', err);
+                    });
+                }
             }
         }
     }, [chatId, messageId, message.message_type, message.file_url, message.download_url, message.local_uri]);
@@ -677,7 +812,12 @@ const ChatContentContainer = React.memo(({
 
         const fileSize = (asset as any).size || (asset as any).fileSize || 0;
         const fileName = (asset as any).name || (asset as any).fileName || 'file';
-        const fileMimeType = (asset as any).mimeType || (asset as any).type || (type === 'image' ? 'image/jpeg' : type === 'video' ? 'video/mp4' : type === 'audio' ? 'audio/mpeg' : null);
+        const fileMimeType = (asset as any).mimeType || (asset as any).type || DEFAULT_MIME_TYPES[type as keyof typeof DEFAULT_MIME_TYPES] || FALLBACK_MIME_TYPE;
+        
+        if (!isSupportedMimeType(fileMimeType)) {
+            showAlert('This file type is not supported for sending.', 'Unsupported File Type');
+            return;
+        }
 
         if (fileSize > 100 * 1024 * 1024) {
             showAlert(`File "${fileName}" is too large. Max 100MB allowed.`);

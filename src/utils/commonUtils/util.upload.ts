@@ -1,5 +1,6 @@
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { Platform } from 'react-native';
+import { FALLBACK_MIME_TYPE } from '@/lib/personalLib/fileSystem/file.download';
 
 /**
  * Append a single ImagePickerAsset to an existing FormData under a given field name.
@@ -13,7 +14,7 @@ export async function appendAssetToFormData(
 ): Promise<void> {
   const fieldName = options.fieldName ?? 'file';
   const filename = options.filename ?? asset.fileName ?? `file_${Date.now()}`;
-  const mimeType = options.mimeType ?? asset.mimeType ?? 'application/octet-stream';
+  const mimeType = options.mimeType ?? asset.mimeType ?? FALLBACK_MIME_TYPE;
 
   if (Platform.OS === 'web') {
     const maybeFile = (asset as any).file as any;

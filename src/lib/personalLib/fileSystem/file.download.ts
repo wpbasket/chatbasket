@@ -10,6 +10,7 @@
  */
 
 import { Platform } from 'react-native';
+import mime from 'react-native-mime-types';
 import type { MessageEntry } from '@/lib/personalLib';
 import { storeMediaBlob, getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 
@@ -17,6 +18,29 @@ import { storeMediaBlob, getMediaBlob } from '@/lib/storage/personalStorage/chat
 
 const CHAT_FILES_DIR = 'chatFiles';
 const TAG = '[FileDownload]';
+
+/** Checks if a MIME type is supported by the system */
+export function isSupportedMimeType(mimeType?: string | null): boolean {
+    if (!mimeType) return false;
+    // Known extensions or valid lookups mean it's supported
+    return !!mime.extension(mimeType.toLowerCase());
+}
+
+/** Defaults for various media categories when the system doesn't provide a MIME type */
+export const DEFAULT_MIME_TYPES = {
+    image: 'image/jpeg',
+    video: 'video/mp4',
+    audio: 'audio/mpeg',
+    file: 'application/octet-stream',
+};
+
+/** Global fallback for unknown binary streams */
+export const FALLBACK_MIME_TYPE = 'application/octet-stream';
+
+// ─── Tracker ──────────────────────────────────────────────────────────────────
+
+/** Tracks active downloads to prevent multiple concurrent requests for the same file */
+const activeDownloads = new Map<string, Promise<string | null>>();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,27 +69,11 @@ function inferExtension(msg: MessageEntry): string {
 
     // 3. Fallback from mime type
     if (msg.file_mime_type) {
-        const mimeMap: Record<string, string> = {
-            'image/jpeg': '.jpg',
-            'image/png': '.png',
-            'image/gif': '.gif',
-            'image/webp': '.webp',
-            'image/heic': '.heic',
-            'video/mp4': '.mp4',
-            'video/mov': '.mov',
-            'video/webm': '.webm',
-            'audio/mpeg': '.mp3',
-            'audio/mp4': '.m4a',
-            'audio/aac': '.aac',
-            'audio/ogg': '.ogg',
-            'audio/wav': '.wav',
-            'application/pdf': '.pdf',
-        };
-        const ext = mimeMap[msg.file_mime_type.toLowerCase()];
-        if (ext) return ext;
+        const ext = mime.extension(msg.file_mime_type.toLowerCase());
+        if (ext) return `.${ext}`;
     }
 
-    return '';
+    return '.bin';
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -88,22 +96,48 @@ function inferExtension(msg: MessageEntry): string {
  */
 export async function downloadIncomingFile(
     msg: MessageEntry,
+    onProgress?: (p: number) => void
 ): Promise<string | null> {
     // Skip non-media messages
     if (!MEDIA_TYPES.has(msg.message_type)) return null;
     if (msg.message_type === 'unsent') return null;
     if (!msg.download_url) return null;
 
-    if (Platform.OS === 'web') {
-        return downloadForWeb(msg);
-    } else {
-        return downloadForNative(msg);
+    // Phase 4b: Deduplicate concurrent downloads for the same message ID.
+    // This prevents "other part trying to redownload" race conditions where
+    // a second request fails with 401 because the first one already ACKed.
+    const messageId = msg.message_id;
+    const existing = activeDownloads.get(messageId);
+    if (existing) {
+        return existing;
     }
+
+    const downloadPromise = (async () => {
+        try {
+            if (Platform.OS === 'web') {
+                return await downloadForWeb(msg, onProgress);
+            } else {
+                return await downloadForNative(msg, onProgress);
+            }
+        } finally {
+            // Always cleanup so future manual retries can re-attempt if it failed
+            activeDownloads.delete(messageId);
+        }
+    })();
+
+    activeDownloads.set(messageId, downloadPromise);
+    return downloadPromise;
 }
 
 // ─── Native implementation ────────────────────────────────────────────────────
 
-async function downloadForNative(msg: MessageEntry): Promise<string | null> {
+async function downloadForNative(
+    msg: MessageEntry,
+    onProgress?: (p: number) => void
+): Promise<string | null> {
+    // Phase 4b: Support SDK 55 Modern API (Zero Legacy)
+    // Using standard XMLHttpRequest for progress (since Fetch streams are limited on Android)
+    // and the Modern File class for localized storage.
     const { File, Directory, Paths } = await import('expo-file-system');
 
     // Ensure chatFiles/ directory exists
@@ -121,19 +155,49 @@ async function downloadForNative(msg: MessageEntry): Promise<string | null> {
         return destFile.uri;
     }
 
-    try {
-        const downloaded = await File.downloadFileAsync(msg.download_url!, destFile);
-        console.log(TAG, `Downloaded → ${downloaded.name}`);
-        return downloaded.uri;
-    } catch (err) {
-        console.error(TAG, `Failed to download ${msg.message_id}:`, err);
-        throw err; // let caller decide (Rule 7: primary blocks ACK, non-primary continues)
-    }
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', msg.download_url!, true);
+        xhr.responseType = 'arraybuffer'; // Modern & compatible way to handle binary in RN
+
+        xhr.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) {
+                const progress = (event.loaded / event.total) * 100;
+                onProgress?.(progress);
+            }
+        };
+
+        xhr.onload = async () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const buffer = xhr.response;
+                    const uint8Array = new Uint8Array(buffer);
+                    
+                    // Write to Modern FileSystem
+                    destFile.write(uint8Array);
+                    
+                    resolve(destFile.uri);
+                } catch (writeErr) {
+                    reject(writeErr);
+                }
+            } else {
+                reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Network request failed'));
+        xhr.ontimeout = () => reject(new Error('Request timed out'));
+
+        xhr.send();
+    });
 }
 
 // ─── Web implementation ───────────────────────────────────────────────────────
 
-async function downloadForWeb(msg: MessageEntry): Promise<string | null> {
+async function downloadForWeb(
+    msg: MessageEntry,
+    onProgress?: (p: number) => void
+): Promise<string | null> {
     const idbUri = `idb://${msg.message_id}`;
 
     // Idempotent: skip if already in IndexedDB
@@ -151,8 +215,25 @@ async function downloadForWeb(msg: MessageEntry): Promise<string | null> {
             throw new Error(`HTTP ${response.status} downloading ${msg.download_url}`);
         }
 
-        const blob = await response.blob();
-        const mimeType = msg.file_mime_type || blob.type || 'application/octet-stream';
+        // --- Stream progress handling ---
+        const contentLength = +(response.headers.get('Content-Length') || '0');
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('Response body is not readable');
+
+        const chunks: Uint8Array[] = [];
+        let receivedLength = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            receivedLength += value.length;
+            if (contentLength) onProgress?.((receivedLength / contentLength) * 100);
+        }
+
+        const blob = new Blob(chunks as any);
+        // --------------------------------
+        const mimeType = msg.file_mime_type || blob.type || FALLBACK_MIME_TYPE;
         const fileName = msg.file_name || `${msg.message_id}${inferExtension(msg)}`;
 
         await storeMediaBlob(msg.message_id, blob, mimeType, fileName);

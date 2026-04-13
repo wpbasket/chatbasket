@@ -15,6 +15,7 @@ import { Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { File, Directory, Paths } from 'expo-file-system';
 import { storeMediaBlob, getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
+import { FALLBACK_MIME_TYPE } from './file.download';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,11 +141,9 @@ async function copyForWeb(
         fileBlob = await response.blob();
     }
 
-    const resolvedMimeType = mimeType || fileBlob.type || 'application/octet-stream';
+    const resolvedMimeType = mimeType || fileBlob.type || FALLBACK_MIME_TYPE;
     await storeMediaBlob(tempId, fileBlob, resolvedMimeType, fileName);
     console.log(TAG, `Stored in IDB → ${tempId} (${fileName})`);
 
     return { localUri: idbUri, fileName };
 }
-
-

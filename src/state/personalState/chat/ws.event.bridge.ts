@@ -73,37 +73,65 @@ async function handleNewMessage(payload: any): Promise<void> {
         return; // Do NOT ACK if persist failed — server will re-deliver
     }
 
-    // Phase 4b: Download media BEFORE ACK
-    // Rule 7: primary blocks ACK on failure, non-primary continues
-    // Rule 8: null isPrimary = non-primary
-    const isPrimary = authState.isPrimary.peek() === true;
-    try {
-        const localUri = await downloadIncomingFile(msg);
-        if (localUri) {
-            msg.local_uri = localUri;
-            await updateMessageStatus(msg.message_id, { local_uri: localUri });
-            dbg(`[WS Bridge] new_message: DOWNLOADED media → ${localUri}`);
-        }
-    } catch (err) {
-        if (isPrimary) {
-            console.error(`[WS Bridge] new_message: DOWNLOAD FAILED (primary, blocking ACK) ${msg.message_id}`, err);
-            return; // Block ACK — will retry on next delivery
-        }
-        console.warn(`[WS Bridge] new_message: DOWNLOAD FAILED (non-primary, continuing) ${msg.message_id}`, err);
-    }
-
     // Add message to the active chat if it's open
     const activeChatId = $chatMessagesState.activeChatId.peek();
     dbg(`[WS Bridge] new_message: activeChatId=${activeChatId}, msg.chat_id=${msg.chat_id}`);
 
     if (activeChatId === msg.chat_id) {
         dbg(`[WS Bridge] new_message: ADDING to active chat state — msgID=${msg.message_id}`);
-        // addMessage already persists (will be a no-op INSERT OR REPLACE), then ACKs
-        await $chatMessagesState.addMessage(msg.chat_id, msg);
-        // Explicitly fire Part B (sender-sync ACK) for cross-device sync of our own messages.
+        // addMessage already persists, skipAck ensures we wait for download before final ACK
+        await $chatMessagesState.addMessage(msg.chat_id, { ...msg, progress: 0 }, { skipAck: true });
+    }
+
+    // Phase 4b: Download media BEFORE ACK
+    // Rule 7: primary blocks ACK on failure, non-primary continues
+    // Rule 8: null isPrimary = non-primary
+    const isPrimary = authState.isPrimary.peek() === true;
+    try {
+        const localUri = await downloadIncomingFile(msg, (p) => {
+            $chatMessagesState.updateMessageProgress(msg.chat_id, msg.message_id, p);
+        });
+
+        if (localUri) {
+            msg.local_uri = localUri;
+            await updateMessageStatus(msg.message_id, { local_uri: localUri });
+
+            // Update in-memory state if message was already added
+            $chatMessagesState.updateMessageStatus(msg.chat_id, msg.message_id, {
+                local_uri: localUri,
+                progress: 100
+            });
+
+            dbg(`[WS Bridge] new_message: DOWNLOADED media → ${localUri}`);
+        }
+    } catch (err) {
+        console.error(`[WS Bridge] new_message: DOWNLOAD FAILED ${msg.message_id}`, err);
+
+        // Persist error status to storage so it persists across reloads
+        await updateMessageStatus(msg.message_id, { status: 'error' })
+            .catch(e => console.warn('[WS Bridge] Failed to persist download error', e));
+
+        // Mark as error so the UI stops the loader and shows error icon
+        $chatMessagesState.updateMessageStatus(msg.chat_id, msg.message_id, {
+            status: 'error',
+            progress: 0
+        });
+
+        // Block ACK for ALL devices — will retry on next delivery/reconnect
+        return;
+    }
+
+    // Explicitly fire Part B (sender-sync ACK) for cross-device sync of our own messages.
+    // OR trigger background ACK for recipient.
+    if (activeChatId === msg.chat_id) {
         if (msg.is_from_me) {
             ackIncomingMessages([msg]).catch(err =>
                 console.warn('[WS Bridge] sender sync ACK failed', err)
+            );
+        } else {
+            // Delivery ACK for incoming messages — download already succeeded above
+            ackIncomingMessages([msg]).catch(err =>
+                console.warn('[WS Bridge] active-chat delivery ACK failed', err)
             );
         }
 

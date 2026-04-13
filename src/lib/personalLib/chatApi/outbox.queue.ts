@@ -15,6 +15,7 @@ import { copyFileToPrivateDir } from '@/lib/personalLib/fileSystem/file.copy';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
+import { DEFAULT_MIME_TYPES, FALLBACK_MIME_TYPE } from '@/lib/personalLib/fileSystem/file.download';
 
 const TAG = '[OutboxQueue]';
 const MAX_RETRIES = 3;
@@ -191,13 +192,8 @@ class OutboxQueue {
         const fileMimeType =
             input.asset.mimeType ||
             input.asset.type ||
-            (input.messageType === 'image'
-                ? 'image/jpeg'
-                : input.messageType === 'video'
-                    ? 'video/mp4'
-                    : input.messageType === 'audio'
-                        ? 'audio/mpeg'
-                        : 'application/octet-stream');
+            DEFAULT_MIME_TYPES[input.messageType as keyof typeof DEFAULT_MIME_TYPES] ||
+            DEFAULT_MIME_TYPES.file;
 
         const optimisticMsg: MessageEntry = {
             message_id: tempId,
@@ -471,7 +467,7 @@ class OutboxQueue {
                 throw new Error(`No blob found in IDB for ${msg.message_id}`);
             }
             const file = new File([media.blob], msg.file_name || media.fileName || 'file', {
-                type: msg.file_mime_type || media.mimeType || 'application/octet-stream',
+                type: msg.file_mime_type || media.mimeType || FALLBACK_MIME_TYPE,
             });
             formData.append('file', file);
         } else {
@@ -481,7 +477,7 @@ class OutboxQueue {
             formData.append('file', {
                 uri: msg.local_uri,
                 name: msg.file_name || 'file',
-                type: msg.file_mime_type || 'application/octet-stream',
+                type: msg.file_mime_type || FALLBACK_MIME_TYPE,
             } as any);
         }
 
