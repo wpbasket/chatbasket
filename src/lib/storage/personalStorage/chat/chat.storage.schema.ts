@@ -24,6 +24,7 @@ export interface LocalMessageEntry {
     file_mime_type: string | null;
     view_url: string | null;
     download_url: string | null;
+    file_token_expiry: string | null;
 
     // Local-only fields
     local_uri: string | null;      // Local file path (before upload)

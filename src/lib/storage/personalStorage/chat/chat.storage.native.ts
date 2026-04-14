@@ -95,6 +95,7 @@ export async function initChatStorage(): Promise<void> {
             last_retry_at TEXT,
             error_message TEXT,
             error_is_blocking INTEGER,
+            file_token_expiry TEXT,
             inserted_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT
         );
@@ -134,8 +135,8 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             synced_to_sender_primary, created_at, expires_at, file_id, file_name,
             file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
             acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
-            inserted_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            file_token_expiry, inserted_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             message.message_id,
             message.chat_id,
@@ -163,6 +164,7 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             null, // last_retry_at — default null
             null, // error_message — default null
             null, // error_is_blocking — default null
+            message.file_token_expiry || null,
             new Date().toISOString(),
             new Date().toISOString()
         ]
@@ -331,8 +333,8 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 synced_to_sender_primary, created_at, expires_at, file_id, file_name,
                 file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
                 acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
-                inserted_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                file_token_expiry, inserted_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 promoted.message_id,
                 promoted.chat_id,
@@ -360,6 +362,7 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 promoted.last_retry_at ?? null,
                 promoted.error_message ?? null,
                 promoted.error_is_blocking == null ? null : (promoted.error_is_blocking ? 1 : 0),
+                promoted.file_token_expiry || null,
                 promoted.inserted_at,
                 promoted.updated_at,
             ]
@@ -614,6 +617,7 @@ function sqliteRowToLocal(row: Record<string, any>): LocalMessageEntry {
         last_retry_at: row.last_retry_at || null,
         error_message: row.error_message || null,
         error_is_blocking: row.error_is_blocking != null ? row.error_is_blocking === 1 : null,
+        file_token_expiry: row.file_token_expiry || null,
     } as LocalMessageEntry;
 }
 

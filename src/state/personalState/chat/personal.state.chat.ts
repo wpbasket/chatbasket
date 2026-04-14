@@ -4,11 +4,13 @@ import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
+import { ApiError } from '@/lib/constantLib';
 import { $personalStateUser } from '../user/personal.state.user';
 import { authState } from '../../auth/state.auth';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
 import { normalizeChatEntries, normalizeChatEntry } from '@/lib/storage/personalStorage/chat/chat.storage.normalize';
+
 
 let isSyncingPending = false;
 /**
@@ -548,6 +550,10 @@ const chatActions = {
 
         if (mediaMessages.length === 0) return downloadFailedIds;
 
+        // Ensure tokens are fresh before starting the batch download (User Request: Refresh only for downloads)
+        await resolveMediaUrls(mediaMessages);
+        await ChatStorage.insertMessages(mediaMessages);
+
         // Sentinel URI to mark permanently failed downloads — survives merges
         // because local_uri is preserved in setMessages/prependMessages.
         // Truthy value → `!m.local_uri` filter skips it on next reload → no infinite retry.
@@ -967,6 +973,7 @@ const chatActions = {
 
     setActiveChatId(chatId: string | null) {
         chatMessages$.activeChatId.set(chatId);
+
         if (chatId) {
             ensureChatInternal(chatId);
         }
@@ -1067,6 +1074,14 @@ const chatActions = {
                 if (msg.file_id && msg.download_url && msg.message_type !== 'text' && msg.message_type !== 'unsent') {
                     try {
                         // Phase 4b: Provide progress callback for UI if chat is open during sync
+                        // Ensure token is fresh before download (User Request: Refresh only for downloads)
+                        await resolveMediaUrls([msg]);
+                        await ChatStorage.updateMessageStatus(msg.message_id, { 
+                            download_url: msg.download_url,
+                            view_url: msg.view_url,
+                            file_token_expiry: msg.file_token_expiry
+                        } as any);
+
                         const localUri = await downloadIncomingFile(msg, (p) => {
                             this.updateMessageProgress(msg.chat_id, msg.message_id, p);
                         });
@@ -1082,8 +1097,18 @@ const chatActions = {
                     } catch (err) {
                         if (isPrimary) {
                             console.error('[ChatState] syncPendingMessages: Media download failed on PRIMARY — skipping ACK for this message', msg.message_id, err);
-                            // Track failed IDs so they're excluded from ACK and in-memory state
-                            downloadFailedIds.add(msg.message_id);
+                            
+                            // 🆕 NEW: If the download fails with a 404 (Missing on Relay),
+                            // mark it as 'error' so it stops clogging the sync queue.
+                            const statusCode = (err as any)?.status || (err as any)?.code;
+                            if (statusCode === 404) {
+                                console.log('[ChatState] syncPendingMessages: Resource GONE (404) on relay — marking message as error', msg.message_id);
+                                ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any).catch(() => {});
+                                this.updateMessageStatus(msg.chat_id, msg.message_id, { status: 'error' });
+                            } else {
+                                // Track failed IDs so they're excluded from ACK and in-memory state
+                                downloadFailedIds.add(msg.message_id);
+                            }
                             continue;
                         }
                         console.warn('[ChatState] syncPendingMessages: Media download failed on non-primary — skipping ACK for safety', msg.message_id, err);

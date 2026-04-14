@@ -54,7 +54,6 @@ export interface MessageEntry {
     status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed'; // Phase D: expanded union
     created_at: string;      // Go time.Time → JSON string
     expires_at: string;
-    file_url?: string;
     file_name?: string | null;
     file_size?: number | null;
     file_mime_type?: string | null;
@@ -62,6 +61,7 @@ export interface MessageEntry {
     download_url?: string;
     progress?: number;
     file_id?: string | null;
+    file_token_expiry?: string | null;
 
     // Phase D — local-only fields (optional: not present in server responses)
     acked_by_server?: boolean;       // True after server ACK
@@ -146,6 +146,7 @@ export interface UploadFileResponse {
     file_size: number | null;
     created_at: string;
     expires_at: string;
+    file_token_expiry?: string | null;
 }
 
 /**
@@ -154,6 +155,7 @@ export interface UploadFileResponse {
 export interface GetFileURLResponse {
     view_url?: string;
     download_url: string;
+    file_token_expiry?: string | null;
 }
 
 /**

@@ -20,6 +20,8 @@ import { authState } from '@/state/auth/state.auth';
 import { $syncEngine } from '@/state/personalState/chat/personal.state.sync';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
+import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
+import { ApiError } from '@/lib/constantLib';
 
 // Production-safe debug logger — compiled out in release builds
 const dbg = __DEV__ ? console.log.bind(console) : () => { };
@@ -88,6 +90,14 @@ async function handleNewMessage(payload: any): Promise<void> {
     // Rule 8: null isPrimary = non-primary
     const isPrimary = authState.isPrimary.peek() === true;
     try {
+        // Ensure token is fresh before download (User Request: Refresh only for downloads)
+        await resolveMediaUrls([msg]);
+        await updateMessageStatus(msg.message_id, { 
+            download_url: msg.download_url,
+            view_url: msg.view_url,
+            file_token_expiry: msg.file_token_expiry
+        } as any);
+
         const localUri = await downloadIncomingFile(msg, (p) => {
             $chatMessagesState.updateMessageProgress(msg.chat_id, msg.message_id, p);
         });
@@ -107,17 +117,20 @@ async function handleNewMessage(payload: any): Promise<void> {
     } catch (err) {
         console.error(`[WS Bridge] new_message: DOWNLOAD FAILED ${msg.message_id}`, err);
 
+        const statusCode = (err as any)?.status || (err as any)?.code;
+        const isPermanentError = statusCode === 404;
+        const targetStatus = isPermanentError ? 'error' : 'failed';
         const DOWNLOAD_FAILED_URI = 'error://download-failed';
         
         // Persist error status + sentinel to storage
         await updateMessageStatus(msg.message_id, { 
-            status: 'failed',
+            status: targetStatus,
             local_uri: DOWNLOAD_FAILED_URI 
         } as any).catch(e => console.warn('[WS Bridge] Failed to persist download error', e));
 
         // Mark as error so the UI stops the loader and shows error icon
         $chatMessagesState.updateMessageStatus(msg.chat_id, msg.message_id, {
-            status: 'failed',
+            status: targetStatus,
             local_uri: DOWNLOAD_FAILED_URI,
             progress: 0
         });

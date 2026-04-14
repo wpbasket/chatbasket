@@ -182,7 +182,9 @@ async function downloadForNative(
                     reject(writeErr);
                 }
             } else {
-                reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+                const error = new Error(`HTTP ${xhr.status}: ${xhr.statusText}`);
+                (error as any).status = xhr.status;
+                reject(error);
             }
         };
 
@@ -219,7 +221,9 @@ async function downloadForWeb(
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status} downloading ${msg.download_url}`);
+            const error = new Error(`HTTP ${response.status} downloading ${msg.download_url}`);
+            (error as any).status = response.status;
+            throw error;
         }
 
         // --- Stream progress handling ---

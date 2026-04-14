@@ -35,6 +35,7 @@ import * as Sharing from 'expo-sharing';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { File } from 'expo-file-system';
 import { downloadIncomingFile, isSupportedMimeType, DEFAULT_MIME_TYPES, FALLBACK_MIME_TYPE } from '@/lib/personalLib/fileSystem/file.download';
+import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 
 const READABLE_MIME_TYPES = new Set([
     'application/pdf',
@@ -327,13 +328,22 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                         });
 
                         // 2. Trigger download
-                        const localUri = await downloadIncomingFile(message, (p) => {
+                        // Ensure token is fresh before download (User Request: Refresh only for downloads)
+                        await resolveMediaUrls([message as MessageEntry]);
+                        
+                        const localUri = await downloadIncomingFile(message as MessageEntry, (p) => {
                             $chatMessagesState.updateMessageProgress(chatId, messageId, p);
                         });
 
                         if (localUri) {
                             // 3. Success: persist to storage and update UI
-                            await ChatStorage.updateMessageStatus(messageId, { local_uri: localUri, status: 'sent' } as any);
+                            await ChatStorage.updateMessageStatus(messageId, { 
+                                local_uri: localUri, 
+                                status: 'sent',
+                                download_url: message.download_url,
+                                view_url: message.view_url,
+                                file_token_expiry: message.file_token_expiry
+                            } as any);
                             $chatMessagesState.updateMessageStatus(chatId, messageId, {
                                 local_uri: localUri,
                                 status: 'sent',
@@ -417,10 +427,26 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
 
         // Not in select mode — handle file open
         // Phase D: prefer local_uri (persisted file) over server URLs (dead post-ACK)
-        const activeUrl = message.local_uri || message.download_url || message.file_url;
+        let activeUrl = message.local_uri || message.download_url || message.view_url;
         if (message.message_type === 'file' && activeUrl) {
             const confirmed = await showConfirmDialog('Are you sure you want to open this file?');
             if (!confirmed) return;
+
+            // Ensure token is fresh before open/share if no local copy
+            // (User Request: Refresh only for downloads/interaction)
+            if (!message.local_uri) {
+                await resolveMediaUrls([message as MessageEntry]);
+                activeUrl = message.download_url || message.view_url || '';
+                
+                // Persist new URLs to storage
+                await ChatStorage.updateMessageStatus(messageId, {
+                    download_url: message.download_url,
+                    view_url: message.view_url,
+                    file_token_expiry: message.file_token_expiry
+                } as any);
+            }
+
+            if (!activeUrl) return;
 
             if (Platform.OS === 'web') {
                 // Web: idb:// marker → open blob in new tab
@@ -455,7 +481,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                             if (!isReadableFile(activeUrl, primaryMime)) {
                                 return Sharing.shareAsync(activeUrl, { mimeType: primaryMime }).catch(err => {
                                     console.error('[UI] Failed to share non-readable file:', err);
-                                    Linking.openURL(activeUrl);
+                                    Linking.openURL(activeUrl!);
                                 });
                             }
 
@@ -474,15 +500,15 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                                 // Fallback 2: Sharing sheet (chooser) as final native attempt
                                 // Ensure share sheet also avoids recommending HTML viewers if possible
                                 const shareMime = resolvedMime === 'text/html' ? 'text/plain' : resolvedMime;
-                                return Sharing.shareAsync(activeUrl, { mimeType: shareMime });
+                                return Sharing.shareAsync(activeUrl!, { mimeType: shareMime });
                             }).catch(() => {
                                 // Final failure: show native URL picker as absolute last resort
-                                Linking.openURL(activeUrl);
+                                Linking.openURL(activeUrl!);
                             });
                         } catch (err) {
                             console.error('[UI] Failed to resolve Content URI:', err);
                             const finalMime = resolvedMime === 'text/html' ? 'text/plain' : resolvedMime;
-                            Sharing.shareAsync(activeUrl, { mimeType: finalMime });
+                            Sharing.shareAsync(activeUrl!, { mimeType: finalMime });
                         }
                     } else {
                         Sharing.shareAsync(activeUrl, { mimeType: resolvedMime }).catch(err => {
@@ -496,7 +522,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 }
             }
         }
-    }, [chatId, messageId, message.message_type, message.file_url, message.download_url, message.local_uri]);
+    }, [chatId, messageId, message.message_type, message.download_url, message.local_uri]);
 
     const isSelected = useValue(() => {
         const selectedIds = $chatMessagesState.chats[chatId]?.selectedMessageIds.get() || [];
@@ -526,7 +552,6 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 onPress={handlePress}
                 isSelected={isSelected}
                 isSelectMode={isSelectMode}
-                fileUrl={message.file_url}
                 viewUrl={message.view_url}
                 downloadUrl={message.download_url}
                 fileName={message.file_name}

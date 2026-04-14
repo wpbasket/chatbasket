@@ -188,6 +188,7 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
         file_mime_type: message.file_mime_type || null,
         view_url: message.view_url ?? null,
         download_url: message.download_url ?? null,
+        file_token_expiry: message.file_token_expiry || null,
         local_uri: (message as any).local_uri ?? message.localUri ?? null,
         temp_id: (message as any).temp_id ?? message.tempId ?? null,
         acked_by_server: !!message.acked_by_server,

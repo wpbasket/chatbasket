@@ -224,7 +224,7 @@ class OutboxQueue {
         );
 
         optimisticMsg.local_uri = copyResult.localUri;
-        optimisticMsg.file_url = copyResult.localUri;
+        // file_url removed from optimistic message
 
         await $chatMessagesState.addMessage(input.chatId, optimisticMsg);
         this.upsertOutgoingPreview(input.chatId, optimisticMsg, input.recipientId, input.recipientName);
@@ -349,6 +349,7 @@ class OutboxQueue {
             download_url: response.download_url ?? null,
             created_at: response.created_at,
             expires_at: response.expires_at ?? null,
+            file_token_expiry: response.file_token_expiry ?? null,
         });
 
         const sentMessage: MessageEntry = {
@@ -392,6 +393,7 @@ class OutboxQueue {
             download_url: response.download_url ?? null,
             created_at: response.created_at,
             expires_at: response.expires_at ?? null,
+            file_token_expiry: response.file_token_expiry ?? null,
         });
 
         const sentMessage: MessageEntry = {
@@ -413,6 +415,7 @@ class OutboxQueue {
             progress: 100,
             file_id: response.file_id ?? null,
             expires_at: response.expires_at,
+            file_token_expiry: response.file_token_expiry,
         };
 
         await this.promoteTempMessage(msg, sentMessage);

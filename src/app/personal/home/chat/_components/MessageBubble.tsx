@@ -7,9 +7,11 @@ import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIc
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ExpoAudio from 'expo-audio';
 import { UnistylesRuntime } from 'react-native-unistyles';
-import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
+import { getMediaBlob, updateMessageStatus } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { useObservable, useValue, useObserve } from '@legendapp/state/react';
 import { $uiState, generateMediaId } from '@/state/ui/state.ui';
+import { resolveMediaUrls, getMessageUri } from '@/utils/personalUtils/util.chatMedia';
+import type { MessageEntry } from '@/lib/personalLib';
 
 // ─── Pure helpers — outside component, never recreated on render ──────────────
 
@@ -72,7 +74,6 @@ type MessageBubbleProps = {
     onPress?: () => void;
     isSelected?: boolean;
     isSelectMode?: boolean;
-    fileUrl?: string;
     fileName?: string | null;
     fileSize?: number | null;
     fileMimeType?: string | null;
@@ -161,7 +162,6 @@ const MessageBubble = memo(
         onPress,
         isSelected,
         isSelectMode,
-        fileUrl,
         viewUrl,
         downloadUrl,
         fileName,
@@ -212,11 +212,36 @@ const MessageBubble = memo(
         }, [messageType, fileMimeType, fileName]);
 
         // ── Stable handler references ─────────────────────────────────────────
-        const handlePress = useCallback(() => {
+        const handlePress = useCallback(async () => {
             if (isSelectMode && onPress) { onPress(); return; }
             
             // Interaction Lock: prevent opening if not ready
             if (!isReady) return;
+
+            // Ensure token is fresh before viewing/playing if no local copy
+            // (User Request: Refresh only for downloads/interaction)
+            if (!localUri && (isImage || isAudio || isVideo)) {
+                // Prepare a message-like object for resolveMediaUrls
+                const msgObj = {
+                    message_id,
+                    message_type: messageType,
+                    // file_url field removed from object passed to resolveMediaUrls
+                    view_url: viewUrl,
+                    download_url: downloadUrl,
+                    file_token_expiry: null, // will be populated
+                } as any;
+
+                await resolveMediaUrls([msgObj]);
+                
+                // Persist new URLs to storage
+                if (message_id) {
+                    await updateMessageStatus(message_id, { 
+                        view_url: msgObj.view_url,
+                        download_url: msgObj.download_url,
+                        file_token_expiry: msgObj.file_token_expiry
+                    } as any);
+                }
+            }
 
             if (isImage) { isLightboxVisible$.set(true); return; }
             if (isAudio || isVideo) {
@@ -227,7 +252,7 @@ const MessageBubble = memo(
                 return;
             }
             if (onPress) onPress();
-        }, [isSelectMode, isImage, isAudio, isVideo, onPress, isReady]);
+        }, [isSelectMode, isImage, isAudio, isVideo, onPress, isReady, localUri, message_id, messageType, viewUrl, downloadUrl]);
 
         const closeLightbox = useCallback(() => isLightboxVisible$.set(false), []);
 
@@ -309,7 +334,7 @@ const MessageBubble = memo(
             }
 
             if (isImage) {
-                const activeViewUrl = resolvedLocalUri || viewUrl || fileUrl;
+                const activeViewUrl = resolvedLocalUri || downloadUrl || viewUrl;
                 if (!activeViewUrl) {
                     return (
                         <View style={styles.mediaBubbleWrapper}>
@@ -343,7 +368,7 @@ const MessageBubble = memo(
             }
 
             if (isVideo || isAudio) {
-                const activeMediaUrl = resolvedLocalUri || viewUrl || fileUrl;
+                const activeMediaUrl = resolvedLocalUri || downloadUrl || viewUrl;
                 if (!activeMediaUrl) {
                     return (
                         <View style={isVideo ? styles.mediaBubbleWrapper : styles.contentPadding}>
@@ -415,7 +440,7 @@ const MessageBubble = memo(
             }
 
             if (messageType === 'file') {
-                const isResolved = !!(resolvedLocalUri || downloadUrl || fileUrl);
+                const isResolved = !!(resolvedLocalUri || downloadUrl || viewUrl);
                 return (
                     <View style={styles.contentPadding}>
                         <View style={styles.fileHeader}>
@@ -515,9 +540,9 @@ const MessageBubble = memo(
                                 <TouchableOpacity style={styles.lightboxClose} onPress={closeLightbox}>
                                     <IconSymbol name="xmark" size={32} color="white" />
                                 </TouchableOpacity>
-                                {resolvedLocalUri || viewUrl || fileUrl ? (
+                                {resolvedLocalUri || downloadUrl || viewUrl ? (
                                     <RNImage
-                                        source={{ uri: (resolvedLocalUri || viewUrl || fileUrl || '').trim() }}
+                                        source={{ uri: (resolvedLocalUri || downloadUrl || viewUrl || '').trim() }}
                                         // Inline style uses hook values so it responds to rotation
                                         style={{ width: windowWidth, height: windowHeight * 0.85, backgroundColor: '#000' }}
                                         resizeMode="contain"
@@ -539,7 +564,6 @@ const MessageBubble = memo(
         prev.type === next.type &&
         prev.status === next.status &&
         prev.messageType === next.messageType &&
-        prev.fileUrl === next.fileUrl &&
         prev.viewUrl === next.viewUrl &&
         prev.downloadUrl === next.downloadUrl &&
         prev.fileMimeType === next.fileMimeType &&
