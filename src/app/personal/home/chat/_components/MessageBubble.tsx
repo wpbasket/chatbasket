@@ -64,7 +64,7 @@ type MessageBubbleProps = {
     text: string;
     type: 'me' | 'other';
     messageType?: string;
-    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed';
     delivered?: boolean;
     createdAt: string;
     onLongPress?: (event: import('react-native').GestureResponderEvent) => void;
@@ -98,7 +98,7 @@ function useLocalMediaUri(
     );
 
     useEffect(() => {
-        if (!localUri) { resolvedUri$.set(null); return; }
+        if (!localUri || localUri === 'error://download-failed') { resolvedUri$.set(null); return; }
 
         if (Platform.OS !== 'web') {
             // Native: local_uri is a file:// path. 
@@ -185,7 +185,9 @@ const MessageBubble = memo(
 
         // ── Ready state check ─────────────────────────────────────────────────
         // A file is ready if we have a resolved local URI and it's not pending or error.
-        const isError = status === 'error';
+        // Detect sentinel local_uri from permanently failed downloads (survives server status overwrites).
+        const isDownloadFailed = localUri === 'error://download-failed';
+        const isError = status === 'error' || status === 'failed' || isDownloadFailed;
         const isReady = useValue(() => {
             if (messageType === 'text' || messageType === 'unsent') return true;
             const isPending = status === 'pending' || status === 'sending';

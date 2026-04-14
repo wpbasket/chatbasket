@@ -11,7 +11,7 @@ export interface LocalMessageEntry {
     recipient_id: string;
     content: string | null;
     message_type: 'text' | 'file' | 'image' | 'video' | 'audio' | 'unsent';
-    status: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+    status: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed';
     is_from_me: boolean;
     delivered_to_recipient: boolean;
     delivered_to_recipient_primary: boolean;

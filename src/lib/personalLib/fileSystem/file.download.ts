@@ -159,6 +159,7 @@ async function downloadForNative(
         const xhr = new XMLHttpRequest();
         xhr.open('GET', msg.download_url!, true);
         xhr.responseType = 'arraybuffer'; // Modern & compatible way to handle binary in RN
+        xhr.timeout = 15000; // 15-second timeout
 
         xhr.onprogress = (event) => {
             if (event.lengthComputable && event.total > 0) {
@@ -206,11 +207,17 @@ async function downloadForWeb(
         return idbUri;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
+
     try {
         const projectId = new URL(msg.download_url!).searchParams.get('project');
         const response = await fetch(msg.download_url!, {
             headers: projectId ? { 'X-Appwrite-Project': projectId } : {},
+            signal: controller.signal,
         });
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status} downloading ${msg.download_url}`);
         }

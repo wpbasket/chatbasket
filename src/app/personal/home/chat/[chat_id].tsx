@@ -249,7 +249,9 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         ];
 
         // Only show "Delete for Me" for messages that exist on the server (not temp IDs)
-        if (!messageId.startsWith('temp_') && message.status !== 'pending' && message.status !== 'error') {
+        // or for failed outgoing messages (safe local-only delete)
+        const isErrorState = status === 'error' || status === 'failed' || message.local_uri === 'error://download-failed';
+        if (!messageId.startsWith('temp_') && (status !== 'pending' || isErrorState)) {
             controllers.push({
                 id: 'delete',
                 label: 'Delete for Me',
@@ -274,7 +276,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
             });
         }
 
-        if (message.is_from_me && status === 'error' && message.message_type !== 'unsent') {
+        if (message.is_from_me && isErrorState && message.message_type !== 'unsent') {
             controllers.unshift({
                 id: 'retry',
                 label: 'Retry Send',
@@ -312,7 +314,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
 
         // Retry Download for incoming media that failed
         const isMedia = ['image', 'video', 'audio', 'file'].includes(message.message_type);
-        if (!message.is_from_me && status === 'error' && isMedia) {
+        if (!message.is_from_me && isErrorState && isMedia) {
             controllers.unshift({
                 id: 'retry_download',
                 label: 'Retry Download',

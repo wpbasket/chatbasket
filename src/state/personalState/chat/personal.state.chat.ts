@@ -542,12 +542,16 @@ const chatActions = {
     async downloadMediaBatch(chatId: string, messages: MessageEntry[]): Promise<Set<string>> {
         const downloadFailedIds = new Set<string>();
         const mediaMessages = messages.filter(m =>
-            !m.is_from_me &&
             ['image', 'video', 'audio', 'file'].includes(m.message_type) &&
             !m.local_uri
         );
 
         if (mediaMessages.length === 0) return downloadFailedIds;
+
+        // Sentinel URI to mark permanently failed downloads — survives merges
+        // because local_uri is preserved in setMessages/prependMessages.
+        // Truthy value → `!m.local_uri` filter skips it on next reload → no infinite retry.
+        const DOWNLOAD_FAILED_URI = 'error://download-failed';
 
         // Process in small serial batches to avoid overwhelming the network
         // We use a simple loop with await to keep concurrency low (1 at a time per batch call)
@@ -555,11 +559,12 @@ const chatActions = {
         for (const msg of mediaMessages) {
             try {
                 // If the message is missing a download URL, it's a permanent server-side data error.
-                // Mark it as error immediately so the UI stops spinning and we can ACK it.
+                // Mark with sentinel so we don't retry and the UI shows the error icon.
                 if (!msg.download_url) {
                     console.warn(`[ChatActions] downloadMediaBatch: skipping ${msg.message_id} - missing download_url`);
-                    this.updateMessageStatus(chatId, msg.message_id, { status: 'error' });
-                    await ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any);
+                    msg.local_uri = DOWNLOAD_FAILED_URI;
+                    this.updateMessageStatus(chatId, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
+                    await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
                     continue;
                 }
 
@@ -583,9 +588,10 @@ const chatActions = {
             } catch (err) {
                 console.error(`[ChatActions] downloadMediaBatch failed for ${msg.message_id}`, err);
                 downloadFailedIds.add(msg.message_id);
-                // Mark as error so the UI stops any spinners
-                this.updateMessageStatus(chatId, msg.message_id, { status: 'error' });
-                await ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any);
+                // Persist sentinel so we don't retry on next reload
+                msg.local_uri = DOWNLOAD_FAILED_URI;
+                this.updateMessageStatus(chatId, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
+                await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
             }
         }
         return downloadFailedIds;
@@ -1084,9 +1090,11 @@ const chatActions = {
                         // Block ACK on non-primary to prevent the server from deleting media 
                         // before other devices (or the primary) have synced it.
                         downloadFailedIds.add(msg.message_id);
-                        // Mark as error so UI shows the retry button
-                        this.updateMessageStatus(msg.chat_id, msg.message_id, { status: 'error' });
-                        await ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any);
+                        // Persist sentinel so we don't retry on next reload (same as downloadMediaBatch)
+                        const DOWNLOAD_FAILED_URI = 'error://download-failed';
+                        msg.local_uri = DOWNLOAD_FAILED_URI;
+                        this.updateMessageStatus(msg.chat_id, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
+                        await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
                     }
                 }
             }

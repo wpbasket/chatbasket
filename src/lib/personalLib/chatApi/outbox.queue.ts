@@ -264,8 +264,8 @@ class OutboxQueue {
                     }
 
                     // Skip messages that have terminal error status (non-blocking errors already failed permanently)
-                    if (msg.status === 'error') {
-                        console.log(`${TAG} Skipping ${msg.message_id} (status=error, non-blocking failure)`);
+                    if (msg.status === 'error' || msg.status === 'failed') {
+                        console.log(`${TAG} Skipping ${msg.message_id} (status=${msg.status}, non-blocking failure)`);
                         continue;
                     }
 

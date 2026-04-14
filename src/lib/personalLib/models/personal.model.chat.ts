@@ -51,7 +51,7 @@ export interface MessageEntry {
     delivered_to_recipient_primary?: boolean; // Go bool (Added Phase C) — backend MessageResponse field
     synced_to_sender_primary: boolean; // Added in Phase 17
     is_unsent?: boolean;             // Added Phase 5.3
-    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error'; // Phase D: expanded union
+    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed'; // Phase D: expanded union
     created_at: string;      // Go time.Time → JSON string
     expires_at: string;
     file_url?: string;
@@ -68,6 +68,12 @@ export interface MessageEntry {
     deleted_for_me?: boolean;        // True after "delete for me"
     local_uri?: string | null;       // Local file path (before upload)
     temp_id?: string | null;         // Client-generated ID before server response
+    
+    // Outbox & Error Tracking (Added Phase D+1)
+    retry_count?: number;            // Number of send attempts
+    last_retry_at?: string | null;   // ISO timestamp of last retry attempt
+    error_message?: string | null;   // Last error message
+    error_is_blocking?: boolean | null; // True if error should block queue
 }
 
 /**

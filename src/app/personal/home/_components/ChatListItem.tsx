@@ -149,7 +149,7 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
                                 return <MaterialCommunityIcon name="checkmark" size={15} color="#999" style={styles.statusIcon} />;
                             }
 
-                            if (status === 'error') {
+                            if (status === 'error' || status === 'failed') {
                                 return <IconSymbol name="alert" size={15} color={theme.colors.errorText} style={styles.statusIcon} />;
                             }
 

@@ -107,18 +107,32 @@ async function handleNewMessage(payload: any): Promise<void> {
     } catch (err) {
         console.error(`[WS Bridge] new_message: DOWNLOAD FAILED ${msg.message_id}`, err);
 
-        // Persist error status to storage so it persists across reloads
-        await updateMessageStatus(msg.message_id, { status: 'error' })
-            .catch(e => console.warn('[WS Bridge] Failed to persist download error', e));
+        const DOWNLOAD_FAILED_URI = 'error://download-failed';
+        
+        // Persist error status + sentinel to storage
+        await updateMessageStatus(msg.message_id, { 
+            status: 'failed',
+            local_uri: DOWNLOAD_FAILED_URI 
+        } as any).catch(e => console.warn('[WS Bridge] Failed to persist download error', e));
 
         // Mark as error so the UI stops the loader and shows error icon
         $chatMessagesState.updateMessageStatus(msg.chat_id, msg.message_id, {
-            status: 'error',
+            status: 'failed',
+            local_uri: DOWNLOAD_FAILED_URI,
             progress: 0
         });
 
-        // Block ACK for ALL devices — will retry on next delivery/reconnect
-        return;
+        // Rule 7: Primary MUST block ACK on failure so it retries on next boot/connect.
+        // Non-primary devices SHOULD continue to ACK if they've marked it with a sentinel,
+        // otherwise they'll be stuck in an infinite "ActivityIndicator" loop because
+        // they can't fetch from the other session's local backend.
+        if (isPrimary) {
+            dbg(`[WS Bridge] new_message: Primary session blocking ACK for failed download ${msg.message_id}`);
+            return;
+        }
+        
+        dbg(`[WS Bridge] new_message: Non-primary session allowing ACK for failed download (sentinel set)`);
+        // Continue to ACK logic below...
     }
 
     // Explicitly fire Part B (sender-sync ACK) for cross-device sync of our own messages.
