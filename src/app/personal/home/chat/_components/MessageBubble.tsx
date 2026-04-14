@@ -334,7 +334,7 @@ const MessageBubble = memo(
             }
 
             if (isImage) {
-                const activeViewUrl = resolvedLocalUri || downloadUrl || viewUrl;
+                const activeViewUrl = resolvedLocalUri;
                 if (!activeViewUrl) {
                     return (
                         <View style={styles.mediaBubbleWrapper}>
@@ -368,7 +368,7 @@ const MessageBubble = memo(
             }
 
             if (isVideo || isAudio) {
-                const activeMediaUrl = resolvedLocalUri || downloadUrl || viewUrl;
+                const activeMediaUrl = resolvedLocalUri;
                 if (!activeMediaUrl) {
                     return (
                         <View style={isVideo ? styles.mediaBubbleWrapper : styles.contentPadding}>
@@ -540,9 +540,9 @@ const MessageBubble = memo(
                                 <TouchableOpacity style={styles.lightboxClose} onPress={closeLightbox}>
                                     <IconSymbol name="xmark" size={32} color="white" />
                                 </TouchableOpacity>
-                                {resolvedLocalUri || downloadUrl || viewUrl ? (
+                                {resolvedLocalUri ? (
                                     <RNImage
-                                        source={{ uri: (resolvedLocalUri || downloadUrl || viewUrl || '').trim() }}
+                                        source={{ uri: (resolvedLocalUri || '').trim() }}
                                         // Inline style uses hook values so it responds to rotation
                                         style={{ width: windowWidth, height: windowHeight * 0.85, backgroundColor: '#000' }}
                                         resizeMode="contain"

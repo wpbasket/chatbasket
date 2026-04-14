@@ -31,6 +31,7 @@ const CHAT_ERROR_MAP: Record<string, string> = {
     file_too_large: 'The file is too large. Please select a smaller file.',
     invalid_file_type: 'This file type is not supported.',
     file_upload_failed: 'Failed to upload file. Please try again.',
+    content_too_long: 'Message content cannot exceed 5000 characters.',
 };
 
 /**

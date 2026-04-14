@@ -20,6 +20,7 @@ import { $uiState } from '@/state/ui/state.ui';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { outboxQueue } from '@/lib/personalLib/chatApi/outbox.queue';
 import { getChatErrorMessage, getEligibilityMessage } from '@/utils/personalUtils/util.chatErrors';
+import { MAX_MESSAGE_CONTENT_LENGTH } from '@/lib/personalLib/constant/constant.chat';
 import { showAlert, showControllersModal, showConfirmDialog, hideModal } from '@/utils/commonUtils/util.modal';
 import type { MessageEntry, ChatEntry } from '@/lib/personalLib';
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
@@ -813,6 +814,11 @@ const ChatContentContainer = React.memo(({
         }
 
         const trimmed = chatData.inputText.trim();
+        if (trimmed.length > MAX_MESSAGE_CONTENT_LENGTH) {
+            showAlert('Message content cannot exceed 5000 characters.');
+            return;
+        }
+
         const recipId = chatData.recipientId;
         if (!trimmed || !recipId || !chat_id) return;
 

@@ -1,6 +1,6 @@
 import { ChatTransport } from "@/lib/personalLib/chatApi/chat.transport";
 import type { MessageEntry } from "@/lib/personalLib";
-import { MEDIA_REFRESH_BUFFER_MS } from "@/lib/constantLib/constants/constants";
+import { MEDIA_REFRESH_BUFFER_MS } from "@/lib/personalLib/constant/constant.chat";
 import { updateMessageStatus } from "@/lib/storage/personalStorage/chat/chat.storage";
 import { ApiError } from "@/lib/constantLib";
 

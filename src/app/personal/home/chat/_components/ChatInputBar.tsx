@@ -5,6 +5,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { $chatMessagesState, useValue } from '@/state/personalState/chat/personal.state.chat';
+import { MAX_MESSAGE_CONTENT_LENGTH } from '@/lib/personalLib/constant/constant.chat';
 
 type ChatInputBarProps = {
     chatId: string;
@@ -60,6 +61,7 @@ export default function ChatInputBar({
                 value={text}
                 onChangeText={onChangeText}
                 multiline
+                maxLength={MAX_MESSAGE_CONTENT_LENGTH}
                 placeholder="Type message..."
                 placeholderTextColor={theme.colors.textSecondary}
                 returnKeyType="send"

@@ -4,24 +4,23 @@ import { PersonalStorageGetDeviceStatus } from './personalStorage/personal.stora
 import { PersonalStorageGetUser } from './personalStorage/personal.storage.user';
 import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia } from './personalStorage/chat/chat.storage';
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
-import { outboxQueue } from '@/lib/personalLib/chatApi/outbox.queue';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
 import { authState } from '@/state/auth/state.auth';
 
+let hydrationPromise: Promise<void> | null = null;
+
 /**
- * Orchestrates the initialization of all storage modules and restores app state.
- * Should be called once in the Root Layout.
+ * Hydrates all personal sync modules and starts background services.
+ * Safe to call multiple times — will only execute once per app lifecycle.
  */
-export const initializeAppStorage = async (): Promise<void> => {
-    try {
-        // 1. Initialize core secure storage (Auth)
-        await initializeSecureStorage();
+export const hydratePersonalModules = async (): Promise<void> => {
+    // Return existing promise if hydration is already in progress or completed
+    if (hydrationPromise) return hydrationPromise;
 
-        // 2. Restore core Auth state (Session, UserId)
-        await restoreAuthState();
-
-        // 3. If logged in, hydrate the rest of the persistent state
-        if (authState.isLoggedIn.get()) {
+    hydrationPromise = (async () => {
+        try {
+            console.log('[StorageInit] Starting personal module hydration...');
+            
             await Promise.all([
                 PersonalStorageGetUser(),
                 PersonalStorageGetDeviceStatus(),
@@ -42,12 +41,8 @@ export const initializeAppStorage = async (): Promise<void> => {
             // Handle initial state
             wsClient.setNetworkOnline(connectionWatcher.isOnline);
 
-            // Drain any pending outbox messages from previous session
-            outboxQueue.processQueue();
 
             // Phase D: Purge soft-deleted rows 30s after network is confirmed online.
-            // This ensures initial sync + WebSocket events have been processed first,
-            // so getDeletedMessageIds guards are no longer needed for those messages.
             const schedulePurge = () => {
                 setTimeout(() => {
                     purgeDeletedMessages().catch(err =>
@@ -62,7 +57,6 @@ export const initializeAppStorage = async (): Promise<void> => {
             if (connectionWatcher.isOnline) {
                 schedulePurge();
             } else {
-                // Wait for the first online transition, then start the 30s timer
                 const unsub = connectionWatcher.subscribe((isOnline) => {
                     if (isOnline) {
                         unsub();
@@ -70,9 +64,34 @@ export const initializeAppStorage = async (): Promise<void> => {
                     }
                 });
             }
+            console.log('[StorageInit] Personal module hydration complete.');
+        } catch (error) {
+            console.error('[StorageInit] Hydration failed:', error);
+            hydrationPromise = null; // Allow retry on failure
+            throw error;
+        }
+    })();
+
+    return hydrationPromise;
+};
+
+/**
+ * Orchestrates the initialization of all storage modules and restores app state.
+ * Should be called once in the Root Layout.
+ */
+export const initializeAppStorage = async (): Promise<void> => {
+    try {
+        // 1. Initialize core secure storage (Auth)
+        await initializeSecureStorage();
+
+        // 2. Restore core Auth state (Session, UserId)
+        await restoreAuthState();
+
+        // 3. If logged in, hydrate the rest of the persistent state
+        if (authState.isLoggedIn.get()) {
+            await hydratePersonalModules();
         } else {
             // Safety net: wipe any leftover ChatStorage from a failed/incomplete logout
-            // (e.g. browser crashed, force-close, etc.)
             try {
                 await clearAllChatStorage();
                 console.log('[StorageInit] Cleaned up leftover ChatStorage (not logged in)');

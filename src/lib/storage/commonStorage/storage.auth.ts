@@ -77,6 +77,11 @@ export const setSession = async (session: { sessionId: string; userId: string; s
   authState.sessionExpiry.set(sessionExpiry);
   authState.isLoggedIn.set(true);
   authState.isSentOtp.set(false);
+
+  // Trigger hydration of personal modules (contacts, chats, etc.) 
+  // immediately after successful login without requiring a manual refresh.
+  // We use a dynamic import here to avoid a circular dependency with storage.init.
+  void import('@/lib/storage/storage.init').then((m) => m.hydratePersonalModules());
 };
 
 export const getSession = async () => {

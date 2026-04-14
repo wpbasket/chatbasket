@@ -7,6 +7,7 @@
 // stop() is called on logout.
 
 import { network$ } from '@/state/tools/state.network';
+import { observe } from '@legendapp/state';
 import { outboxQueue } from './outbox.queue';
 
 const TAG = '[ConnectionWatcher]';
@@ -28,12 +29,14 @@ class ConnectionWatcher {
     start(): void {
         if (this._unsub) return; // Already watching
 
-        // Listen for changes in the global network state
-        this._unsub = network$.isConnected.onChange((params) => {
-            this.handleStateChange(params.value);
+        // Official Legend State v3 pattern: observe() automatically runs once 
+        // at the start and then whenever the accessed observables change.
+        this._unsub = observe(() => {
+            const isOnline = network$.isConnected.get();
+            this.handleStateChange(isOnline);
         });
 
-        console.log(`${TAG} Started (${this.isOnline ? 'ONLINE' : 'OFFLINE'})`);
+        console.log(`${TAG} Started`);
     }
 
     private handleStateChange(isOnline: boolean): void {
