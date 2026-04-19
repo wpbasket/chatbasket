@@ -1152,7 +1152,7 @@ const chatActions = {
                         // Phase 4b: Provide progress callback for UI if chat is open during sync
                         // Ensure token is fresh before download (User Request: Refresh only for downloads)
                         await resolveMediaUrls([msg]);
-                        await ChatStorage.updateMessageStatus(msg.message_id, { 
+                        await ChatStorage.updateMessageStatus(msg.message_id, {
                             download_url: msg.download_url,
                             view_url: msg.view_url,
                             file_token_expiry: msg.file_token_expiry
@@ -1173,13 +1173,13 @@ const chatActions = {
                     } catch (err) {
                         if (isPrimary) {
                             console.error('[ChatState] syncPendingMessages: Media download failed on PRIMARY — skipping ACK for this message', msg.message_id, err);
-                            
+
                             // 🆕 NEW: If the download fails with a 404 (Missing on Relay),
                             // mark it as 'error' so it stops clogging the sync queue.
                             const statusCode = (err as any)?.status || (err as any)?.code;
                             if (statusCode === 404) {
                                 console.log('[ChatState] syncPendingMessages: Resource GONE (404) on relay — marking message as error', msg.message_id);
-                                ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any).catch(() => {});
+                                ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any).catch(() => { });
                                 this.updateMessageStatus(msg.chat_id, msg.message_id, { status: 'error' });
                             } else {
                                 // Track failed IDs so they're excluded from ACK and in-memory state
@@ -1277,7 +1277,7 @@ const chatActions = {
             // ACK all successfully-downloaded messages (including soft-deleted ones)
             // so the server stops re-delivering them. filteredToProcess excludes deleted
             // from in-memory state, but messagesToProcess includes them for ACK.
-            ackIncomingMessages(messagesToProcess, { skipMediaCheck: true }).catch(err =>
+            await ackIncomingMessages(messagesToProcess, { skipMediaCheck: true }).catch(err =>
                 console.warn('[ChatState] syncPendingMessages ACK failed', err)
             );
 
