@@ -426,6 +426,23 @@ export async function messageExists(messageId: string): Promise<boolean> {
 }
 
 /**
+ * Get message counts per chat_id in a single efficient query.
+ * Only counts non-deleted messages (deleted_for_me = 0).
+ */
+export async function getMessageCountsByChatId(): Promise<Record<string, number>> {
+    const d = getDb();
+    const rows = await d.getAllAsync<{ chat_id: string; count: number }>(
+        `SELECT chat_id, COUNT(*) as count FROM messages WHERE deleted_for_me = 0 GROUP BY chat_id`,
+        []
+    );
+    const result: Record<string, number> = {};
+    for (const row of rows) {
+        result[row.chat_id] = row.count;
+    }
+    return result;
+}
+
+/**
  * Wipe all chat-related data from local storage — called on LOGOUT and on
  * fresh boot when user is not logged in (safety net).
  *

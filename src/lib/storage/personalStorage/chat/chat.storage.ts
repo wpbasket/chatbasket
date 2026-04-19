@@ -60,6 +60,8 @@ export const getMessageByTempId: typeof import('./chat.storage.native').getMessa
     (...args: any[]) => (ChatStorageImpl.getMessageByTempId as any)(...args);
 export const messageExists: typeof import('./chat.storage.native').messageExists =
     (...args: any[]) => (ChatStorageImpl.messageExists as any)(...args);
+export const getMessageCountsByChatId: typeof import('./chat.storage.native').getMessageCountsByChatId =
+    (...args: any[]) => (ChatStorageImpl.getMessageCountsByChatId as any)(...args);
 export const clearAllChatStorage = async (): Promise<void> => {
     // Must work even when initChatStorage was never called (e.g. fresh boot while logged out)
     if (ChatStorageImpl.clearAllChatStorage) {

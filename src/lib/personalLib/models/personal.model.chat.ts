@@ -34,6 +34,7 @@ export interface ChatEntry {
 
     // Local-only field (not from server) — set by client during sync
     is_contactable?: boolean;                // false when server omits this chat (blocked/private)
+    local_message_count?: number;            // Count of non-deleted messages in local DB (0 = hidden from chat list)
 }
 
 /**

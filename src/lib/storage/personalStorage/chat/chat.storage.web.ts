@@ -505,6 +505,24 @@ export async function messageExists(messageId: string): Promise<boolean> {
 }
 
 /**
+ * Get message counts per chat_id from IndexedDB.
+ * Only counts non-deleted messages (deleted_for_me !== true).
+ * Uses unencrypted index fields — no decryption needed.
+ */
+export async function getMessageCountsByChatId(): Promise<Record<string, number>> {
+    const db = await openDataDb();
+    const tx = db.transaction(MESSAGES_STORE, 'readonly');
+    const store = tx.objectStore(MESSAGES_STORE);
+    const all = await idbGetAll<any>(store);
+    const result: Record<string, number> = {};
+    for (const r of all) {
+        if (r.deleted_for_me === true) continue;
+        result[r.chat_id] = (result[r.chat_id] || 0) + 1;
+    }
+    return result;
+}
+
+/**
  * Wipe all chat-related data from IndexedDB — called on LOGOUT and on
  * fresh boot when user is not logged in (safety net).
  *

@@ -245,6 +245,7 @@ async function handleNewMessage(payload: any): Promise<void> {
             last_message_sender_id: msg.is_from_me ? (currentUserId || null) : otherUserId,
             last_message_is_unsent: msg.message_type === 'unsent',
             unread_count: !msg.is_from_me ? 1 : 0,
+            local_message_count: 1,
             created_at: msg.created_at,
             updated_at: msg.created_at,
             other_user_last_read_at: '',
@@ -253,6 +254,14 @@ async function handleNewMessage(payload: any): Promise<void> {
         dbg(`[WS Bridge] new_message: CREATING NEW chat list entry - unread_count=${newEntry.unread_count}`);
         $chatListState.upsertChat(newEntry);
     }
+
+    // Increment local_message_count for non-active, EXISTING chats.
+    // Active chats already increment via $chatMessagesState.addMessage().
+    // New chats (else branch above) already have local_message_count: 1 on the entry.
+    if (!isChatActive && currentEntry) {
+        $chatListState.incrementMessageCount(msg.chat_id, 1);
+    }
+
     dbg(`[WS Bridge] new_message: DONE — msgID=${msg.message_id} chatID=${msg.chat_id} is_from_me=${msg.is_from_me} content="${msg.content?.substring(0, 50)}"`);
 }
 

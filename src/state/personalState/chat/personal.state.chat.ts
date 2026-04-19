@@ -134,6 +134,8 @@ interface ChatListState {
     updateUnreadCount: (chatId: string, count: number) => void;
     markChatRead: (chatId: string) => void;
     markFetched: () => void;
+    refreshMessageCounts: () => Promise<void>;
+    incrementMessageCount: (chatId: string, delta: number) => void;
     reset: () => void;
 }
 
@@ -166,7 +168,7 @@ const state$ = observable({
     chats() {
         const byId = state$.chatsById.get();
         return Object.values(byId)
-            .filter(c => c && c.chat_id)
+            .filter(c => c && c.chat_id && (c.local_message_count ?? 0) > 0)
             .sort(sortChatsByActivity);
     },
     chatIds() {
@@ -174,7 +176,9 @@ const state$ = observable({
     },
     totalUnreadCount() {
         const byId = state$.chatsById.get();
-        return Object.values(byId).reduce((sum, c) => sum + (c.unread_count || 0), 0);
+        return Object.values(byId)
+            .filter(c => (c.local_message_count ?? 0) > 0)
+            .reduce((sum, c) => sum + (c.unread_count || 0), 0);
     },
     hasChats() {
         return state$.chatIds.get().length > 0;
@@ -215,6 +219,14 @@ const state$ = observable({
                 }
             }
 
+            // Preserve local_message_count from existing state when merging
+            // (server doesn't send this field; refreshMessageCounts will re-hydrate later)
+            for (const [id, chat] of Object.entries(incoming)) {
+                if (existing[id]?.local_message_count != null) {
+                    chat.local_message_count = existing[id].local_message_count;
+                }
+            }
+
             state$.chatsById.set({ ...merged, ...incoming });
             state$.error.set(null);
             state$.hydratingFromStorage.set(false);
@@ -232,8 +244,16 @@ const state$ = observable({
         }
 
         // Proactively fetch all pending messages and ACK them
-        chatActions.syncPendingMessages().catch(err =>
-            console.warn('[ChatListState] syncPendingMessages after setChats failed', err)
+        // After sync completes, re-hydrate message counts so chats become visible
+        chatActions.syncPendingMessages()
+            .then(() => state$.refreshMessageCounts())
+            .catch(err =>
+                console.warn('[ChatListState] syncPendingMessages after setChats failed', err)
+            );
+
+        // Also hydrate counts immediately for messages already in local DB
+        state$.refreshMessageCounts().catch(err =>
+            console.warn('[ChatListState] initial refreshMessageCounts failed', err)
         );
     },
     async loadChatsFromStorage() {
@@ -258,6 +278,11 @@ const state$ = observable({
 
             const normalized = normalizeChatEntries(storedChats);
             if (normalized.length > 0) {
+                // Hydrate local_message_count from the messages table
+                const counts = await ChatStorage.getMessageCountsByChatId();
+                for (const chat of normalized) {
+                    chat.local_message_count = counts[chat.chat_id] ?? 0;
+                }
                 state$.chatsById.set(toChatMap(normalized));
                 state$.error.set(null);
             }
@@ -271,6 +296,13 @@ const state$ = observable({
     upsertChat(entry: ChatEntry) {
         const normalized = normalizeChatEntry(entry);
         if (!normalized) return;
+        // Preserve local_message_count if not explicitly set in the new entry
+        if (normalized.local_message_count == null) {
+            const existing = state$.chatsById[normalized.chat_id]?.peek();
+            if (existing?.local_message_count != null) {
+                normalized.local_message_count = existing.local_message_count;
+            }
+        }
         state$.chatsById[normalized.chat_id].set(normalized);
 
         ChatStorage.insertChats([normalized]).catch(err =>
@@ -320,6 +352,34 @@ const state$ = observable({
     },
     markFetched() {
         state$.lastFetchedAt.set(Date.now());
+    },
+    /**
+     * Re-query message counts from local DB and update all chat entries.
+     * Called after bulk operations that change message counts (setChats, syncPendingMessages, etc.)
+     */
+    async refreshMessageCounts() {
+        try {
+            const counts = await ChatStorage.getMessageCountsByChatId();
+            batch(() => {
+                const byId = state$.chatsById.peek();
+                for (const chatId of Object.keys(byId)) {
+                    state$.chatsById[chatId].local_message_count.set(counts[chatId] ?? 0);
+                }
+            });
+        } catch (err) {
+            console.warn('[ChatListState] refreshMessageCounts failed', err);
+        }
+    },
+    /**
+     * Increment or decrement the local_message_count for a chat.
+     * Used by message operations for reactive updates without re-querying DB.
+     */
+    incrementMessageCount(chatId: string, delta: number) {
+        const chat$ = state$.chatsById[chatId];
+        if (chat$?.peek()) {
+            const current = chat$.local_message_count.peek() ?? 0;
+            chat$.local_message_count.set(Math.max(0, current + delta));
+        }
     },
     reset() {
         batch(() => {
@@ -473,6 +533,9 @@ const chatActions = {
             chat.messagesById.set(mergedById);
             chat.messageIds.set(mergedList.map((e) => e.message_id));
             chat.offset.set(mergedList.length);
+
+            // Update local_message_count to reflect actual merged state
+            $chatListState.incrementMessageCount(chatId, mergedList.length - ($chatListState.chatsById[chatId]?.local_message_count.peek() ?? 0));
         });
 
         // Auto-Ack AFTER persist (fire-and-forget)
@@ -524,6 +587,9 @@ const chatActions = {
             chat.messagesById.set(byId);
             chat.messageIds.set(merged.map((e) => e.message_id));
             chat.offset.set(merged.length);
+
+            // Update local_message_count to reflect actual merged state
+            $chatListState.incrementMessageCount(chatId, merged.length - ($chatListState.chatsById[chatId]?.local_message_count.peek() ?? 0));
         });
 
         // [Phase 4b] Pickup missing media for the prepended messages before ACK
@@ -636,6 +702,9 @@ const chatActions = {
             chat.messages.set(updated);
             chat.messagesById[resolvedEntry.message_id].set(resolvedEntry);
             chat.messageIds.set(updated.map((e) => e.message_id));
+
+            // Increment local_message_count
+            $chatListState.incrementMessageCount(chatId, 1);
         });
 
         // Auto-Ack AFTER persist (fire-and-forget, skip sender sync)
@@ -864,12 +933,14 @@ const chatActions = {
     },
 
     removeMessages(chatId: string, messageIds: string[]) {
+        let actualRemoved = 0;
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const currentMessages = chat.messages.peek();
             const idSet = new Set(messageIds);
 
             const filtered = currentMessages.filter((m: MessageEntry) => !idSet.has(m.message_id));
+            actualRemoved = currentMessages.length - filtered.length;
 
             chat.messages.set(filtered);
             messageIds.forEach(id => {
@@ -878,6 +949,11 @@ const chatActions = {
                 }
             });
             chat.messageIds.set(filtered.map((m: MessageEntry) => m.message_id));
+
+            // Decrement local_message_count
+            if (actualRemoved > 0) {
+                $chatListState.incrementMessageCount(chatId, -actualRemoved);
+            }
         });
     },
 
@@ -1148,16 +1224,21 @@ const chatActions = {
 
                     // 1. Add messages to active chat store (if loaded) — inline to avoid double persist
                     if (activeChatId === chatId || chatStoreData) {
+                        let addedCount = 0;
                         chatMsgs.forEach(m => {
                             const chat = ensureChatInternal(chatId);
                             const existing = chat.messagesById.peek();
                             if (existing[m.message_id]) return;
+                            addedCount++;
                             const current = chat.messages.peek();
                             const updated = [m, ...current].slice(0, 1000);
                             chat.messages.set(updated);
                             chat.messagesById[m.message_id].set(m);
                             chat.messageIds.set(updated.map(e => e.message_id));
                         });
+                        if (addedCount > 0) {
+                            $chatListState.incrementMessageCount(chatId, addedCount);
+                        }
                     }
 
                     // 2. Update Chat List previews (Only update UI/Previews, TRUST server unread_count)
