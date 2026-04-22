@@ -17,6 +17,8 @@ import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation
 type ChatListItemProps = {
     chatId: string;
     onPress: (chat: ChatEntry) => void;
+    onLongPress?: (chat: ChatEntry, event: import('react-native').GestureResponderEvent) => void;
+    onContextMenu?: (chat: ChatEntry, event: import('react-native').GestureResponderEvent) => void;
 };
 
 function formatTime(dateStr: string | null): string {
@@ -35,7 +37,7 @@ function formatTime(dateStr: string | null): string {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
+export const ChatListItem = memo(({ chatId, onPress, onLongPress, onContextMenu }: ChatListItemProps) => {
     const { theme } = useUnistyles();
     const { handlePressIn } = pressableAnimation();
 
@@ -67,6 +69,10 @@ export const ChatListItem = memo(({ chatId, onPress }: ChatListItemProps) => {
         <Pressable
             onPress={() => onPress(chat)}
             onPressIn={handlePressIn}
+            onLongPress={onLongPress ? (event) => onLongPress(chat, event) : undefined}
+            // @ts-ignore - onContextMenu is web-only
+            onContextMenu={onContextMenu ? (event: import('react-native').GestureResponderEvent) => onContextMenu(chat, event) : undefined}
+            delayLongPress={300}
             style={({ pressed }) => [
                 styles.container,
                 pressed && { opacity: 0.1 },

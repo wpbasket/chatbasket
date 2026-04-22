@@ -9,6 +9,7 @@ import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/p
 import { $contactsState, type ContactEntry } from '@/state/personalState/contacts/personal.state.contacts';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
+import { showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useValue, Memo } from '@legendapp/state/react';
 import { useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
@@ -41,6 +42,36 @@ const PersonalHome = React.memo(() => {
     });
   }, [router]);
 
+  const handleChatLongPress = useCallback((chat: ChatEntry, event: import('react-native').GestureResponderEvent) => {
+    if (event && 'preventDefault' in event) {
+      (event as any).preventDefault();
+    }
+
+    const position = {
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    };
+
+    // Stub actions — wire real logic later
+    const controllers: any[] = [
+      {
+        id: 'delete_chat',
+        label: 'Delete Chat',
+        onPress: () => {
+          console.log('[ChatList] Delete Chat pressed for chat_id:', chat.chat_id);
+        },
+      },
+    ];
+
+    showControllersModal(controllers, {
+      title: 'Chat Options',
+      position,
+      showConfirmButton: false,
+      showCancelButton: true,
+      closeOnControllerPress: true,
+    });
+  }, []);
+
   const handleNewChat = useCallback(() => {
     router.push('/personal/contacts');
   }, [router]);
@@ -60,9 +91,14 @@ const PersonalHome = React.memo(() => {
 
   const renderItem = useCallback(
     ({ item: chatId }: { item: string }) => (
-      <ChatListItem chatId={chatId} onPress={handleChatPress} />
+      <ChatListItem
+        chatId={chatId}
+        onPress={handleChatPress}
+        onLongPress={handleChatLongPress}
+        onContextMenu={handleChatLongPress}
+      />
     ),
-    [handleChatPress]
+    [handleChatPress, handleChatLongPress]
   );
 
   const keyExtractor = useCallback((chatId: string) => chatId, []);
