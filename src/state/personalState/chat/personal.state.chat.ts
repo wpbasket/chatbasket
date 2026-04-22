@@ -136,6 +136,7 @@ interface ChatListState {
     markFetched: () => void;
     refreshMessageCounts: () => Promise<void>;
     incrementMessageCount: (chatId: string, delta: number) => void;
+    clearChatMessages: (chatId: string) => void;
     reset: () => void;
 }
 
@@ -381,6 +382,38 @@ const state$ = observable({
             chat$.local_message_count.set(Math.max(0, current + delta));
         }
     },
+    /**
+     * Reset the chat list entry for a locally-cleared chat: zero the message
+     * counts, clear the unread badge, and null out the last_message_* preview
+     * fields. The chat row itself is PRESERVED so the client still knows about
+     * the conversation — it will auto-rehydrate on the next incoming message.
+     *
+     * The chats/chatIds computeds filter `local_message_count > 0`, so after
+     * this runs the chat disappears from the Home list until a new message
+     * arrives. Local-only — caller is responsible for persisting via
+     * ChatStorage.clearChatMessages(chatId).
+     */
+    clearChatMessages(chatId: string) {
+        if (!chatId) return;
+        const chat$ = state$.chatsById[chatId];
+        if (!chat$?.peek()) return;
+        batch(() => {
+            chat$.assign({
+                local_message_count: 0,
+                unread_count: 0,
+                last_message_content: null,
+                last_message_type: null,
+                last_message_id: null,
+                last_message_created_at: null,
+                last_message_status: 'sent',
+                last_message_is_from_me: false,
+                last_message_is_unsent: false,
+                last_message_sender_id: null,
+                updated_at: new Date().toISOString(),
+            } as Partial<ChatEntry>);
+        });
+        state$.persistChat(chatId);
+    },
     reset() {
         batch(() => {
             state$.chatsById.set({});
@@ -422,6 +455,7 @@ interface ChatMessagesState {
     toggleSelectMode: (chatId: string, enabled: boolean) => void;
     toggleMessageSelection: (chatId: string, messageId: string) => void;
     clearSelection: (chatId: string) => void;
+    clearChat: (chatId: string) => void;
     reset: (chatId?: string) => void;
     syncPendingMessages: () => Promise<void>;
     debouncedMarkRead: (chatId: string) => void;
@@ -824,9 +858,13 @@ const chatActions = {
             console.log(`[ChatState] markMessagesDeliveredUpTo: Updated ${count} individual messages`);
 
             // 2. Update Chat List meta (Source of Truth for Double Grey Tick)
+            // NOTE: Legend State's `chatsById[chatId]` always returns a truthy
+            // proxy even after the underlying value has been deleted, so the
+            // only safe existence check is `.peek()` on the underlying value.
+            // Same pattern as `markMessagesReadUpTo` below.
             const chatEntry$ = $chatListState.chatsById[chatId];
-            if (chatEntry$) {
-                const chatEntry = chatEntry$.peek();
+            const chatEntry = chatEntry$?.peek();
+            if (chatEntry) {
                 console.log(`[ChatState] markMessagesDeliveredUpTo: Updating ChatEntry in list. Setting other_user_last_delivered_at=${deliveredAt}`);
                 chatEntry$.other_user_last_delivered_at.set(deliveredAt);
                 shouldPersistChat = true;
@@ -1082,6 +1120,31 @@ const chatActions = {
 
     clearSelection(chatId: string) {
         ensureChatInternal(chatId).selectedMessageIds.set([]);
+    },
+
+    /**
+     * Drop a single chat's in-memory conversation state (used when the user
+     * clears a chat locally). Removes the map entry entirely and, if this chat
+     * was the active one, resets activeChatId/isChatOpen so the chat screen's
+     * useFocusEffect navigates back Home.
+     *
+     * Local-only — caller is responsible for ChatStorage.clearChatMessages(chatId)
+     * and $chatListState.clearChatMessages(chatId). The chat row itself is NOT
+     * removed; it stays in $chatListState.chatsById so the chat can auto‑rehydrate
+     * on the next incoming message.
+     */
+    clearChat(chatId: string) {
+        if (!chatId) return;
+        batch(() => {
+            const chat$ = chatMessages$.chats[chatId];
+            if (chat$?.peek()) {
+                chat$.delete();
+            }
+            if (chatMessages$.activeChatId.peek() === chatId) {
+                chatMessages$.activeChatId.set(null);
+                chatMessages$.isChatOpen.set(false);
+            }
+        });
     },
 
     reset(chatId?: string) {

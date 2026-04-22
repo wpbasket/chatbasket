@@ -767,6 +767,57 @@ export async function cleanupMessageMedia(messageIds: string[]): Promise<void> {
 }
 
 /**
+ * Clear all local messages for a chat (with media blob cleanup). Chat row is
+ * preserved so the chat remains known to the client and can auto‑rehydrate from
+ * new server activity (the UI hides empty chats via $chatListState.chats’s
+ * `local_message_count > 0` filter). LOCAL-ONLY — does not contact the server.
+ *
+ * Order:
+ *   1. Gather message IDs for the chat (via idx_chat_id index).
+ *   2. Cleanup media blobs referenced by those messages.
+ *   3. Delete message rows from MESSAGES_STORE. Chat row is intentionally NOT deleted.
+ */
+export async function clearChatMessages(chatId: string): Promise<void> {
+    if (!chatId) return;
+    try {
+        const db = await openDataDb();
+
+        // 1. Gather message IDs for the chat (index field is unencrypted)
+        const readTx = db.transaction(MESSAGES_STORE, 'readonly');
+        const index = readTx.objectStore(MESSAGES_STORE).index('idx_chat_id');
+        const records = await idbGetAll<any>(index, chatId);
+        const messageIds = records.map(r => r.message_id).filter(Boolean);
+
+        // 2. Media blob cleanup (best-effort — failures should not block row deletion)
+        if (messageIds.length > 0) {
+            try {
+                await cleanupMessageMedia(messageIds);
+            } catch (err) {
+                console.warn('[ChatStorage:Web] clearChatMessages media cleanup failed', err);
+            }
+        }
+
+        // 3. Delete all message rows for chat_id (chat row is intentionally kept)
+        if (messageIds.length > 0) {
+            const delMsgTx = db.transaction(MESSAGES_STORE, 'readwrite');
+            const delMsgStore = delMsgTx.objectStore(MESSAGES_STORE);
+            for (const id of messageIds) {
+                await new Promise<void>((resolve, reject) => {
+                    const req = delMsgStore.delete(id);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+        }
+
+        console.log(`[ChatStorage:Web] clearChatMessages: cleared ${messageIds.length} message(s) for chat ${chatId} (chat row preserved)`);
+    } catch (err) {
+        console.warn(`[ChatStorage:Web] clearChatMessages failed for ${chatId}`, err);
+        throw err;
+    }
+}
+
+/**
  * Delete media blobs for messages that were unsent (message_type = 'unsent')
  * but whose media was not cleaned up (e.g. crash or interrupted unsend).
  */

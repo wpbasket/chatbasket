@@ -9,7 +9,8 @@ import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/p
 import { $contactsState, type ContactEntry } from '@/state/personalState/contacts/personal.state.contacts';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
-import { showControllersModal } from '@/utils/commonUtils/util.modal';
+import { showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { useValue, Memo } from '@legendapp/state/react';
 import { useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
@@ -52,13 +53,40 @@ const PersonalHome = React.memo(() => {
       y: event.nativeEvent.pageY,
     };
 
-    // Stub actions — wire real logic later
     const controllers: any[] = [
       {
         id: 'delete_chat',
         label: 'Delete Chat',
-        onPress: () => {
-          console.log('[ChatList] Delete Chat pressed for chat_id:', chat.chat_id);
+        onPress: async () => {
+          const confirmed = await showConfirmDialog(
+            'Delete all messages in this chat from this device? The chat will be hidden until a new message arrives. This cannot be undone.',
+            { confirmText: 'Delete', confirmVariant: 'destructive' }
+          );
+          if (!confirmed) return;
+
+          const chatId = chat.chat_id;
+          try {
+            // 1. Drop in-memory conversation state first so the chat screen
+            //    unmounts immediately. clearChat() resets activeChatId/isChatOpen,
+            //    which triggers the useFocusEffect in [chat_id].tsx to navigate
+            //    back Home if this chat was currently open.
+            $chatMessagesState.clearChat(chatId);
+
+            // 2. Reset the chat list entry: zero message/unread counts and null
+            //    last_message_* preview fields. The chat row itself is kept in
+            //    $chatListState.chatsById so the conversation is still known to
+            //    the client — it disappears from the Home list via the
+            //    `local_message_count > 0` filter and auto‑rehydrates on the
+            //    next incoming message (WhatsApp‑style clear semantics).
+            $chatListState.clearChatMessages(chatId);
+
+            // 3. Persist: delete all local messages + media for this chat.
+            //    Chat row is intentionally preserved in storage.
+            await ChatStorage.clearChatMessages(chatId);
+          } catch (err) {
+            console.error('[ChatList] Delete Chat failed', err);
+            showAlert(getChatErrorMessage(err, 'Could not delete chat messages.'));
+          }
         },
       },
     ];

@@ -50,6 +50,8 @@ export const swapTempIdToRealId: typeof import('./chat.storage.native').swapTemp
     (...args: any[]) => (ChatStorageImpl.swapTempIdToRealId as any)(...args);
 export const deleteMessage: typeof import('./chat.storage.native').deleteMessage =
     (...args: any[]) => (ChatStorageImpl.deleteMessage as any)(...args);
+export const clearChatMessages: typeof import('./chat.storage.native').clearChatMessages =
+    (...args: any[]) => (ChatStorageImpl.clearChatMessages as any)(...args);
 export const getDeletedMessageIds: typeof import('./chat.storage.native').getDeletedMessageIds =
     (...args: any[]) => (ChatStorageImpl.getDeletedMessageIds as any)(...args);
 export const getLastMessageTimestamp: typeof import('./chat.storage.native').getLastMessageTimestamp =

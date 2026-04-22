@@ -582,6 +582,43 @@ export async function cleanupMessageMedia(messageIds: string[]): Promise<void> {
 }
 
 /**
+ * Clear all local messages for a chat (with media cleanup). Chat row is preserved
+ * so the chat remains known to the client and can auto‑rehydrate from new server
+ * activity (the UI hides empty chats via $chatListState.chats’s
+ * `local_message_count > 0` filter). LOCAL-ONLY — does not contact the server.
+ *
+ * Order:
+ *   1. Gather message IDs for the chat (for media cleanup).
+ *   2. Cleanup local media files referenced by those messages.
+ *   3. Delete message rows for chat_id. Chat row is intentionally NOT deleted.
+ */
+export async function clearChatMessages(chatId: string): Promise<void> {
+    if (!chatId) return;
+    const d = getDb();
+    await withTxMutex(async () => {
+        try {
+            const rows = await d.getAllAsync<{ message_id: string }>(
+                `SELECT message_id FROM messages WHERE chat_id = ?`, [chatId]
+            );
+            const messageIds = (rows || []).map(r => r.message_id);
+            if (messageIds.length > 0) {
+                try {
+                    await cleanupMessageMedia(messageIds);
+                } catch (err) {
+                    console.warn('[ChatStorage:Native] clearChatMessages media cleanup failed', err);
+                }
+            }
+
+            await d.runAsync(`DELETE FROM messages WHERE chat_id = ?`, [chatId]);
+            console.log(`[ChatStorage:Native] clearChatMessages: cleared ${messageIds.length} message(s) for chat ${chatId} (chat row preserved)`);
+        } catch (err) {
+            console.warn(`[ChatStorage:Native] clearChatMessages failed for ${chatId}`, err);
+            throw err;
+        }
+    });
+}
+
+/**
  * Delete local files for messages that were unsent (message_type = 'unsent')
  * but whose media was not cleaned up (e.g. crash or interrupted unsend).
  */
