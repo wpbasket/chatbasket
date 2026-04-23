@@ -300,6 +300,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   list: {
     flex: 1,
+    paddingHorizontal: 3,
   },
   emptyContainer: {
     flex: 1,

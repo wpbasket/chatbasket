@@ -190,9 +190,18 @@ const styles = StyleSheet.create((theme) => ({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 15,
-        paddingVertical: 12,
+        paddingHorizontal: 25,
+        paddingVertical: 4,
+        marginVertical: 4,
         gap: 12,
+        borderRadius: 10,
+        _web: {
+            cursor: 'pointer',
+            transition: 'background-color 0.15s ease',
+            _hover: {
+                backgroundColor: theme.colors.backgroundElement,
+            },
+        },
     },
     pressed: {
         opacity: 0.6,
@@ -200,11 +209,13 @@ const styles = StyleSheet.create((theme) => ({
     content: {
         flex: 1,
         gap: 2,
+        backgroundColor: 'transparent',
     },
     topRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        backgroundColor: 'transparent',
     },
     name: {
         flex: 1,
@@ -219,12 +230,14 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        backgroundColor: 'transparent',
     },
     previewContainer: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         marginRight: 8,
+        backgroundColor: 'transparent',
     },
     statusIcon: {
         marginRight: 4,
