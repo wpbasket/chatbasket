@@ -1,6 +1,6 @@
 import LoadingScreen from "@/components/ui/common/LoadingScreen";
 import { ThemedView } from "@/components/ui/common/ThemedView";
-import { PersonalStorageGetUser } from "@/lib/storage/personalStorage/personal.storage.user";
+import { PersonalStorageGetUser } from "@/lib/storage/personalStorage/profile/personal.storage.user";
 import { authState } from "@/state/auth/state.auth";
 import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile";
 import { useValue } from "@legendapp/state/react";

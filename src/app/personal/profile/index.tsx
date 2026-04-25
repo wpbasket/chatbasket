@@ -18,6 +18,7 @@ import { Memo, Show, useValue } from '@legendapp/state/react';
 import { router, Stack } from 'expo-router';
 import { useCallback } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView } from 'react-native';
+import { ProfileAvatar } from '@/components/personal/profile/ProfileAvatar';
 import styles from './profile.styles';
 import { commonAuthApi } from '@/lib/commonLib/authApi/common.api.auth';
 import { useUnistyles } from 'react-native-unistyles';
@@ -177,12 +178,7 @@ export default function ProfileScreen() {
                     { opacity: pressed ? 0.1 : 1 },
                     styles.profilePicture
                   ]}>
-                    <Memo>
-                      <Image
-                        source={{ uri: $personalStateUser.user.avatar_url.get() || '' }}
-                        style={styles.profilePictureImage}
-                      />
-                    </Memo>
+                    <ProfileAvatar />
                   </Pressable>
                   {/* Profile Picture End */}
 

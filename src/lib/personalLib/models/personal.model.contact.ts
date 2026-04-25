@@ -17,6 +17,8 @@ export interface Contact {
     created_at: string;
     updated_at: string;
     avatar_url?: string | null;
+    avatar_file_id?: string | null;          // Added for caching
+    cached_avatar_file_id?: string | null;   // Local-only
     is_mutual: boolean;
 }
 
@@ -54,6 +56,8 @@ export interface PendingContactRequest {
     requested_at: string;
     updated_at: string;
     avatar_url?: string | null;
+    avatar_file_id?: string | null;          // Added for caching
+    cached_avatar_file_id?: string | null;   // Local-only
 }
 
 /**
@@ -70,6 +74,8 @@ export interface SentContactRequest {
     requested_at: string;
     updated_at: string;
     avatar_url?: string | null;
+    avatar_file_id?: string | null;          // Added for caching
+    cached_avatar_file_id?: string | null;   // Local-only
 }
 
 /**

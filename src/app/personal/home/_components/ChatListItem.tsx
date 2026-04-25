@@ -80,10 +80,13 @@ export const ChatListItem = memo(({ chatId, onPress, onLongPress, onContextMenu 
         >
             {/* Avatar */}
             <PrivacyAvatar
+                userId={chat.other_user_id}
                 uri={chat.is_contactable !== false ? chat.avatar_url : null}
                 name={displayName}
                 size={50}
                 colorKey={chat.other_user_id}
+                avatarFileId={chat.avatar_file_id}
+                cachedAvatarFileId={chat.cached_avatar_file_id}
             />
 
             {/* Content */}

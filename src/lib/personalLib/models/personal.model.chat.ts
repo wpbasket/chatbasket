@@ -32,7 +32,8 @@ export interface ChatEntry {
     last_message_is_unsent?: boolean;        // Added Phase 5.3
     unread_count: number;
 
-    // Local-only field (not from server) — set by client during sync
+    avatar_file_id: string | null;           // Added for caching
+    cached_avatar_file_id: string | null;    // Local-only: what version we have on disk
     is_contactable?: boolean;                // false when server omits this chat (blocked/private)
     local_message_count?: number;            // Count of non-deleted messages in local DB (0 = hidden from chat list)
 }

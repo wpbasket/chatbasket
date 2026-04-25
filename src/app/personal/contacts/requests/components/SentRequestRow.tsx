@@ -48,7 +48,15 @@ export default function SentRequestRow({ id, onOpenActions, onUndo }: SentRowPro
         onPressIn={handlePressIn}
         onPress={(event) => onOpenActions(item, event)}
       >
-        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} colorKey={item.id} />
+        <PrivacyAvatar 
+          userId={item.id}
+          uri={item.avatarUrl} 
+          name={displayName} 
+          size={48} 
+          colorKey={item.id} 
+          avatarFileId={item.avatarFileId}
+          cachedAvatarFileId={item.cachedAvatarFileId}
+        />
         <ThemedView style={styles.rowContent}>
           <ThemedText type='semibold' style={styles.rowName} selectable>
             {displayName}

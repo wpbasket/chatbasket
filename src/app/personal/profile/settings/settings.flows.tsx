@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ApiError } from '@/lib/constantLib';
-import { PersonalStorageSetUser } from '@/lib/storage/personalStorage/personal.storage.user';
+import { PersonalStorageSetUser } from '@/lib/storage/personalStorage/profile/personal.storage.user';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { useValue } from '@legendapp/state/react';
 import { setting$ } from '@/state/settings/state.setting';

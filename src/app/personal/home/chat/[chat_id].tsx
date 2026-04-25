@@ -116,10 +116,13 @@ const PersonalChatScreen = React.memo(() => {
                                     <Memo>
                                         {() => (
                                             <PrivacyAvatar
+                                                userId={recipient_id}
                                                 uri={$chatListState.chatsById[chat_id]?.is_contactable.get() !== false ? $chatListState.chatsById[chat_id]?.avatar_url.get() : null}
                                                 name={displayName}
                                                 size={50}
                                                 colorKey={recipient_id}
+                                                avatarFileId={$chatListState.chatsById[chat_id]?.avatar_file_id.get()}
+                                                cachedAvatarFileId={$chatListState.chatsById[chat_id]?.cached_avatar_file_id.get()}
                                             />
                                         )}
                                     </Memo>

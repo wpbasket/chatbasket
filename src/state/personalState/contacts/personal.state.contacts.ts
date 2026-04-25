@@ -9,6 +9,8 @@ export type ContactEntry = {
   createdAt: string;
   updatedAt: string;
   avatarUrl: string | null;
+  avatarFileId: string | null;           // Added for caching
+  cachedAvatarFileId: string | null;      // Local-only
   isMutual: boolean;
 };
 
@@ -21,6 +23,8 @@ export type PendingRequestEntry = {
   requestedAt: string;
   updatedAt: string;
   avatarUrl: string | null;
+  avatarFileId: string | null;           // Added for caching
+  cachedAvatarFileId: string | null;      // Local-only
   status: string;
 };
 
@@ -45,6 +49,8 @@ export const $contactsState = observable({
     $contactsState.error.set(value);
   },
   setContacts(entries: ContactEntry[]) {
+    // Preserve cachedAvatarFileId from existing state (server doesn't send this local-only field)
+    const existingById = $contactsState.contactsById.peek();
     const sorted = [...entries].sort((a, b) => {
       const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
       const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
@@ -57,6 +63,13 @@ export const $contactsState = observable({
       return a.id.localeCompare(b.id);
     });
 
+    // Carry forward cached avatar markers
+    for (const entry of sorted) {
+      if (!entry.cachedAvatarFileId && existingById[entry.id]?.cachedAvatarFileId) {
+        entry.cachedAvatarFileId = existingById[entry.id].cachedAvatarFileId;
+      }
+    }
+
     $contactsState.contacts.set(sorted);
     const byId: Record<string, ContactEntry> = {};
     for (const entry of sorted) {
@@ -66,6 +79,8 @@ export const $contactsState = observable({
     $contactsState.contactsIds.set(sorted.map((entry) => entry.id));
   },
   setAddedYou(entries: ContactEntry[]) {
+    // Preserve cachedAvatarFileId from existing state (server doesn't send this local-only field)
+    const existingById = $contactsState.addedYouById.peek();
     const sorted = [...entries].sort((a, b) => {
       const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
       const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
@@ -77,6 +92,13 @@ export const $contactsState = observable({
       if (aUsername > bUsername) return 1;
       return a.id.localeCompare(b.id);
     });
+
+    // Carry forward cached avatar markers
+    for (const entry of sorted) {
+      if (!entry.cachedAvatarFileId && existingById[entry.id]?.cachedAvatarFileId) {
+        entry.cachedAvatarFileId = existingById[entry.id].cachedAvatarFileId;
+      }
+    }
 
     $contactsState.addedYou.set(sorted);
     const byId: Record<string, ContactEntry> = {};
@@ -115,6 +137,16 @@ export const $contactsState = observable({
   },
   markFetched() {
     $contactsState.lastFetchedAt.set(Date.now());
+  },
+  updateCachedAvatarFileId(userId: string, fileId: string | null) {
+    const contact$ = $contactsState.contactsById[userId];
+    if (contact$?.peek()) {
+      contact$.cachedAvatarFileId.set(fileId);
+    }
+    const addedYou$ = $contactsState.addedYouById[userId];
+    if (addedYou$?.peek()) {
+      addedYou$.cachedAvatarFileId.set(fileId);
+    }
   },
   reset() {
     $contactsState.contacts.set([]);
@@ -155,6 +187,8 @@ export const $contactRequestsState = observable({
     $contactRequestsState.error.set(value);
   },
   setPending(entries: PendingRequestEntry[]) {
+    // Preserve cachedAvatarFileId from existing state (server doesn't send this local-only field)
+    const existingById = $contactRequestsState.pendingById.peek();
     const sorted = [...entries].sort((a, b) => {
       const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
       const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
@@ -167,6 +201,13 @@ export const $contactRequestsState = observable({
       return a.id.localeCompare(b.id);
     });
 
+    // Carry forward cached avatar markers
+    for (const entry of sorted) {
+      if (!entry.cachedAvatarFileId && existingById[entry.id]?.cachedAvatarFileId) {
+        entry.cachedAvatarFileId = existingById[entry.id].cachedAvatarFileId;
+      }
+    }
+
     $contactRequestsState.pending.set(sorted);
     const byId: Record<string, PendingRequestEntry> = {};
     for (const entry of sorted) {
@@ -176,6 +217,8 @@ export const $contactRequestsState = observable({
     $contactRequestsState.pendingIds.set(sorted.map((entry) => entry.id));
   },
   setSent(entries: SentRequestEntry[]) {
+    // Preserve cachedAvatarFileId from existing state (server doesn't send this local-only field)
+    const existingById = $contactRequestsState.sentById.peek();
     const sorted = [...entries].sort((a, b) => {
       const aName = ((a.nickname ?? a.name) ?? '').toLowerCase();
       const bName = ((b.nickname ?? b.name) ?? '').toLowerCase();
@@ -187,6 +230,13 @@ export const $contactRequestsState = observable({
       if (aUsername > bUsername) return 1;
       return a.id.localeCompare(b.id);
     });
+
+    // Carry forward cached avatar markers
+    for (const entry of sorted) {
+      if (!entry.cachedAvatarFileId && existingById[entry.id]?.cachedAvatarFileId) {
+        entry.cachedAvatarFileId = existingById[entry.id].cachedAvatarFileId;
+      }
+    }
 
     $contactRequestsState.sent.set(sorted);
     const byId: Record<string, SentRequestEntry> = {};
@@ -201,6 +251,16 @@ export const $contactRequestsState = observable({
   },
   markFetched() {
     $contactRequestsState.lastFetchedAt.set(Date.now());
+  },
+  updateCachedAvatarFileId(userId: string, fileId: string | null) {
+    const pending$ = $contactRequestsState.pendingById[userId];
+    if (pending$?.peek()) {
+      pending$.cachedAvatarFileId.set(fileId);
+    }
+    const sent$ = $contactRequestsState.sentById[userId];
+    if (sent$?.peek()) {
+      sent$.cachedAvatarFileId.set(fileId);
+    }
   },
   reset() {
     $contactRequestsState.pending.set([]);

@@ -236,6 +236,8 @@ async function handleNewMessage(payload: any): Promise<void> {
             other_user_name: contact?.nickname ?? contact?.name ?? '',
             other_user_username: contact?.username ?? '',
             avatar_url: contact?.avatarUrl ?? null,
+            avatar_file_id: contact?.avatarFileId ?? null,
+            cached_avatar_file_id: contact?.cachedAvatarFileId ?? null,
             last_message_content: previewContent,
             last_message_created_at: msg.created_at,
             last_message_type: msg.message_type,

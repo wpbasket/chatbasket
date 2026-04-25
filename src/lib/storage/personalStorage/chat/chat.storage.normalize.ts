@@ -93,6 +93,8 @@ export function normalizeChatEntry(input: Partial<ChatEntry> | null | undefined)
         other_user_name: asString(input.other_user_name),
         other_user_username: asString(input.other_user_username),
         avatar_url: asNullableString(input.avatar_url),
+        avatar_file_id: asNullableString(input.avatar_file_id),
+        cached_avatar_file_id: asNullableString(input.cached_avatar_file_id),
         created_at: createdAt,
         updated_at: updatedAt,
         other_user_last_read_at: asString(input.other_user_last_read_at),

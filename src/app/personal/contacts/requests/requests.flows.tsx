@@ -42,8 +42,9 @@ export default function CreateRequestsFlows({
             createdAt: request.requestedAt,
             updatedAt: new Date().toISOString(),
             avatarUrl: request.avatarUrl,
+            avatarFileId: request.avatarFileId ?? null,
+            cachedAvatarFileId: request.cachedAvatarFileId ?? null,
             // Accepting a request means they added you; it does not automatically
-            // make the contact mutual until you add them back from "People who added you".
             isMutual: false,
           };
 

@@ -33,6 +33,8 @@ export async function PersonalUtilFetchContactRequests() {
       requestedAt: entry.requested_at,
       updatedAt: entry.updated_at,
       avatarUrl: entry.avatar_url ?? null,
+      avatarFileId: entry.avatar_file_id ?? null,
+      cachedAvatarFileId: entry.cached_avatar_file_id ?? null,
       status: entry.status,
     });
 
@@ -45,6 +47,8 @@ export async function PersonalUtilFetchContactRequests() {
       requestedAt: entry.requested_at,
       updatedAt: entry.updated_at,
       avatarUrl: entry.avatar_url ?? null,
+      avatarFileId: entry.avatar_file_id ?? null,
+      cachedAvatarFileId: entry.cached_avatar_file_id ?? null,
       status: entry.status,
     });
 
@@ -96,6 +100,8 @@ export async function PersonalUtilFetchContacts() {
       createdAt: contact.created_at,
       updatedAt: contact.updated_at,
       avatarUrl: contact.avatar_url ?? null,
+      avatarFileId: contact.avatar_file_id ?? null,
+      cachedAvatarFileId: contact.cached_avatar_file_id ?? null,
       isMutual: contact.is_mutual,
     });
 

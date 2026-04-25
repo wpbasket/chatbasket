@@ -1,13 +1,30 @@
 import { initializeSecureStorage, restoreAuthState } from './commonStorage/storage.auth';
 import { initializeContactsStorage, PersonalStorageLoadContactRequests, PersonalStorageLoadContacts } from './personalStorage/personal.storage.contacts';
 import { PersonalStorageGetDeviceStatus } from './personalStorage/personal.storage.device';
-import { PersonalStorageGetUser } from './personalStorage/personal.storage.user';
+import { PersonalStorageGetUser } from './personalStorage/profile/personal.storage.user';
 import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia } from './personalStorage/chat/chat.storage';
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
 import { authState } from '@/state/auth/state.auth';
 
 let hydrationPromise: Promise<void> | null = null;
+
+/**
+ * Resets the hydration gate so the next hydratePersonalModules() call
+ * will run from scratch (re-open DB, reload contacts, restart watchers).
+ * Called during logout — without this, re-login skips all initialization
+ * because the resolved promise from the previous session is still cached.
+ */
+export const resetPersonalHydration = () => {
+    hydrationPromise = null;
+};
+
+/**
+ * Returns the in-flight hydration promise, or null if not started.
+ * Callers can `await waitForHydration()` to ensure the DB is ready
+ * before touching ChatStorage.
+ */
+export const waitForHydration = (): Promise<void> | null => hydrationPromise;
 
 /**
  * Hydrates all personal sync modules and starts background services.
@@ -20,7 +37,7 @@ export const hydratePersonalModules = async (): Promise<void> => {
     hydrationPromise = (async () => {
         try {
             console.log('[StorageInit] Starting personal module hydration...');
-            
+
             await Promise.all([
                 PersonalStorageGetUser(),
                 PersonalStorageGetDeviceStatus(),
@@ -33,7 +50,7 @@ export const hydratePersonalModules = async (): Promise<void> => {
 
             // Phase 4e: Start connection watcher + sync WebSocket state + drain outbox queue
             connectionWatcher.start();
-            
+
             // Link WebSocket lifecycle to network connectivity
             connectionWatcher.subscribe((isOnline) => {
                 wsClient.setNetworkOnline(isOnline);

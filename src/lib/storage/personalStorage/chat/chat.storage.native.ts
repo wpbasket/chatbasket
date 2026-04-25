@@ -49,6 +49,8 @@ export async function initChatStorage(): Promise<void> {
             other_user_name TEXT NOT NULL DEFAULT '',
             other_user_username TEXT NOT NULL DEFAULT '',
             avatar_url TEXT,
+            avatar_file_id TEXT,
+            cached_avatar_file_id TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             other_user_last_read_at TEXT NOT NULL DEFAULT '',
@@ -189,6 +191,8 @@ function chatBindings(chat: ChatEntry): any[] {
         chat.other_user_name,
         chat.other_user_username,
         chat.avatar_url,
+        chat.avatar_file_id,
+        chat.cached_avatar_file_id,
         chat.created_at,
         chat.updated_at,
         chat.other_user_last_read_at,
@@ -209,12 +213,13 @@ function chatBindings(chat: ChatEntry): any[] {
 async function upsertChatRow(d: SQLite.SQLiteDatabase, chat: ChatEntry): Promise<void> {
     await d.runAsync(
         `INSERT OR REPLACE INTO chats (
-            chat_id, other_user_id, other_user_name, other_user_username, avatar_url,
+            chat_id, other_user_id, other_user_name, other_user_username,
+            avatar_url, avatar_file_id, cached_avatar_file_id,
             created_at, updated_at, other_user_last_read_at, other_user_last_delivered_at,
             last_message_content, last_message_created_at, last_message_type,
             last_message_is_from_me, last_message_status, last_message_sender_id,
             last_message_id, last_message_is_unsent, unread_count, is_contactable
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         chatBindings(chat)
     );
 }
@@ -253,6 +258,23 @@ export async function getChats(): Promise<LocalChatEntry[]> {
     );
     return (rows || []).map(sqliteChatRowToLocal);
 }
+ 
+export async function updateChatCachedAvatarFileId(chatId: string, fileId: string | null): Promise<void> {
+    const d = getDb();
+    await d.runAsync(
+        `UPDATE chats SET cached_avatar_file_id = ?, updated_at = ? WHERE chat_id = ?`,
+        [fileId, new Date().toISOString(), chatId]
+    );
+}
+
+export async function updateChatCachedAvatarFileIdByUserId(userId: string, fileId: string | null): Promise<void> {
+    const d = getDb();
+    await d.runAsync(
+        `UPDATE chats SET cached_avatar_file_id = ?, updated_at = ? WHERE other_user_id = ?`,
+        [fileId, new Date().toISOString(), userId]
+    );
+}
+
 
 export async function getMessagesByChat(chatId: string, limit: number = 50, offset: number = 0): Promise<LocalMessageEntry[]> {
     const d = getDb();
@@ -680,6 +702,8 @@ function sqliteChatRowToLocal(row: Record<string, any>): LocalChatEntry {
     return {
         ...row,
         avatar_url: row.avatar_url || null,
+        avatar_file_id: row.avatar_file_id || null,
+        cached_avatar_file_id: row.cached_avatar_file_id || null,
         last_message_content: row.last_message_content || null,
         last_message_created_at: row.last_message_created_at || null,
         last_message_type: row.last_message_type || null,

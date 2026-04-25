@@ -50,6 +50,8 @@ export interface LocalChatEntry {
     other_user_name: string;
     other_user_username: string;
     avatar_url: string | null;
+    avatar_file_id: string | null;
+    cached_avatar_file_id: string | null;
     created_at: string;
     unread_count: number;
     other_user_last_read_at: string;

@@ -20,20 +20,10 @@ const styles = StyleSheet.create((theme, rt) => ({
     gap: 20,
   },
   profilePicture: {
-    height: 80,
-    width: 80,
-    backgroundColor: theme.colors.icon,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 9999,
+    // Styling now controlled by ProfileAvatar component
   },
   profilePictureImage: {
-    width: '100%',
-    height: '100%',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    pointerEvents: 'none',
-    borderRadius: 9999,
+    // Styling now controlled by ProfileAvatar component
   },
   outerBucketContainer: {
     gap: 10,

@@ -137,6 +137,7 @@ interface ChatListState {
     refreshMessageCounts: () => Promise<void>;
     incrementMessageCount: (chatId: string, delta: number) => void;
     clearChatMessages: (chatId: string) => void;
+    updateCachedAvatarFileId: (userId: string, fileId: string | null) => void;
     reset: () => void;
 }
 
@@ -220,11 +221,14 @@ const state$ = observable({
                 }
             }
 
-            // Preserve local_message_count from existing state when merging
-            // (server doesn't send this field; refreshMessageCounts will re-hydrate later)
+            // Preserve local-only fields from existing state when merging
+            // (server doesn't send these fields)
             for (const [id, chat] of Object.entries(incoming)) {
                 if (existing[id]?.local_message_count != null) {
                     chat.local_message_count = existing[id].local_message_count;
+                }
+                if (!chat.cached_avatar_file_id && existing[id]?.cached_avatar_file_id) {
+                    chat.cached_avatar_file_id = existing[id].cached_avatar_file_id;
                 }
             }
 
@@ -266,6 +270,13 @@ const state$ = observable({
 
         state$.hydratingFromStorage.set(true);
         try {
+            // Wait for DB initialization (initChatStorage) to complete.
+            // UI components can mount before hydratePersonalModules() finishes,
+            // so we await the hydration promise to avoid "Database not initialized".
+            const { waitForHydration } = await import('@/lib/storage/storage.init');
+            const pending = waitForHydration();
+            if (pending) await pending;
+
             if (state$.hydratedFromStorage.peek() || Object.keys(state$.chatsById.peek()).length > 0) {
                 return;
             }
@@ -413,6 +424,18 @@ const state$ = observable({
             } as Partial<ChatEntry>);
         });
         state$.persistChat(chatId);
+    },
+    updateCachedAvatarFileId(userId: string, fileId: string | null) {
+        batch(() => {
+            const byId = state$.chatsById.peek();
+            for (const chatId of Object.keys(byId)) {
+                const chat$ = state$.chatsById[chatId];
+                if (chat$.other_user_id.peek() === userId) {
+                    chat$.cached_avatar_file_id.set(fileId);
+                    chat$.updated_at.set(new Date().toISOString());
+                }
+            }
+        });
     },
     reset() {
         batch(() => {

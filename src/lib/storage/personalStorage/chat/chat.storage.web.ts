@@ -303,6 +303,8 @@ function chatToLocal(chat: ChatEntry): LocalChatEntry {
     return {
         ...chat,
         avatar_url: chat.avatar_url ?? null,
+        avatar_file_id: chat.avatar_file_id ?? null,
+        cached_avatar_file_id: chat.cached_avatar_file_id ?? null,
         last_message_content: chat.last_message_content ?? null,
         last_message_created_at: chat.last_message_created_at ?? null,
         last_message_type: chat.last_message_type ?? null,
@@ -348,6 +350,38 @@ export async function getChats(): Promise<LocalChatEntry[]> {
         const bTime = b.last_message_created_at || b.created_at;
         return new Date(bTime).getTime() - new Date(aTime).getTime();
     });
+}
+
+export async function updateChatCachedAvatarFileId(chatId: string, fileId: string | null): Promise<void> {
+    const db = await openDataDb();
+    const tx = db.transaction(CHATS_STORE, 'readwrite');
+    const store = tx.objectStore(CHATS_STORE);
+    const record = await idbGet<any>(store, chatId);
+    if (!record) return;
+
+    const chat = await decryptChatEntry(record);
+    chat.cached_avatar_file_id = fileId;
+    chat.updated_at = new Date().toISOString();
+    const encrypted = await encryptChatEntry(chat);
+    await idbPut(store, encrypted);
+}
+
+export async function updateChatCachedAvatarFileIdByUserId(userId: string, fileId: string | null): Promise<void> {
+    const db = await openDataDb();
+    const tx = db.transaction(CHATS_STORE, 'readwrite');
+    const store = tx.objectStore(CHATS_STORE);
+    const records = await idbGetAll<any>(store);
+
+    for (const record of records) {
+        const chat = await decryptChatEntry(record);
+        if (chat.other_user_id === userId) {
+            chat.cached_avatar_file_id = fileId;
+            chat.updated_at = new Date().toISOString();
+            const encrypted = await encryptChatEntry(chat);
+            await idbPut(store, encrypted);
+            return;
+        }
+    }
 }
 
 export async function getMessagesByChat(chatId: string, limit: number = 50, offset: number = 0): Promise<LocalMessageEntry[]> {

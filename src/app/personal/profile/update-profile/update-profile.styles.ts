@@ -101,16 +101,10 @@ const styles = StyleSheet.create((theme, rt) => ({
     paddingBottom: 20,
   },
   profilePicture: {
-    height: 80,
-    width: 80,
-    backgroundColor: theme.colors.icon,
-    borderRadius: 9999,
+    // Styling now controlled by ProfileAvatar component
   },
   profilePictureImage: {
-    width: '100%',
-    height: '100%',
-    pointerEvents: 'none',
-    borderRadius: 9999,
+    // Styling now controlled by ProfileAvatar component
   },
   outerEditIcon: {
     // marginTop: 10,

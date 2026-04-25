@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { Image, Pressable } from 'react-native';
+import { ProfileAvatar } from '@/components/personal/profile/ProfileAvatar';
 import styles from '../update-profile.styles';
 
 type UpdateProfileAvatarSectionProps = {
@@ -28,12 +29,7 @@ export default function UpdateProfileAvatarSection({
           showAvatarError && styles.profileInputError,
         ]}
       >
-        {hasAvatar && avatarUri && (
-          <Image
-            source={{ uri: avatarUri }}
-            style={styles.profilePictureImage}
-          />
-        )}
+        <ProfileAvatar uri={avatarUri} />
       </Pressable>
       <ThemedView style={styles.outerEditIcon}>
         <Pressable

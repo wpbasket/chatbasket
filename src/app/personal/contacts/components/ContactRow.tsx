@@ -54,7 +54,15 @@ export default function ContactRow({ id, kind, onOpenActions, onMessage }: Conta
           }
         }}
       >
-        <PrivacyAvatar uri={item.avatarUrl} name={displayName} size={48} colorKey={item.id} />
+        <PrivacyAvatar 
+          userId={item.id}
+          uri={item.avatarUrl} 
+          name={displayName} 
+          size={48} 
+          colorKey={item.id} 
+          avatarFileId={item.avatarFileId}
+          cachedAvatarFileId={item.cachedAvatarFileId}
+        />
         <ThemedView style={styles.rowContent}>
           <ThemedText type='semibold' style={styles.rowName} selectable>
             {displayName}

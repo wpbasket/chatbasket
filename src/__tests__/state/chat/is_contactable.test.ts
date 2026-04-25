@@ -57,6 +57,8 @@ function makeChatEntry(overrides: Partial<ChatEntry> & { chat_id: string; other_
         last_message_id: `msg_${overrides.chat_id}`,
         last_message_is_unsent: false,
         unread_count: 0,
+        avatar_file_id: null,
+        cached_avatar_file_id: null,
         ...overrides,
     };
 }

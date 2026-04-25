@@ -1,13 +1,18 @@
+import { useEffect, useState } from 'react';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
-import { Image } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { Image, Platform } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { resolveAvatarUri, downloadAndCacheAvatar } from '@/utils/personalUtils/util.avatarCache';
 
 export interface PrivacyAvatarProps {
+  userId: string;
   uri: string | null;
   name: string;
   size?: number;
   colorKey?: string;
+  avatarFileId?: string | null;
+  cachedAvatarFileId?: string | null;
 }
 
 const AVATAR_COLORS = [
@@ -40,15 +45,89 @@ const getAvatarColor = (name: string) => {
   return AVATAR_COLORS[index];
 };
 
-export function PrivacyAvatar({ uri, name, size = 48, colorKey }: PrivacyAvatarProps) {
+export function PrivacyAvatar({ 
+  userId, 
+  uri: serverUri, 
+  name, 
+  size = 48, 
+  colorKey,
+  avatarFileId,
+  cachedAvatarFileId 
+}: PrivacyAvatarProps) {
+  const [displayUri, setDisplayUri] = useState<string | null>(null);
+  const { theme } = useUnistyles();
+
+  useEffect(() => {
+    let isMounted = true;
+    let blobUrl: string | null = null;
+    
+    async function resolve() {
+      const { uri: resolvedUri, needsDownload } = await resolveAvatarUri(
+        userId,
+        serverUri,
+        avatarFileId ?? null,
+        cachedAvatarFileId ?? null
+      );
+
+      let finalUri = resolvedUri;
+
+      // If we need to download, do it FIRST before showing anything
+      if (needsDownload && serverUri && avatarFileId) {
+        console.log(`[PrivacyAvatar:${userId}] Downloading before display...`);
+        const localUri = await downloadAndCacheAvatar(userId, serverUri, avatarFileId);
+        
+        if (localUri) {
+          console.log(`[PrivacyAvatar:${userId}] Download successful, using local storage`);
+          finalUri = localUri;
+        } else {
+          console.log(`[PrivacyAvatar:${userId}] Download failed, falling back to server URL as last resort`);
+          finalUri = serverUri;
+        }
+      }
+      
+      // Web resolution: idb:// -> blob:
+      if (Platform.OS === 'web' && finalUri?.startsWith('idb://')) {
+        const key = finalUri.split('//')[1]?.split('?')[0];
+        if (key) {
+          const { getProfileAvatarBlob } = await import('@/lib/storage/personalStorage/profile/profile.storage');
+          const blob = await getProfileAvatarBlob(key);
+          if (blob && isMounted) {
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+            blobUrl = URL.createObjectURL(blob);
+            finalUri = blobUrl;
+            console.log(`[PrivacyAvatar:${userId}] Web Resolved idb:// to blob URL`);
+          }
+        }
+      }
+      
+      if (isMounted) setDisplayUri(finalUri);
+    }
+
+    resolve();
+    return () => { 
+      isMounted = false; 
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [userId, serverUri, avatarFileId, cachedAvatarFileId]);
+
   const dimensionStyle = {
     width: size,
     height: size,
     borderRadius: size / 2,
   } as const;
 
-  if (uri) {
-    return <Image source={{ uri }} style={[styles.image, dimensionStyle]} />;
+  // Better: check if theme name exists
+  const isDark = (theme as any).name === 'dark' || (theme as any).mode === 'dark';
+  const finalBorderWidth = isDark ? 0 : 1;
+
+  if (displayUri) {
+    return (
+      <Image 
+        source={{ uri: displayUri }} 
+        style={[styles.image, dimensionStyle, { borderWidth: finalBorderWidth }]} 
+        resizeMethod="resize"
+      />
+    );
   }
 
   const backgroundColor = getAvatarColor(colorKey || name);
@@ -58,7 +137,7 @@ export function PrivacyAvatar({ uri, name, size = 48, colorKey }: PrivacyAvatarP
       style={[
         styles.placeholder,
         dimensionStyle,
-        { backgroundColor }
+        { backgroundColor, borderWidth: finalBorderWidth }
       ]}
     >
       <ThemedText type='smallBold' style={[styles.initials, { lineHeight: size }]} selectable={false}>

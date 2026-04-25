@@ -2,16 +2,7 @@ import { ProfileResponse } from "@/lib/publicLib";
 import { authState } from "@/state/auth/state.auth";
 import { Platform } from 'react-native';
 import { AppStorage } from "../storage.wrapper";
-import { PersonalStorageRemoveContactRequests, PersonalStorageRemoveContacts } from "../personalStorage/personal.storage.contacts";
-import { PersonalStorageRemoveUser } from "../personalStorage/personal.storage.user";
-import { PreferencesStorage } from "./storage.preferences";
-import { PersonalStorageGetDeviceStatus, PersonalStorageRemoveDeviceStatus } from '@/lib/storage/personalStorage/personal.storage.device';
-import { clearAllChatStorage } from '@/lib/storage/personalStorage/chat/chat.storage';
-// NOTE: connectionWatcher is lazy-imported in logout() to avoid require cycle:
-// constantLib → client.ts → storage.auth.ts → connection.watcher → outbox.queue → chat.transport → personal.api.chat → constantLib
 import { appMode$ } from "@/state/appMode/state.appMode";
-import { $contactRequestsState, $contactsState } from "@/state/personalState/contacts/personal.state.contacts";
-import { $personalStateUser } from "@/state/personalState/user/personal.state.user";
 
 // Define the schema for Auth storage
 type AuthSchema = {
@@ -128,27 +119,27 @@ export const clearSession = async () => {
 
   // Clear preferences storage for both platforms
   try {
+    const { PreferencesStorage } = await import('./storage.preferences');
     PreferencesStorage.clearTheme();
     PreferencesStorage.clearMode();
   } catch (error) {
     console.log('Failed to clear preferences storage:', error);
   }
 
-  // Clear personal user storage for both platforms
+  // Clear personal user storage for both platforms (Chats, Contacts, Profile, Devices)
   try {
+    const { PersonalStorageRemoveChat } = await import('@/lib/storage/personalStorage/chat/personal.storage.chat');
+    const { PersonalStorageRemoveUser } = await import('@/lib/storage/personalStorage/profile/personal.storage.user');
+    const { PersonalStorageRemoveContacts, PersonalStorageRemoveContactRequests } = await import('../personalStorage/personal.storage.contacts');
+    const { PersonalStorageRemoveDeviceStatus } = await import('@/lib/storage/personalStorage/personal.storage.device');
+
+    await PersonalStorageRemoveChat();
     await PersonalStorageRemoveUser();
     await PersonalStorageRemoveContacts();
     await PersonalStorageRemoveContactRequests();
     await PersonalStorageRemoveDeviceStatus();
   } catch (error) {
     console.log('Failed to clear personal user storage:', error);
-  }
-
-  // Clear chat storage BEFORE auth state is cleared (Rule 10 — Phase D)
-  try {
-    await clearAllChatStorage();
-  } catch (error) {
-    console.error('[StorageAuth] Failed to clear chat storage (continuing logout):', error);
   }
 
   // Clear auth state for both platforms (Exhaustive)
@@ -175,21 +166,30 @@ export const clearSession = async () => {
 
   // Reset Domain Observables (In-memory Cleanup)
   try {
+    const { $contactsState, $contactRequestsState } = await import("@/state/personalState/contacts/personal.state.contacts");
+    const { $personalStateUser } = await import("@/state/personalState/user/personal.state.user");
+    const { $chatMessagesState, $chatListState } = await import("@/state/personalState/chat/personal.state.chat");
+
     $contactsState.reset();
     $contactRequestsState.reset();
     $personalStateUser.user.set(null);
     $personalStateUser.avatarUri.set(null);
+    $chatMessagesState.reset();
+    $chatListState.reset();
   } catch (error) {
     console.log('Failed to reset domain observables:', error);
   }
 
-  // Phase D: Reset chat in-memory state — prevents previous user's data from being visible
+  // Reset the hydration gate so the next login re-initializes everything
+  // (re-opens SQLite, reloads contacts, restarts connection watcher).
+  // This is the critical fix: without it, hydratePersonalModules() returns
+  // immediately on re-login because the old resolved promise is still cached,
+  // leaving db=null and causing "Database not initialized" errors.
   try {
-    const { $chatMessagesState, $chatListState } = await import('@/state/personalState/chat/personal.state.chat');
-    $chatMessagesState.reset();
-    ($chatListState as any).reset();
+    const { resetPersonalHydration } = await import('@/lib/storage/storage.init');
+    resetPersonalHydration();
   } catch (error) {
-    console.log('Failed to reset chat state observables:', error);
+    console.log('Failed to reset hydration:', error);
   }
 };
 
@@ -223,6 +223,7 @@ export const restoreAuthState = async (): Promise<void> => {
         authState.sessionExpiry.set(session.sessionExpiry);
         authState.user.set(session.user);
         authState.isLoggedIn.set(true);
+        const { PersonalStorageGetDeviceStatus } = await import('@/lib/storage/personalStorage/personal.storage.device');
         await PersonalStorageGetDeviceStatus();
       } else {
         if (session.sessionId && session.userId) {
@@ -231,6 +232,7 @@ export const restoreAuthState = async (): Promise<void> => {
           authState.sessionExpiry.set(session.sessionExpiry);
           authState.user.set(session.user);
           authState.isLoggedIn.set(true);
+          const { PersonalStorageGetDeviceStatus } = await import('@/lib/storage/personalStorage/personal.storage.device');
           await PersonalStorageGetDeviceStatus();
         } else {
           await clearSession();
