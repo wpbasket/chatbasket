@@ -1,7 +1,7 @@
 import { AppModal } from '@/components/modals/AppModal';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IncomingShareListener } from '@/hooks/useIncomingShare';
-import { initializeAppStorage } from '@/lib/storage/storage.init';
+import { initializeAppStorage, personalStorageHydration$ } from '@/lib/storage/storage.init';
 import { checkInitialNotification, registerTokenWithBackend, setupNotificationListeners } from '@/notification/registerFcmOrApn';
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
@@ -41,6 +41,7 @@ export default function RootLayout() {
   const sentOtp = useValue(authState.isSentOtp);
   const mode = useValue(appMode$.mode);
   const networkLoaded = useValue(network$.isLoaded);
+  const personalStorageReady = useValue(personalStorageHydration$.ready);
   const segments = useSegments();
 
   // Helper to process deep links (memoized to avoid recreation on every render)
@@ -153,7 +154,7 @@ export default function RootLayout() {
 
     // UPDATED: Render nothing until fonts, auth, AND first network check are ready.
     // This prevents the flicker by keeping the splash screen visible.
-    if (!loaded || !authLoaded || !networkLoaded) {
+    if (!loaded || !authLoaded || !networkLoaded || (lock && !personalStorageReady)) {
       return null;
     }
   }
@@ -177,7 +178,7 @@ export default function RootLayout() {
     }, [loaded]);
 
     // NEW: Also wait for auth and network to be loaded on web before rendering the UI.
-    if (!authLoaded || !networkLoaded) {
+    if (!authLoaded || !networkLoaded || (lock && !personalStorageReady)) {
       return null;
     }
   }

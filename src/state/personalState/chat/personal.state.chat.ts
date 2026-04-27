@@ -270,13 +270,6 @@ const state$ = observable({
 
         state$.hydratingFromStorage.set(true);
         try {
-            // Wait for DB initialization (initChatStorage) to complete.
-            // UI components can mount before hydratePersonalModules() finishes,
-            // so we await the hydration promise to avoid "Database not initialized".
-            const { waitForHydration } = await import('@/lib/storage/storage.init');
-            const pending = waitForHydration();
-            if (pending) await pending;
-
             if (state$.hydratedFromStorage.peek() || Object.keys(state$.chatsById.peek()).length > 0) {
                 return;
             }

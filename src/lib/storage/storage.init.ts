@@ -1,3 +1,4 @@
+import { observable } from '@legendapp/state';
 import { initializeSecureStorage, restoreAuthState } from './commonStorage/storage.auth';
 import { initializeContactsStorage, PersonalStorageLoadContactRequests, PersonalStorageLoadContacts } from './personalStorage/personal.storage.contacts';
 import { PersonalStorageGetDeviceStatus } from './personalStorage/personal.storage.device';
@@ -9,6 +10,11 @@ import { authState } from '@/state/auth/state.auth';
 
 let hydrationPromise: Promise<void> | null = null;
 
+export const personalStorageHydration$ = observable({
+    ready: false,
+    loading: false,
+});
+
 /**
  * Resets the hydration gate so the next hydratePersonalModules() call
  * will run from scratch (re-open DB, reload contacts, restart watchers).
@@ -17,6 +23,8 @@ let hydrationPromise: Promise<void> | null = null;
  */
 export const resetPersonalHydration = () => {
     hydrationPromise = null;
+    personalStorageHydration$.ready.set(false);
+    personalStorageHydration$.loading.set(false);
 };
 
 /**
@@ -33,6 +41,8 @@ export const waitForHydration = (): Promise<void> | null => hydrationPromise;
 export const hydratePersonalModules = async (): Promise<void> => {
     // Return existing promise if hydration is already in progress or completed
     if (hydrationPromise) return hydrationPromise;
+
+    personalStorageHydration$.loading.set(true);
 
     hydrationPromise = (async () => {
         try {
@@ -81,11 +91,15 @@ export const hydratePersonalModules = async (): Promise<void> => {
                     }
                 });
             }
+            personalStorageHydration$.ready.set(true);
             console.log('[StorageInit] Personal module hydration complete.');
         } catch (error) {
             console.error('[StorageInit] Hydration failed:', error);
             hydrationPromise = null; // Allow retry on failure
+            personalStorageHydration$.ready.set(false);
             throw error;
+        } finally {
+            personalStorageHydration$.loading.set(false);
         }
     })();
 

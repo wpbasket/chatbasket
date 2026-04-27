@@ -99,7 +99,7 @@ export const getSession = async () => {
   }
 };
 
-export const clearSession = async () => {
+export const clearSession = async (options?: { skipAuthStateReset?: boolean }) => {
   const storage = getStorage();
 
   // Phase D: Stop outbox queue + connection watcher FIRST — before clearing auth tokens.
@@ -142,26 +142,8 @@ export const clearSession = async () => {
     console.log('Failed to clear personal user storage:', error);
   }
 
-  // Clear auth state for both platforms (Exhaustive)
-  authState.set({
-    isSentOtp: false,
-    isLoggedIn: false,
-    sessionId: null,
-    sessionExpiry: null,
-    userId: null,
-    user: null,
-    isInTheProfileUpdateMode: false,
-    name: null,
-    email: null,
-    isPrimary: null,
-    primaryDeviceName: null,
-  });
-
-  // Reset App Mode to Public
-  try {
-    appMode$.mode.set('public');
-  } catch (error) {
-    console.log('Failed to reset app mode:', error);
+  if (!options?.skipAuthStateReset) {
+    resetAuthStateAfterLogout();
   }
 
   // Reset Domain Observables (In-memory Cleanup)
@@ -190,6 +172,30 @@ export const clearSession = async () => {
     resetPersonalHydration();
   } catch (error) {
     console.log('Failed to reset hydration:', error);
+  }
+};
+
+export const resetAuthStateAfterLogout = () => {
+  // Clear auth state for both platforms (Exhaustive)
+  authState.set({
+    isSentOtp: false,
+    isLoggedIn: false,
+    sessionId: null,
+    sessionExpiry: null,
+    userId: null,
+    user: null,
+    isInTheProfileUpdateMode: false,
+    name: null,
+    email: null,
+    isPrimary: null,
+    primaryDeviceName: null,
+  });
+
+  // Reset App Mode to Public
+  try {
+    appMode$.mode.set('public');
+  } catch (error) {
+    console.log('Failed to reset app mode:', error);
   }
 };
 

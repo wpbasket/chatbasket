@@ -63,16 +63,11 @@ export default function ContactsScreen() {
 
   const { handlePressIn: handlePressInModal } = pressableAnimation();
 
-  const fetchContacts = useCallback(async () => {
-    await PersonalUtilFetchContacts();
-  }, []);
-
   const fetchRequests = useCallback(async () => {
     await PersonalUtilFetchContactRequests();
   }, []);
 
   const { openAddContact, openActionsFromContacts, openActionsFromAddedYou } = CreateContactsFlows({
-    fetchContacts,
     styles,
     handlePressIn: handlePressInModal,
   });
@@ -85,7 +80,7 @@ export default function ContactsScreen() {
 
   useEffect(() => {
 
-    void fetchContacts();
+    void PersonalUtilFetchContacts();
     void fetchRequests();
     return () => {
       modalActions.close();
@@ -279,7 +274,7 @@ export default function ContactsScreen() {
             <RefreshControl
               refreshing={loading}
               onRefresh={() => {
-                void fetchContacts();
+                void PersonalUtilFetchContacts();
                 void fetchRequests();
               }}
             />

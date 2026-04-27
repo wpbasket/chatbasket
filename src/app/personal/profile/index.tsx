@@ -8,11 +8,11 @@ import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { profileApi } from '@/lib/publicLib/profileApi/public.api.profile';
-import { clearSession } from '@/lib/storage/commonStorage/storage.auth';
+import { clearSession, resetAuthStateAfterLogout } from '@/lib/storage/commonStorage/storage.auth';
 import { authState } from '@/state/auth/state.auth';
 import { $personalStateCreateProfile } from '@/state/personalState/profile/personal.state.profile.createProfile';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
-import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
+import { runWithLoading, showConfirmDialog } from '@/utils/commonUtils/util.modal';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import { Memo, Show, useValue } from '@legendapp/state/react';
 import { router, Stack } from 'expo-router';
@@ -106,14 +106,21 @@ export default function ProfileScreen() {
   };
 
   const logout = async () => {
-    try {
-      const response = await commonAuthApi.logout({ all_sessions: false });
-      if (response.status) {
-        clearSession();
+    await runWithLoading(async () => {
+      try {
+        const response = await commonAuthApi.logout({ all_sessions: false });
+        if (response.status) {
+          await clearSession({ skipAuthStateReset: true });
+        }
+      } catch (error) {
+        await clearSession({ skipAuthStateReset: true });
       }
-    } catch (error) {
-      clearSession();
-    }
+    }, {
+      message: 'Logging out...',
+      cancellable: false,
+    });
+
+    resetAuthStateAfterLogout();
   };
 
   return (<>

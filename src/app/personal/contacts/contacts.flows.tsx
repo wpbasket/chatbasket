@@ -3,6 +3,8 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
+import { PersonalUtilAddContactById, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
+import { PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
 import {
     $contactRequestsState,
     $contactsState,
@@ -18,7 +20,6 @@ import { Pressable, TextInput, View } from 'react-native';
 import type { ContactsStyles } from './contacts.styles';
 
 export type ContactsFlowsDeps = {
-  fetchContacts: () => Promise<void>;
   styles: ContactsStyles;
   handlePressIn: () => void;
 };
@@ -410,7 +411,7 @@ const EditNicknameActionButtons = ({ styles: contactStyles, handlePressIn, onSav
   );
 };
 
-export default function CreateContactsFlows({ fetchContacts, styles: contactStyles, handlePressIn }: ContactsFlowsDeps) {
+export default function CreateContactsFlows({ styles: contactStyles, handlePressIn }: ContactsFlowsDeps) {
   const openAddContact = async (event?: GestureResponderEvent) => {
     const position = event
       ? {
@@ -432,9 +433,10 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
         const rawNickname = addContact$.nickname.get();
         const trimmed = (rawNickname ?? '').trim();
         const nickname = trimmed.length > 0 ? trimmed.slice(0, 40) : null;
-        const response = await runWithLoading(() =>
-          PersonalContactApi.createContact({ contact_user_id: recipientId, nickname })
-        );
+        const response = await PersonalUtilAddContactById({
+          contactUserId: recipientId,
+          nickname,
+        });
         hideModal();
 
         const isMutualAdd =
@@ -458,8 +460,8 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
           response.message === 'personal_contact_added' ||
           response.message === 'already_in_contacts'
         ) {
-          await fetchContacts();
-        } else if (response.message === 'contact_request_sent' || response.message === 'pending_request_exists') {
+          await PersonalUtilFetchContacts();
+        } else if (isRequestContactCode(response.message)) {
           $contactRequestsState.markFetched();
         }
         addContact$.reset();
@@ -558,9 +560,10 @@ export default function CreateContactsFlows({ fetchContacts, styles: contactStyl
 
   const handleAddContactQuick = async (contact: ContactEntry) => {
     try {
-      const response = await runWithLoading(() =>
-        PersonalContactApi.createContact({ contact_user_id: contact.id, nickname: null })
-      );
+      const response = await PersonalUtilAddContactById({
+        contactUserId: contact.id,
+        nickname: null,
+      });
       if (
         response.message === 'public_contact_added' ||
         response.message === 'personal_contact_added'
