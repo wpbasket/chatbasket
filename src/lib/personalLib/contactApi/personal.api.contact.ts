@@ -7,6 +7,7 @@ import { GetContactsResponse,
      UndoContactRequestPayload,
      DeleteContactPayload,
      CreateContactPayload,
+     CreateContactResponse,
      GetContactRequestsResponse, 
      UpdateContactNicknamePayload,
      RemoveNicknamePayload} from "@/lib/personalLib";
@@ -37,8 +38,8 @@ async function checkContactExistance(payload: CheckContactExistancePayload): Pro
  * @param payload contact_user_id: string;
  * @returns status: boolean; message: string;
  */
-async function createContact(payload: CreateContactPayload): Promise<BooleanResponse> {
-    return apiClient.post<BooleanResponse>('/personal/contacts/create', payload);
+async function createContact(payload: CreateContactPayload): Promise<CreateContactResponse> {
+    return apiClient.post<CreateContactResponse>('/personal/contacts/create', payload);
 }
 
 /**

@@ -37,9 +37,10 @@ import { File } from 'expo-file-system';
 import { downloadIncomingFile, isSupportedMimeType, DEFAULT_MIME_TYPES, FALLBACK_MIME_TYPE } from '@/lib/personalLib/fileSystem/file.download';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { $contactRequestsState, $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
+import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
 import { PersonalUtilAddContactById, isImmediateContactCode, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
-import { PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
+import { mapContactToEntry, PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
 
 const READABLE_MIME_TYPES = new Set([
     'application/pdf',
@@ -670,7 +671,15 @@ const ChatContentContainer = React.memo(({
                 });
 
                 if (isImmediateContactCode(result.message)) {
-                    await PersonalUtilFetchContacts();
+                    if (result.contact) {
+                        $contactsState.upsertContact(mapContactToEntry(result.contact));
+                        if (addedYouEntry) {
+                            $contactsState.setAddedYouMutual(recipient_id as string, result.contact.is_mutual);
+                        }
+                        await PersonalStorageSetContacts();
+                    } else {
+                        await PersonalUtilFetchContacts();
+                    }
                     await refreshEligibility();
                 } else if (isRequestContactCode(result.message)) {
                     $contactRequestsState.markFetched();
@@ -679,8 +688,8 @@ const ChatContentContainer = React.memo(({
                 return result;
             });
 
-            if (response.message === 'public_contact_added' || response.message === 'personal_contact_added') {
-                const rawDisplayName = participant.nickname ?? participant.name;
+            if (response.message === 'personal_contact_added' || response.contact?.is_mutual) {
+                const rawDisplayName = response.contact?.nickname ?? response.contact?.name ?? participant.nickname ?? participant.name;
                 const mutualName = rawDisplayName && rawDisplayName.trim().length > 0
                     ? rawDisplayName.trim()
                     : 'this contact';

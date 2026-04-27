@@ -3,8 +3,8 @@ import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
-import { PersonalUtilAddContactById, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
-import { PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
+import { PersonalUtilAddContactById, isImmediateContactCode, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
+import { mapContactToEntry, PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
 import {
     $contactRequestsState,
     $contactsState,
@@ -54,6 +54,9 @@ const editNickname$ = observable({
   },
 });
 
+let addContactLettersInputRef: TextInput | null = null;
+let addContactNumbersInputRef: TextInput | null = null;
+
 const checkUsername = async () => {
   const username = addContact$.username.get();
   const normalized = username.replace(/\s+/g, '');
@@ -71,61 +74,72 @@ const checkUsername = async () => {
   try {
     addContact$.isChecking.set(true);
     addContact$.error.set(null);
-    const response = await PersonalContactApi.checkContactExistance({
-      contact_username: normalized.toUpperCase(),
-    });
 
-    const anyResp: any = response as any;
-    const parse = (r: any) => {
-      const existsRaw = r?.exists ?? r?.Exists;
-      const pTypeRaw = r?.profile_type ?? r?.profileType ?? r?.ProfileType;
-      const recipRaw = r?.recipient_user_id ?? r?.recipientUserId ?? r?.RecipientUserId;
-      const nameRaw = r?.name ?? r?.Name;
-      const existsParsed = typeof existsRaw === 'boolean'
-        ? existsRaw
-        : typeof existsRaw === 'string'
-        ? existsRaw.toLowerCase() === 'true'
-        : !!existsRaw;
-      const pType = (pTypeRaw ?? null) as string | null;
-      const recip = recipRaw ? String(recipRaw) : null;
-      const name = typeof nameRaw === 'string' ? nameRaw : null;
-      return { existsParsed, pType, recip, name };
-    };
+    addContactLettersInputRef?.blur?.();
+    addContactNumbersInputRef?.blur?.();
 
-    let { existsParsed, pType, recip, name } = parse(anyResp);
-    addContact$.profileType.set(pType);
-    addContact$.name.set(name);
-
-    if (!existsParsed || pType === null) {
-      // Try fallback with lowercase if first (uppercase) attempt failed
-      const resp2 = await PersonalContactApi.checkContactExistance({
-        contact_username: normalized.toLowerCase(),
+    const runLookup = async () => {
+      const response = await PersonalContactApi.checkContactExistance({
+        contact_username: normalized.toUpperCase(),
       });
-      const parsed2 = parse(resp2 as any);
-      existsParsed = parsed2.existsParsed;
-      pType = parsed2.pType;
-      recip = parsed2.recip;
-      name = parsed2.name;
+
+      const anyResp: any = response as any;
+      const parse = (r: any) => {
+        const existsRaw = r?.exists ?? r?.Exists;
+        const pTypeRaw = r?.profile_type ?? r?.profileType ?? r?.ProfileType;
+        const recipRaw = r?.recipient_user_id ?? r?.recipientUserId ?? r?.RecipientUserId;
+        const nameRaw = r?.name ?? r?.Name;
+        const existsParsed = typeof existsRaw === 'boolean'
+          ? existsRaw
+          : typeof existsRaw === 'string'
+          ? existsRaw.toLowerCase() === 'true'
+          : !!existsRaw;
+        const pType = (pTypeRaw ?? null) as string | null;
+        const recip = recipRaw ? String(recipRaw) : null;
+        const name = typeof nameRaw === 'string' ? nameRaw : null;
+        return { existsParsed, pType, recip, name };
+      };
+
+      let { existsParsed, pType, recip, name } = parse(anyResp);
       addContact$.profileType.set(pType);
       addContact$.name.set(name);
-    }
 
-    const found = !!existsParsed || !!pType || !!recip;
+      if (!existsParsed || pType === null) {
+        // Try fallback with lowercase if first (uppercase) attempt failed
+        const resp2 = await PersonalContactApi.checkContactExistance({
+          contact_username: normalized.toLowerCase(),
+        });
+        const parsed2 = parse(resp2 as any);
+        existsParsed = parsed2.existsParsed;
+        pType = parsed2.pType;
+        recip = parsed2.recip;
+        name = parsed2.name;
+        addContact$.profileType.set(pType);
+        addContact$.name.set(name);
+      }
 
-    if (!found) {
-      addContact$.error.set('User not found.');
-      addContact$.recipientId.set(null);
-      addContact$.name.set(null);
-      return;
-    }
+      const found = !!existsParsed || !!pType || !!recip;
 
-    if (pType === 'private') {
-      addContact$.error.set('This profile is private and cannot be added.');
-      addContact$.recipientId.set(null);
-      return;
-    }
+      if (!found) {
+        addContact$.error.set('User not found.');
+        addContact$.recipientId.set(null);
+        addContact$.name.set(null);
+        return;
+      }
 
-    addContact$.recipientId.set(recip);
+      if (pType === 'private') {
+        addContact$.error.set('This profile is private and cannot be added.');
+        addContact$.recipientId.set(null);
+        return;
+      }
+
+      addContact$.recipientId.set(recip);
+    };
+
+    await runWithLoading(runLookup, {
+      message: 'Checking username...',
+      cancellable: false,
+    });
   } catch (err: any) {
     addContact$.error.set(err?.response?.data?.message ?? err?.message ?? 'Could not verify username.');
     addContact$.recipientId.set(null);
@@ -190,7 +204,10 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
   return (
     <ThemedView style={contactStyles.usernameInputContainer}>
       <TextInput
-        ref={lettersRef}
+        ref={(ref) => {
+          lettersRef.current = ref;
+          addContactLettersInputRef = ref;
+        }}
         value={lettersValue}
         onChangeText={handleLettersChange}
         autoCapitalize='characters'
@@ -201,7 +218,10 @@ const AddContactUsernameInput = ({ styles: contactStyles, handlePressIn }: AddCo
         onFocus={handlePressIn}
       />
       <TextInput
-        ref={numbersRef}
+        ref={(ref) => {
+          numbersRef.current = ref;
+          addContactNumbersInputRef = ref;
+        }}
         value={numbersValue}
         onChangeText={handleNumbersChange}
         keyboardType='numeric'
@@ -455,12 +475,16 @@ export default function CreateContactsFlows({ styles: contactStyles, handlePress
         } else {
           showContactAlert(response.message, 'Request sent.');
         }
-        if (
-          response.message === 'public_contact_added' ||
-          response.message === 'personal_contact_added' ||
-          response.message === 'already_in_contacts'
-        ) {
-          await PersonalUtilFetchContacts();
+        if (isImmediateContactCode(response.message)) {
+          if (response.contact) {
+            $contactsState.upsertContact(mapContactToEntry(response.contact));
+            if (addedYouEntry) {
+              $contactsState.setAddedYouMutual(recipientId, response.contact.is_mutual);
+            }
+            await PersonalStorageSetContacts();
+          } else {
+            await PersonalUtilFetchContacts();
+          }
         } else if (isRequestContactCode(response.message)) {
           $contactRequestsState.markFetched();
         }
@@ -577,19 +601,23 @@ export default function CreateContactsFlows({ styles: contactStyles, handlePress
         showContactAlert(response.message, 'Contact updated.');
       }
 
-      if (
-        response.message === 'public_contact_added' ||
-        response.message === 'personal_contact_added' ||
-        response.message === 'already_in_contacts'
-      ) {
-        const existing = $contactsState.contacts.get();
-        const exists = existing.some((c) => c.id === contact.id);
-        if (!exists) {
-          $contactsState.setContacts([...existing, { ...contact, isMutual: true }]);
-        }
-        const addedYouEntry = $contactsState.addedYouById[contact.id].get();
-        if (addedYouEntry) {
-          $contactsState.setAddedYouMutual(contact.id, true);
+      if (isImmediateContactCode(response.message)) {
+        if (response.contact) {
+          $contactsState.upsertContact(mapContactToEntry(response.contact));
+          const addedYouEntry = $contactsState.addedYouById[contact.id].get();
+          if (addedYouEntry) {
+            $contactsState.setAddedYouMutual(contact.id, response.contact.is_mutual);
+          }
+        } else {
+          const existing = $contactsState.contacts.get();
+          const exists = existing.some((c) => c.id === contact.id);
+          if (!exists) {
+            $contactsState.setContacts([...existing, { ...contact, isMutual: true }]);
+          }
+          const addedYouEntry = $contactsState.addedYouById[contact.id].get();
+          if (addedYouEntry) {
+            $contactsState.setAddedYouMutual(contact.id, true);
+          }
         }
       }
 

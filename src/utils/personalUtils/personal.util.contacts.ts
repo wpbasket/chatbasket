@@ -18,6 +18,20 @@ import {
   type SentRequestEntry,
 } from '@/state/personalState/contacts/personal.state.contacts';
 
+export const mapContactToEntry = (contact: Contact): ContactEntry => ({
+  id: contact.id,
+  name: contact.name,
+  username: contact.username,
+  nickname: contact.nickname,
+  bio: contact.bio,
+  createdAt: contact.created_at,
+  updatedAt: contact.updated_at,
+  avatarUrl: contact.avatar_url ?? null,
+  avatarFileId: contact.avatar_file_id ?? null,
+  cachedAvatarFileId: contact.cached_avatar_file_id ?? null,
+  isMutual: contact.is_mutual,
+});
+
 export async function PersonalUtilFetchContactRequests() {
   try {
     $contactRequestsState.setLoading(true);
@@ -91,23 +105,9 @@ export async function PersonalUtilFetchContacts() {
 
     const response = await PersonalContactApi.getContacts();
 
-    const toEntry = (contact: Contact): ContactEntry => ({
-      id: contact.id,
-      name: contact.name,
-      username: contact.username,
-      nickname: contact.nickname,
-      bio: contact.bio,
-      createdAt: contact.created_at,
-      updatedAt: contact.updated_at,
-      avatarUrl: contact.avatar_url ?? null,
-      avatarFileId: contact.avatar_file_id ?? null,
-      cachedAvatarFileId: contact.cached_avatar_file_id ?? null,
-      isMutual: contact.is_mutual,
-    });
-
     const contactsPayload = {
-      contacts: response.contacts.map(toEntry),
-      addedYou: response.people_who_added_you.map(toEntry),
+      contacts: response.contacts.map(mapContactToEntry),
+      addedYou: response.people_who_added_you.map(mapContactToEntry),
       lastFetchedAt: Date.now(),
     };
     $contactsState.setContacts(contactsPayload.contacts);

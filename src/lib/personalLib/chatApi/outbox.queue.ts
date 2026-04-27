@@ -10,6 +10,7 @@ import {
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import type { LocalMessageEntry } from '@/lib/storage/personalStorage/chat/chat.storage.schema';
 import { $chatMessagesState, $chatListState } from '@/state/personalState/chat/personal.state.chat';
+import { $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
 import { authState } from '@/state/auth/state.auth';
 import { copyFileToPrivateDir } from '@/lib/personalLib/fileSystem/file.copy';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
@@ -590,13 +591,14 @@ class OutboxQueue {
         recipientName?: string,
     ): void {
         const existingChat = $chatListState.chatsById[chatId]?.peek();
+        const contactEntry = $contactsState.contactsById[recipientId]?.peek() || $contactsState.addedYouById[recipientId]?.peek();
         $chatListState.upsertChat({
             ...existingChat,
             chat_id: chatId,
             other_user_id: existingChat?.other_user_id || recipientId,
-            other_user_name: existingChat?.other_user_name || recipientName || 'User',
-            other_user_username: existingChat?.other_user_username || '',
-            avatar_url: existingChat?.avatar_url ?? null,
+            other_user_name: existingChat?.other_user_name || contactEntry?.name || recipientName || 'User',
+            other_user_username: existingChat?.other_user_username || contactEntry?.username || '',
+            avatar_url: existingChat?.avatar_url ?? contactEntry?.avatarUrl ?? null,
             last_message_content: getPreviewText(message),
             last_message_created_at: message.created_at,
             last_message_type: message.message_type,
@@ -610,6 +612,10 @@ class OutboxQueue {
             other_user_last_read_at: existingChat?.other_user_last_read_at || new Date(0).toISOString(),
             other_user_last_delivered_at: existingChat?.other_user_last_delivered_at || '',
             updated_at: message.created_at,
+            avatar_file_id: existingChat?.avatar_file_id ?? contactEntry?.avatarFileId ?? null,
+            cached_avatar_file_id: existingChat?.cached_avatar_file_id ?? contactEntry?.cachedAvatarFileId ?? null,
+            is_contactable: existingChat?.is_contactable ?? true,
+            local_message_count: Math.max(1, existingChat?.local_message_count ?? 0),
         } as ChatEntry);
     }
 

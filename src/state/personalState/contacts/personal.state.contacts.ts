@@ -108,6 +108,22 @@ export const $contactsState = observable({
     $contactsState.addedYouById.set(byId);
     $contactsState.addedYouIds.set(sorted.map((entry) => entry.id));
   },
+  upsertContact(entry: ContactEntry) {
+    const contacts = $contactsState.contacts.get();
+    const index = contacts.findIndex((existing) => existing.id === entry.id);
+    if (index === -1) {
+      $contactsState.setContacts([...contacts, entry]);
+      return;
+    }
+
+    const next = [...contacts];
+    next[index] = {
+      ...next[index],
+      ...entry,
+      cachedAvatarFileId: entry.cachedAvatarFileId ?? next[index].cachedAvatarFileId,
+    };
+    $contactsState.setContacts(next);
+  },
   setContactMutual(id: string, isMutual: boolean) {
     const byId = $contactsState.contactsById[id];
     if (byId) {

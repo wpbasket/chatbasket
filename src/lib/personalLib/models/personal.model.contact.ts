@@ -100,6 +100,12 @@ export interface CreateContactPayload {
     nickname: string | null;
 }
 
+export interface CreateContactResponse {
+    status: boolean;
+    message: string;
+    contact?: Contact | null;
+}
+
 /**
  * CheckContactExistancePayload is the request payload for checking if a contact exists (legacy symbol name)
  * Endpoint: POST /personal/contacts/check-existence

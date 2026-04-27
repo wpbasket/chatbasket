@@ -1,6 +1,6 @@
 import { PersonalContactApi } from '@/lib/personalLib/contactApi/personal.api.contact';
 import { runWithLoading } from '@/utils/commonUtils/util.modal';
-import type { BooleanResponse } from '@/lib/constantLib';
+import type { CreateContactResponse } from '@/lib/personalLib/models/personal.model.contact';
 
 export type AddContactByIdOptions = {
   contactUserId: string;
@@ -23,7 +23,7 @@ export const PersonalUtilAddContactById = async ({
   contactUserId,
   nickname = null,
   useLoading = true,
-}: AddContactByIdOptions): Promise<BooleanResponse> => {
+}: AddContactByIdOptions): Promise<CreateContactResponse> => {
   const task = () => PersonalContactApi.createContact({
     contact_user_id: contactUserId,
     nickname,
