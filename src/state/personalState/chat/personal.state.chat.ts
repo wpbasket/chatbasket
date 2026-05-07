@@ -200,6 +200,20 @@ const state$ = observable({
             chat.is_contactable = true;
         }
 
+        // Preserve local-only fields BEFORE persisting to storage.
+        // The server never sends cached_avatar_file_id, so incoming entries have null.
+        // Without this, insertChats() writes null to IDB, and on next boot
+        // loadChatsFromStorage() loads null → VERSION_MISMATCH every session.
+        const existingBeforePersist = state$.chatsById.peek();
+        for (const chat of normalized) {
+            if (!chat.cached_avatar_file_id) {
+                const ex = existingBeforePersist[chat.chat_id];
+                if (ex?.cached_avatar_file_id) {
+                    chat.cached_avatar_file_id = ex.cached_avatar_file_id;
+                }
+            }
+        }
+
         try {
             await ChatStorage.insertChats(normalized);
         } catch (err) {
@@ -301,12 +315,16 @@ const state$ = observable({
     upsertChat(entry: ChatEntry) {
         const normalized = normalizeChatEntry(entry);
         if (!normalized) return;
+        const existing = state$.chatsById[normalized.chat_id]?.peek();
         // Preserve local_message_count if not explicitly set in the new entry
         if (normalized.local_message_count == null) {
-            const existing = state$.chatsById[normalized.chat_id]?.peek();
             if (existing?.local_message_count != null) {
                 normalized.local_message_count = existing.local_message_count;
             }
+        }
+        // Preserve cached_avatar_file_id (local-only field, server never sends it)
+        if (!normalized.cached_avatar_file_id && existing?.cached_avatar_file_id) {
+            normalized.cached_avatar_file_id = existing.cached_avatar_file_id;
         }
         state$.chatsById[normalized.chat_id].set(normalized);
 

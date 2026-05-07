@@ -2,23 +2,71 @@
 
 🌐 **Website**: [chatbasket.live](https://chatbasket.live)
 
-A modern, cross-platform social messaging application built with **React Native** and **Expo SDK 55**. ChatBasket offers both personal messaging and public social feed experiences with a sleek, themeable UI.
+A modern, cross-platform social messaging application built with **React Native** and **Expo SDK 55**. ChatBasket is designed around a **dual-mode architecture** — two distinct experiences living inside one app:
 
-![React Native](https://img.shields.io/badge/React_Native-0.83.2-61DAFB?logo=react&logoColor=white)
-![Expo](https://img.shields.io/badge/Expo-SDK_55-000020?logo=expo&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
+| Mode | Status | Description |
+|------|--------|-------------|
+| 🔒 **Personal Mode** | ✅ Active | Private messaging, contacts, and cross-device sync |
+| 🌍 **Public Mode** | 🚧 Upcoming | Social feed with posts, explore section, and public profiles |
+
+> The sections below detail the **Personal Mode** implementation — the messaging engine that is currently live.
+
+![React Native](https://img.shields.io/badge/React_Native-61DAFB?logo=react&logoColor=white)
+![Expo](https://img.shields.io/badge/Expo-000020?logo=expo&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Web-lightgrey)
 
 ---
 
-## 📐 Engineering & Architecture
+## 🔒 Personal Mode — Engineering & Architecture
 
-- **Advanced Chat Engine**: Implements a **Primary-Device-Centric Relay Architecture** with **Double-Primary Acknowledgment**, **Dual-Transport (WebSocket/REST) fallback**, and recursive retry logic.
-- **Cross-Device Sync**: **P2P Synchronization [Upcoming]** via WebRTC ensures consistent read/delivery state across all devices without central storage reliance.
-- **Local-First Persistence**: Messages are persisted to local storage before acknowledgment or UI updates, ensuring zero data loss.
+- **Advanced Chat Engine**: Implements a **Primary-Device-Centric Relay Architecture** with **Double-Primary(Sender and Recipient Primary devices) Acknowledgment**, **Dual-Transport (WebSocket/REST) fallback**.
+- **Cross-Device Sync**: **P2P Synchronization [Upcoming]** via WebRTC ensures consistent read/delivery state across all devices(sessions).
+- **Local-First Persistence**: Messages are persisted to local storage(SQLite in Native, IndexedDB in Web) before acknowledgment or UI updates, ensuring zero data loss.
 - **Hybrid Status Tracking**: Combines per-message metadata with chat-level bulk timestamps for efficient status visualization.
 
-### Detailed System Documentation
+### Chat Engine Pillars
+
+The Chat Engine is built on core architectural pillars grounded in Backend Business Rules:
+
+#### 1. Primary-Device-Centric Relay
+The backend acts as an ephemeral bridge, not a permanent vault. The **Primary Device** is the authoritative source of truth, storing the full chat history and serving P2P sync requests to secondary devices. ACK blocking ensures media is fully persisted locally before the relay purges.
+
+#### 2. Double-Primary Acknowledgment (Relay Purging)
+A message record is deleted from the server ONLY after **both** the sender's Primary and the recipient's Primary have confirmed receipt and local persistence.
+
+#### 3. Dual-Transport Strategy
+WebSocket-first communication with automatic **REST fallback** — if the socket is disconnected or a transport error occurs, critical actions (send, ACK) seamlessly switch to REST so messaging is never blocked.
+
+#### 4. Outbox Queue & Offline Messaging
+Messages are queued in a local Outbox when offline. The queue drains automatically on reconnect, ensuring zero message loss regardless of network state.
+
+#### 5. Optimistic UI
+Messages appear instantly with pending status; replaced with server ID on success, retry affordance on failure.
+
+#### 6. 4-State Status Model
+Pending → Sent → Delivered → Read — driven by relay ACKs and bulk read timestamps.
+
+#### 7. Hybrid Status Tracking
+Per-message flags exist only while the message is in transit; long-term status lives as chat-level bulk timestamps that survive relay purging.
+
+#### 8. Delivery & Read ACK Separation
+Delivery acknowledgments (triggered passively from inbox/home) and read receipts (triggered on active chat focus) are handled independently with built-in de-duplication to prevent redundant network calls.
+
+#### 9. Revocation & Offline Sync (Unsend / Delete)
+When a user unsends or deletes a message:
+- **If the other user is online**: The backend instantly pushes the revocation event via WebSocket. The recipient's app removes the message from the UI immediately.
+- **If the other user is offline**: The backend stores the action as a durable sync record. When the offline user opens the app, a catch-up sync fetches all missed actions and replays them — so unsent messages disappear even if the user was offline when the action happened.
+
+#### 10. P2P WebRTC Synchronization [Upcoming]
+Secondary devices will sync directly with the Primary via WebRTC data channels — no fallback to backend bandwidth if P2P fails.
+
+For a deeper dive, see [Chat System Details](./src/app/personal/home/chat/README_CHAT.md).
+
+---
+
+## 📚 Detailed System Documentation
+
 1.  **[Root Architecture & Routing](./src/app/README_ROOT_ARCHITECTURE.md)**
     *   *How `_layout.tsx` orchestrates initialization, Deep Links, and Route Guards.*
 2.  **[Authentication System](./src/state/auth/README_AUTH.md)**
@@ -43,70 +91,61 @@ A modern, cross-platform social messaging application built with **React Native*
     *   *Development-only filtered logging using `__DEV__` gates.*
 12. **Backend Architecture Reference (`chatbasket_backend/docs/`)**
 
-## 🛠 Tech Stack
-
-- **Framework**: [Expo SDK 55.0.4](https://expo.dev/) (React Native 0.83.2)
-- **State Management**: [Legend-State](https://legendapp.com/open-source/state/) (Signal-based, reactive)
-- **Storage**: SQLite (Expo SQLite) for local-first persistence
-- **Communication**: WebSocket (Primary) with WebRTC (P2P Sync)
-
-## 🏗 Engineering Overview
-
-The Chat Engine is built on four core architectural pillars grounded in Backend Business Rules:
-
-### 1. Primary-Device-Centric Relay
-The backend acts as an ephemeral bridge, not a permanent vault. The **Primary Device** is the authoritative source of truth, storing the full encrypted chat history and serving P2P sync requests to secondary devices.
-
-### 2. Double-Primary Acknowledgment (Relay Purging)
-The backend relay is governed by strict purging rules. A message record is deleted from the server ONLY after **both** the sender's Primary device and the recipient's Primary device have confirmed receipt and persistence.
-
-### 3. P2P WebRTC Synchronization [Upcoming]
-Secondary devices (Web/Native) will synchronize directly with the user's Primary device via WebRTC data channels. This enables full history reconstruction without the backend ever storing a permanent copy of the messages.
-
-For a deeper dive, see [Chat System Details](file:///w:/codewp/cb/chatbasket/src/app/personal/home/chat/README_CHAT.md).
-
 ## 🔄 App Lifecycle Overview
 
 For new developers, here is how the app boots up:
 
-1.  **Splash Screen**: The app launches and holds the Splash Screen (in `_layout.tsx`).
-2.  **Auth Hydration**:
-    *   Reads Encrypted Session Tokens from MMKV.
-    *   If valid, sets `authState.isLoggedIn = true`.
-3.  **Deep Link Check (Critical)**:
-    *   **Native**: `+native-intent.tsx` intercepts initial deep links via `redirectSystemPath()`.
-    *   **Web**: `state.appMode.ts` checks `window.location.pathname` during initialization.
-    *   If a deep link exists (e.g., `chatbasket://public/profile`), it sets `appMode = 'public'` **synchronously**.
+1.  **Splash Screen + Font Preloading**: The app launches, holds the splash screen, and preloads all font bundles (including icon fonts) in parallel.
+2.  **Storage Initialization & Auth Hydration**:
+    *   Initializes secure storage providers.
+    *   Restores persisted auth session (tokens, expiry, user metadata).
+    *   If logged in, hydrates personal storage — contacts, user profile, device status, and chat data.
+    *   Expired sessions are detected and cleaned up automatically.
+3.  **Deep Link Resolution**:
+    *   **Native cold start**: Deep links are intercepted and the app mode is set before navigation begins.
+    *   **Native warm start**: Listens for incoming deep links while the app is already running.
+    *   **Web**: Reads the URL path on initialization to determine the target mode.
+    *   Mode is updated only when it differs from the current state to avoid redundant re-renders.
 4.  **Route Guard Evaluation**:
-    *   `Stack.Protected` runs.
-    *   If `isLoggedIn` is false -> Redirect to `/login`.
-    *   If `appMode` matches the Route -> Render Screen.
-5.  **Render**: The Splash Screen fades, and the user interacts with the app.
+    *   If not logged in → Redirect to login.
+    *   If app mode matches the route → Render screen.
+5.  **Notification Setup** (Native only):
+    *   Registers notification listeners on mount.
+    *   Registers the device push token with the backend for logged-in sessions.
+    *   Handles cold-start notification routing (user tapped a notification to open the app).
+6.  **Share Intent Handling**: Listens for content shared from other apps (e.g., sharing a link or image into ChatBasket).
+7.  **Network Tracking**: Starts global connectivity monitoring to feed offline/online state across the app.
+8.  **Render Gate**: The app holds rendering until auth hydration, network status, and personal storage are all ready — preventing route guard flicker and incomplete UI.
+9.  **Render**: The Splash Screen fades, and the user interacts with the app.
 
 ---
 
 ## ✨ Features
 
 ### 🔐 Authentication
-- Secure OTP-based authentication flow (no refresh tokens; sessions carry expiry only)
-- Persistent login state with secure storage on native; web persists expiry while session token stays in HttpOnly cookie
-- Primary device metadata (`isPrimary`, `primaryDeviceName`) returned on login for UI prompts
-- Protected routes for authenticated users
+- Multi-step secure login: Email + 6-digit PIN → OTP verification → session establishment
+- **Native**: Session tokens stored in encrypted secure storage; API calls use Bearer token headers
+- **Web**: Session token lives in HttpOnly cookies (never exposed to JS); only expiry is persisted client-side
+- Session expiry enforced on hydration — expired sessions trigger automatic cleanup
+- Protected route guards gated on login state and app mode
 
-### 💭 Dual Mode Experience
-- **Personal Mode**: Private messaging and contacts management
-- **Public Mode**: Social feed with posts, explore section, and public profiles
+### 💬 Real-Time Messaging
+
+### 🔔 Push Notifications
+
+### 📤 Share Intent
+Receive shared content (links, images, files) from other apps directly into ChatBasket.
 
 ### 🎨 Modern UI/UX
-- Automatic dark/light theme support
+- Automatic dark/light theme support with semantic theming
 - Custom typography with Gantari and AstaSans fonts
 - Smooth animations powered by Reanimated and Legend Motion
 - Haptic feedback for enhanced interactions
+- Global modal system using the "Imperative Promise" pattern for clean, decoupled modal usage
 
 ### 📱 Cross-Platform
 - Native iOS and Android support
 - Web support with responsive design
-- Edge-to-edge display on Android
 
 ---
 
@@ -114,7 +153,7 @@ For new developers, here is how the app boots up:
 
 | Category | Technology |
 |----------|------------|
-| **Framework** | React Native 0.83.2 + Expo SDK 55.0.4 |
+| **Framework** | React Native + Expo |
 | **Navigation** | Expo Router with typed routes |
 | **State Management** | Legend State (reactive state) |
 | **Styling** | React Native Unistyles |

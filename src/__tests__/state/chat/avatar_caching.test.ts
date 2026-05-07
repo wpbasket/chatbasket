@@ -157,4 +157,132 @@ describe('Avatar Caching & Privacy Logic', () => {
         expect(finalChat.cached_avatar_file_id).toBe('local_v1');
         expect(finalChat.avatar_file_id).toBe('server_v2');
     });
+
+    it('Persistence: setChats persists preserved markers to storage (not null)', async () => {
+        const { insertChats } = require('@/lib/storage/personalStorage/chat/chat.storage');
+
+        // 1. Set up existing state with a cached marker
+        $chatListState.upsertChat(makeChatEntry({ chat_id: 'c1', cached_avatar_file_id: 'local_v1' }));
+        (insertChats as jest.Mock).mockClear();
+
+        // 2. Server sync — server never sends cached_avatar_file_id
+        const serverResponse = [
+            makeChatEntry({ chat_id: 'c1', avatar_file_id: 'server_v2', cached_avatar_file_id: null })
+        ];
+        await $chatListState.setChats(serverResponse);
+
+        // 3. Verify insertChats was called with PRESERVED marker, NOT null
+        expect(insertChats).toHaveBeenCalledTimes(1);
+        const persistedEntries = (insertChats as jest.Mock).mock.calls[0][0];
+        const persistedChat = persistedEntries.find((c: any) => c.chat_id === 'c1');
+        expect(persistedChat).toBeDefined();
+        expect(persistedChat.cached_avatar_file_id).toBe('local_v1');
+    });
+
+    it('Persistence: upsertChat preserves cached markers from existing state', () => {
+        const { insertChats } = require('@/lib/storage/personalStorage/chat/chat.storage');
+
+        // 1. Set up existing state with a cached marker
+        $chatListState.upsertChat(makeChatEntry({ chat_id: 'c1', cached_avatar_file_id: 'local_v1' }));
+        (insertChats as jest.Mock).mockClear();
+
+        // 2. upsertChat with incoming entry that has null cached_avatar_file_id
+        // (e.g., from a WS event that only updates last_message fields)
+        $chatListState.upsertChat(makeChatEntry({
+            chat_id: 'c1',
+            cached_avatar_file_id: null,
+            last_message_content: 'New message',
+        }));
+
+        // 3. In-memory state must preserve the marker
+        const finalChat = $chatListState.chatsById['c1'].peek();
+        expect(finalChat.cached_avatar_file_id).toBe('local_v1');
+        expect(finalChat.last_message_content).toBe('New message');
+
+        // 4. Storage must also receive the preserved marker
+        expect(insertChats).toHaveBeenCalledTimes(1);
+        const persistedEntries = (insertChats as jest.Mock).mock.calls[0][0];
+        expect(persistedEntries[0].cached_avatar_file_id).toBe('local_v1');
+    });
+
+    it('Persistence: upsertChat does NOT override an explicitly set cached marker', () => {
+        // 1. Set up existing state
+        $chatListState.upsertChat(makeChatEntry({ chat_id: 'c1', cached_avatar_file_id: 'old_v1' }));
+
+        // 2. upsertChat with a NEW cached marker (e.g., PRE-FLIGHT just downloaded a new version)
+        $chatListState.upsertChat(makeChatEntry({
+            chat_id: 'c1',
+            cached_avatar_file_id: 'new_v2',
+        }));
+
+        // 3. The new marker should win — preservation only kicks in when incoming is falsy
+        const finalChat = $chatListState.chatsById['c1'].peek();
+        expect(finalChat.cached_avatar_file_id).toBe('new_v2');
+    });
+
+    describe('REGRESSION: prove the persist-before-merge bug existed', () => {
+        it('OLD behavior: server entries have null cached_avatar_file_id (the root cause)', () => {
+            // Server NEVER sends cached_avatar_file_id — this is the data that arrives
+            const serverEntry = makeChatEntry({
+                chat_id: 'c1',
+                avatar_file_id: 'server_v2',
+                cached_avatar_file_id: null,
+            });
+
+            // OLD CODE did: await ChatStorage.insertChats([serverEntry])
+            // BEFORE reading existing state. Prove the incoming value IS null:
+            expect(serverEntry.cached_avatar_file_id).toBeNull();
+
+            // This null would be written to IndexedDB, overwriting any previously-stored value.
+            // On next boot, loadChatsFromStorage() reads null → VERSION_MISMATCH every session.
+        });
+
+        it('OLD behavior: insertChats would receive null despite existing state having the value', () => {
+            const { insertChats } = require('@/lib/storage/personalStorage/chat/chat.storage');
+
+            // Simulate: existing state has a cached marker from a previous PRE-FLIGHT fix
+            $chatListState.upsertChat(makeChatEntry({ chat_id: 'c1', cached_avatar_file_id: 'local_v1' }));
+            (insertChats as jest.Mock).mockClear();
+
+            // Simulate OLD setChats code path manually:
+            // 1. Normalize server entries (cached_avatar_file_id = null)
+            const serverEntries = [
+                makeChatEntry({ chat_id: 'c1', avatar_file_id: 'server_v2', cached_avatar_file_id: null })
+            ];
+
+            // 2. OLD code called insertChats DIRECTLY with normalized entries (no merge)
+            //    This is what WOULD happen without the fix:
+            const oldCodePersistedValue = serverEntries[0].cached_avatar_file_id;
+            expect(oldCodePersistedValue).toBeNull(); // ← BUG: null written to IDB
+
+            // 3. FIXED code preserves from existing state BEFORE persisting:
+            const existing = $chatListState.chatsById['c1']?.peek();
+            for (const entry of serverEntries) {
+                if (!entry.cached_avatar_file_id && existing?.cached_avatar_file_id) {
+                    entry.cached_avatar_file_id = existing.cached_avatar_file_id;
+                }
+            }
+            const fixedCodePersistedValue = serverEntries[0].cached_avatar_file_id;
+            expect(fixedCodePersistedValue).toBe('local_v1'); // ← FIX: preserved value written
+        });
+
+        it('END-TO-END: setChats now persists preserved value (fix is active)', async () => {
+            const { insertChats } = require('@/lib/storage/personalStorage/chat/chat.storage');
+
+            $chatListState.upsertChat(makeChatEntry({ chat_id: 'c1', cached_avatar_file_id: 'local_v1' }));
+            (insertChats as jest.Mock).mockClear();
+
+            // Full setChats call — exercises the real fixed code path
+            await $chatListState.setChats([
+                makeChatEntry({ chat_id: 'c1', avatar_file_id: 'server_v2', cached_avatar_file_id: null })
+            ]);
+
+            // insertChats MUST receive 'local_v1', NOT null
+            const persisted = (insertChats as jest.Mock).mock.calls[0][0];
+            expect(persisted[0].cached_avatar_file_id).toBe('local_v1');
+
+            // In-memory state also correct
+            expect($chatListState.chatsById['c1'].peek().cached_avatar_file_id).toBe('local_v1');
+        });
+    });
 });

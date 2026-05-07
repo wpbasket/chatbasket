@@ -20,7 +20,6 @@ export async function restoreProfileAvatar() {
     }
 
     const uri = await getExistingAvatarUri();
-    console.log('[ProfileAvatar] Restore result:', uri ? 'SUCCESS' : 'CACHE_MISS');
     $personalStateUser.avatarUri.set(uri);
 }
 
