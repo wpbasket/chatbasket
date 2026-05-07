@@ -43,38 +43,48 @@ export const PersonalStorageGetUser = async (): Promise<void> => {
 
 export const PersonalStorageRemoveUser = async (): Promise<void> => {
   const storage = await getStorage();
-  await storage.remove(PersonalUserKey);
-  // Clear associated profile storage (avatar, etc.)
+  await storage.clearAll();
   await clearProfileStorage();
 };
 
 /**
  * Clears all profile-related local storage.
- * Called during logout. Add future profile storage cleanup here.
+ * Called during logout + logged-out boot safety cleanup.
  */
 export const clearProfileStorage = async (): Promise<void> => {
-  // Avatar files (Native: filesystem, Web: dedicated IndexedDB)
+  // Profile AppStorage scope (Native MMKV / Web AsyncStorage)
+  try {
+    const storage = await getStorage();
+    await storage.clearAll();
+  } catch (err) {
+    console.error('[ProfileStorage] AppStorage cleanup failed:', err);
+  }
+
   if (Platform.OS === 'web') {
     try {
-      const { deleteProfileAvatarBlob } = await import('./profile.storage');
-      await deleteProfileAvatarBlob();
+      const { clearAllProfileStorage } = await import('./profile.storage');
+      await clearAllProfileStorage();
     } catch (err) {
-      console.error('[ProfileStorage] Web avatar cleanup failed:', err);
+      console.error('[ProfileStorage] Web storage cleanup failed:', err);
     }
   } else {
     try {
-      const { File, Directory, Paths } = await import('expo-file-system');
-      const profileDir = new Directory(Paths.document, 'profiles');
-      if (profileDir.exists) {
-        const avatarFile = new File(profileDir, 'me_avatar.jpg');
-        if (avatarFile.exists) {
-          avatarFile.delete();
+      const { Directory, Paths } = await import('expo-file-system');
+      const docDir = new Directory(Paths.document);
+      if (docDir.exists) {
+        const entries = docDir.list();
+        for (const entry of entries) {
+          const name = entry.uri.split('/').pop()?.toLowerCase() || '';
+          if (entry instanceof Directory && (name === 'profiles' || name.includes('profile'))) {
+            try {
+              entry.delete();
+              console.log(`[ProfileStorage] Deleted directory: ${name}`);
+            } catch { /* ignore */ }
+          }
         }
       }
     } catch (err) {
-      console.error('[ProfileStorage] Native avatar cleanup failed:', err);
+      console.error('[ProfileStorage] Native storage cleanup failed:', err);
     }
   }
-
-  // Future: add more profile-related storage cleanup here
 };

@@ -2,7 +2,7 @@ import { observable } from '@legendapp/state';
 import { initializeSecureStorage, restoreAuthState } from './commonStorage/storage.auth';
 import { initializeContactsStorage, PersonalStorageLoadContactRequests, PersonalStorageLoadContacts } from './personalStorage/personal.storage.contacts';
 import { PersonalStorageGetDeviceStatus } from './personalStorage/personal.storage.device';
-import { PersonalStorageGetUser } from './personalStorage/profile/personal.storage.user';
+import { PersonalStorageGetUser, clearProfileStorage } from './personalStorage/profile/personal.storage.user';
 import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia } from './personalStorage/chat/chat.storage';
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
@@ -124,10 +124,13 @@ export const initializeAppStorage = async (): Promise<void> => {
         } else {
             // Safety net: wipe any leftover ChatStorage from a failed/incomplete logout
             try {
-                await clearAllChatStorage();
-                console.log('[StorageInit] Cleaned up leftover ChatStorage (not logged in)');
+                await Promise.all([
+                    clearAllChatStorage(),
+                    clearProfileStorage(),
+                ]);
+                console.log('[StorageInit] Cleaned up leftover personal storage (not logged in)');
             } catch (err) {
-                console.warn('[StorageInit] ChatStorage cleanup failed:', err);
+                console.warn('[StorageInit] Personal storage cleanup failed:', err);
             }
         }
     } catch (error) {

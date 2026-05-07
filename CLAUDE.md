@@ -1,14 +1,17 @@
 ### Core Principles
-1. **Semantic Preference**: Utilize tools with **semantic embeddings** (e.g., GitNexus `query`) for conceptual discovery whenever the specific task permits.
-2. **Tiered Repository Discovery**: Utilize **group-level queries** (e.g., `gitnexus_group_query`) against **`cb-group`** for global discovery and cross-repo architectural queries. For deep implementation, refactoring, or impact analysis, switch to the specific **sub-repo index** (e.g., `chatbasket_backend`) to ensure maximum precision and local context.
-3. **Strategic Documentation**: If Wiki is present, then utilize the **GitNexus Wiki** (located in sub-repo `.gitnexus/wiki/` folders) when the task requires high-level architectural understanding, module mapping, or strategic context before deep-diving into code.
+
+1. **MUST Follow context-mode Rules**: See full rules at bottom of this file
+
+2. **Semantic Preference**: Utilize tools with **semantic embeddings** (e.g., GitNexus `query`) for conceptual discovery whenever the specific task permits.
+3. **Tiered Repository Discovery**: Utilize **group-level queries** (e.g., `gitnexus_group_query`) against **`cb-group`** for global discovery and cross-repo architectural queries. For deep implementation, refactoring, or impact analysis, switch to the specific **sub-repo index** (e.g., `chatbasket_backend`) to ensure maximum precision and local context.
+4. **Strategic Documentation**: If Wiki is present, then utilize the **GitNexus Wiki** (located in sub-repo `.gitnexus/wiki/` folders) when the task requires high-level architectural understanding, module mapping, or strategic context before deep-diving into code.
 
 ---
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **chatbasket** (3610 symbols, 7665 relationships, 265 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **chatbasket** (3648 symbols, 7704 relationships, 265 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -58,3 +61,89 @@ This repository is listed under GitNexus **group(s): cb-group** (see `~/.gitnexu
 - Prefer using the global `playwright` command instead of creating local temporary Playwright installs.
 - When requiring Playwright from ad-hoc Node scripts, set `NODE_PATH` to the global npm root first in PowerShell: `$env:NODE_PATH = (npm root -g)`.
 - Microsoft Edge is available at: `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
+
+---
+
+# context-mode — MANDATORY routing rules
+
+context-mode MCP tools available. Rules protect context window from flooding. One unrouted command dumps 56 KB into context. Pi enforces routing via hooks (`tool_call` blocks `curl`/`wget`) AND these instructions. Kimi uses MCP tools plus these routing rules; no known Kimi hook integration. Hooks = hard enforcement; rules = completeness for redirections hooks cannot catch.
+
+## Think in Code — MANDATORY
+
+Analyze/count/filter/compare/search/parse/transform data: **write code** via `ctx_execute(language, code)`, `console.log()` only the answer. Do NOT read raw data into context. PROGRAM the analysis, not COMPUTE it. Pure JavaScript — Node.js built-ins only (`fs`, `path`, `child_process`). `try/catch`, handle `null`/`undefined`. Works on both Node.js and Bun. One script replaces ten tool calls.
+
+## BLOCKED — do NOT use
+
+### curl / wget — FORBIDDEN (hook-enforced)
+
+Do NOT use `curl`/`wget` in `bash`. Pi hooks block these. Dumps raw HTTP into context.
+Use: `ctx_fetch_and_index(url, source)` or `ctx_execute(language: "javascript", code: "const r = await fetch(...)")`
+
+### Inline HTTP — FORBIDDEN
+
+No `node -e "fetch(..."`, `python -c "requests.get(..."`. Bypasses sandbox.
+Use: `ctx_execute(language, code)` — only stdout enters context
+
+### Direct web fetching — FORBIDDEN
+
+Raw HTML can exceed 100 KB.
+Use: `ctx_fetch_and_index(url, source)` then `ctx_search(queries)`
+
+## REDIRECTED — use sandbox
+
+### Shell/bash (>20 lines output)
+
+Shell/`bash` ONLY for: `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`.
+Otherwise: `ctx_batch_execute(commands, queries)` or `ctx_execute(language: "shell", code: "...")`
+
+### ReadFile/read (for analysis)
+
+Reading to **edit** → `ReadFile`/`read` correct. Reading to **analyze/explore/summarize** → `ctx_execute_file(path, language, code)`.
+
+### Grep/grep/find (large results)
+
+Use `Grep` for targeted code search. Use `ctx_execute(language: "shell", code: "grep ...")` for large/raw result processing in sandbox.
+
+## Tool selection
+
+0. **MEMORY**: `ctx_search(sort: "timeline")` — after resume, check prior context before asking user.
+1. **GATHER**: `ctx_batch_execute(commands, queries)` — runs all commands, auto-indexes, returns search. ONE call replaces 30+. Each command: `{label: "header", command: "..."}`.
+2. **FOLLOW-UP**: `ctx_search(queries: ["q1", "q2", ...])` — all questions as array, ONE call (default relevance mode).
+3. **PROCESSING**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — sandbox, only stdout enters context.
+4. **WEB**: `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` — raw HTML never enters context.
+5. **INDEX**: `ctx_index(content, source)` — store in FTS5 for later search.
+
+## Output
+
+Terse like caveman. Technical substance exact. Only fluff die.
+Drop: articles, filler (just/really/basically), pleasantries, hedging. Fragments OK. Short synonyms. Code unchanged.
+Pattern: [thing] [action] [reason]. [next step]. Auto-expand for: security warnings, irreversible actions, user confusion.
+Write artifacts to FILES — never inline. Return: file path + 1-line description.
+Descriptive source labels for `search(source: "label")`.
+
+## Session Continuity
+
+Skills, roles, and decisions persist for the entire session. Do not abandon them as the conversation grows.
+
+## Memory
+
+Session history is persistent and searchable. On resume, search BEFORE asking the user:
+
+| Need                    | Command                                                                   |
+| ----------------------- | ------------------------------------------------------------------------- |
+| What did we decide?     | `ctx_search(queries: ["decision"], source: "decision", sort: "timeline")` |
+| What constraints exist? | `ctx_search(queries: ["constraint"], source: "constraint")`               |
+
+DO NOT ask "what were we working on?" — SEARCH FIRST.
+If search returns 0 results, proceed as a fresh session.
+
+## ctx commands
+
+| Command       | Action                                                                        |
+| ------------- | ----------------------------------------------------------------------------- |
+| `ctx stats`   | Call `stats` MCP tool, display full output verbatim                           |
+| `ctx doctor`  | Call `doctor` MCP tool, run returned shell command, display as checklist      |
+| `ctx upgrade` | Call `upgrade` MCP tool, run returned shell command, display as checklist     |
+| `ctx purge`   | Call `purge` MCP tool with confirm: true. Warns before wiping knowledge base. |
+
+After /clear or /compact: knowledge base and session stats preserved. Use `ctx purge` to start fresh.

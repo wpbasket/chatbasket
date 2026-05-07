@@ -6,6 +6,7 @@ const STORE_NAME = 'media';
 const AVATAR_KEY = 'ME_PROFILE_AVATAR';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+let dbInstance: IDBDatabase | null = null;
 
 function getDB(): Promise<IDBDatabase> {
     if (Platform.OS !== 'web') {
@@ -22,7 +23,10 @@ function getDB(): Promise<IDBDatabase> {
                 db.createObjectStore(STORE_NAME);
             }
         };
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+            dbInstance = request.result;
+            resolve(request.result);
+        };
         request.onerror = () => reject(request.error);
     });
 
@@ -75,5 +79,26 @@ export async function deleteProfileAvatarBlob(key: string = AVATAR_KEY): Promise
         const request = store.delete(key);
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
+    });
+}
+
+/**
+ * Deletes the full ProfileStorage IndexedDB.
+ * Used on logout + logged-out boot safety cleanup.
+ */
+export async function clearAllProfileStorage(): Promise<void> {
+    if (Platform.OS !== 'web') return;
+
+    if (dbInstance) {
+        dbInstance.close();
+        dbInstance = null;
+    }
+    dbPromise = null;
+
+    await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+        req.onblocked = () => resolve();
     });
 }
