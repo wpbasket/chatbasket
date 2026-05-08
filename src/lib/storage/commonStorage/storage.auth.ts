@@ -3,6 +3,10 @@ import { authState } from "@/state/auth/state.auth";
 import { Platform } from 'react-native';
 import { AppStorage } from "../storage.wrapper";
 import { appMode$ } from "@/state/appMode/state.appMode";
+import {
+  PersonalStorageGetDeviceStatus,
+  PersonalStorageRemoveDeviceStatus,
+} from "@/lib/storage/personalStorage/personal.storage.device";
 
 // Define the schema for Auth storage
 type AuthSchema = {
@@ -131,7 +135,6 @@ export const clearSession = async (options?: { skipAuthStateReset?: boolean }) =
     const { PersonalStorageRemoveChat } = await import('@/lib/storage/personalStorage/chat/personal.storage.chat');
     const { PersonalStorageRemoveUser } = await import('@/lib/storage/personalStorage/profile/personal.storage.user');
     const { PersonalStorageRemoveContacts, PersonalStorageRemoveContactRequests } = await import('../personalStorage/personal.storage.contacts');
-    const { PersonalStorageRemoveDeviceStatus } = await import('@/lib/storage/personalStorage/personal.storage.device');
 
     await PersonalStorageRemoveChat();
     await PersonalStorageRemoveUser();
@@ -229,7 +232,6 @@ export const restoreAuthState = async (): Promise<void> => {
         authState.sessionExpiry.set(session.sessionExpiry);
         authState.user.set(session.user);
         authState.isLoggedIn.set(true);
-        const { PersonalStorageGetDeviceStatus } = await import('@/lib/storage/personalStorage/personal.storage.device');
         await PersonalStorageGetDeviceStatus();
       } else {
         if (session.sessionId && session.userId) {
@@ -238,7 +240,6 @@ export const restoreAuthState = async (): Promise<void> => {
           authState.sessionExpiry.set(session.sessionExpiry);
           authState.user.set(session.user);
           authState.isLoggedIn.set(true);
-          const { PersonalStorageGetDeviceStatus } = await import('@/lib/storage/personalStorage/personal.storage.device');
           await PersonalStorageGetDeviceStatus();
         } else {
           await clearSession();
