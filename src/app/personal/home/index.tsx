@@ -7,6 +7,7 @@ import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation
 import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/personal.state.chat';
 import { $contactsState, type ContactEntry } from '@/state/personalState/contacts/personal.state.contacts';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
@@ -101,7 +102,11 @@ const PersonalHome = React.memo(() => {
   }, []);
 
   const handleNewChat = useCallback(() => {
-    router.push('/personal/contacts');
+    if (!$personalStateUser.user.peek()) {
+      router.replace('/personal/profile');
+    } else {
+      router.push('/personal/contacts');
+    }
   }, [router]);
 
   const fetchChats = useCallback(async () => {

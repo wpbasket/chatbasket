@@ -12,6 +12,8 @@ import {
 } from '@/state/personalState/contacts/personal.state.contacts';
 import { hideModal, runWithLoading, showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
+import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
+import { router } from 'expo-router';
 import { observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
 import { useRef } from 'react';
@@ -433,6 +435,11 @@ const EditNicknameActionButtons = ({ styles: contactStyles, handlePressIn, onSav
 
 export default function CreateContactsFlows({ styles: contactStyles, handlePressIn }: ContactsFlowsDeps) {
   const openAddContact = async (event?: GestureResponderEvent) => {
+    if (!$personalStateUser.user.peek()) {
+      router.replace('/personal/profile');
+      return;
+    }
+
     const position = event
       ? {
           x: event.nativeEvent.pageX,
