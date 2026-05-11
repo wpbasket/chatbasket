@@ -18,6 +18,7 @@ import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.se
 import { registerTokenWithBackend } from '../../notification/registerFcmOrApn'
 import { showConfirmDialog } from '@/utils/commonUtils/util.modal'
 import { PersonalStorageSetDeviceStatus } from '@/lib/storage/personalStorage/personal.storage.device'
+import { showGenericError, isRateLimitError } from '@/utils/commonUtils/util.error'
 
 export default function AuthVerification() {
     const otp = useValue(loginOrSignup$.otp)
@@ -98,6 +99,10 @@ export default function AuthVerification() {
             }, { message: 'Verifying' });
         } catch (error) {
             if (error instanceof ApiError) {
+                if (isRateLimitError(error.type)) {
+                    showGenericError(error);
+                    return;
+                }
                 showAlert(error.message || 'Verification failed');
             } else {
                 showAlert('Unexpected error occurred try again');
@@ -166,6 +171,10 @@ export default function AuthVerification() {
             }
         } catch (error) {
             if (error instanceof ApiError) {
+                if (isRateLimitError(error.type)) {
+                    showGenericError(error);
+                    return;
+                }
                 showAlert(error.message || 'Failed to resend OTP');
             } else {
                 showAlert('Unexpected error occurred try again');

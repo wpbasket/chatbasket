@@ -12,6 +12,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
+import { showGenericError, isRateLimitError } from '@/utils/commonUtils/util.error';
 
 export default function Auth() {
   const { method } = useLocalSearchParams();
@@ -74,6 +75,10 @@ export default function Auth() {
         }
       } catch (error) {
         if (error instanceof ApiError) {
+          if (isRateLimitError(error.type)) {
+            showGenericError(error);
+            return;
+          }
           if (['unauthorized'].includes(error.type)) {
             showAlert('Invalid email or password');
             return;
@@ -115,6 +120,10 @@ export default function Auth() {
         }
       } catch (error) {
         if (error instanceof ApiError) {
+          if (isRateLimitError(error.type)) {
+            showGenericError(error);
+            return;
+          }
           if (['conflict'].includes(error.type)) {
             showAlert('Email already exists');
             return;
@@ -191,6 +200,10 @@ export default function Auth() {
                 }
               } catch (err) {
                 if (err instanceof ApiError) {
+                  if (isRateLimitError(err.type)) {
+                    showGenericError(err);
+                    return;
+                  }
                   if (err.type === 'conflict') showAlert('Email not found');
                   else showAlert('Something went wrong try again');
                 } else {
@@ -283,6 +296,10 @@ export default function Auth() {
                   forgotPassword$.resendExpiryAt.set(Date.now() + 120_000);
                 }
               } catch (err) {
+                if (err instanceof ApiError && isRateLimitError(err.type)) {
+                  showGenericError(err);
+                  return;
+                }
                 showAlert('Something went wrong try again');
               }
             }}
@@ -337,6 +354,7 @@ export default function Auth() {
                 }
               } catch (err) {
                 if (err instanceof ApiError) {
+                  if (isRateLimitError(err.type)) { showGenericError(err); return; }
                   if (err.type === 'otp_expired') showAlert('OTP expired. Please request a new one.');
                   else if (err.type === 'invalid_otp') showAlert('Invalid code. Please try again.');
                   else if (err.type === 'flow_error') showAlert('Session timeout. Restart the process.');

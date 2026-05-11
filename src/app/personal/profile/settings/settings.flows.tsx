@@ -4,7 +4,7 @@ import { PersonalStorageSetUser } from '@/lib/storage/personalStorage/profile/pe
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { useValue } from '@legendapp/state/react';
 import { setting$ } from '@/state/settings/state.setting';
-import { showGenericError } from '@/utils/commonUtils/util.error';
+import { showGenericError, isRateLimitError } from '@/utils/commonUtils/util.error';
 import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
@@ -119,6 +119,7 @@ export default function CreateSettingsFlows({
                                 }
                             } catch (err) {
                                 if (err instanceof ApiError) {
+                                    if (isRateLimitError(err.type)) { showGenericError(err); return; }
                                     if (err.type === 'conflict') showAlert('This email is already in use.');
                                     else if (err.type === 'invalid_password') showAlert('Incorrect password. If you forgot, change password.');
                                     else if (err.type === 'unauthorized') showAlert('Incorrect password.');
@@ -190,6 +191,10 @@ export default function CreateSettingsFlows({
                                     setting$.resendExpiryAt.set(Date.now() + COOLDOWN_MS);
                                 }
                             } catch (err) {
+                                if (err instanceof ApiError && isRateLimitError(err.type)) {
+                                    showGenericError(err);
+                                    return;
+                                }
                                 showGenericError(err);
                             }
                         }}
@@ -237,6 +242,7 @@ export default function CreateSettingsFlows({
                                 }
                             } catch (err) {
                                 if (err instanceof ApiError) {
+                                    if (isRateLimitError(err.type)) { showGenericError(err); return; }
                                     if (err.type === 'otp_expired') showAlert('OTP expired. Please request a new one.');
                                     else if (err.type === 'invalid_otp') showAlert('Invalid code. Please try again.');
                                     else if (err.type === 'flow_error') showAlert('Session timeout. Restart the process.');
@@ -336,7 +342,13 @@ export default function CreateSettingsFlows({
                                     setting$.resendAttempts.set(currAttempts + 1);
                                     setting$.resendExpiryAt.set(Date.now() + COOLDOWN_MS);
                                 }
-                            } catch (err) { showGenericError(err); }
+                            } catch (err) {
+                                if (err instanceof ApiError && isRateLimitError(err.type)) {
+                                    showGenericError(err);
+                                    return;
+                                }
+                                showGenericError(err);
+                            }
                         }}
                         style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
                     >
@@ -386,6 +398,7 @@ export default function CreateSettingsFlows({
                                 }
                             } catch (err) {
                                 if (err instanceof ApiError) {
+                                    if (isRateLimitError(err.type)) { showGenericError(err); return; }
                                     if (err.type === 'otp_expired') showAlert('OTP expired. Please request a new one.');
                                     else if (err.type === 'invalid_otp') showAlert('Invalid code. Please try again.');
                                     else if (err.type === 'flow_error') showAlert('Session timeout. Restart the process.');
@@ -424,6 +437,10 @@ export default function CreateSettingsFlows({
                 await openPasswordConfirmModal();
             }
         } catch (err) {
+            if (err instanceof ApiError && isRateLimitError(err.type)) {
+                showGenericError(err);
+                return;
+            }
             showGenericError(err);
         }
     };
