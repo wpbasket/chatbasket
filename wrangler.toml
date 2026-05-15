@@ -1,9 +1,7 @@
 #:schema ./node_modules/wrangler/config-schema.json
 name = "cb-cloudlfare"
+compatibility_date = "2026-05-15"
 pages_build_output_dir = "dist"
 
-# Deployment Configuration
-compatibility_date = "2026-03-03"
-
 [vars]
-NODE_VERSION = "24"
+NODE_VERSION = "24.15.0"
