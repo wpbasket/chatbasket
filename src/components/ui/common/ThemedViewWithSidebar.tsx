@@ -98,5 +98,15 @@ const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
     width: '100%',
+    borderRightColor: theme.colors.neutral0,
+    borderRightWidth: {
+      xs: 0,
+      sm: 0,
+      md: 0,
+      lg: 0,
+      xl: 1,
+      xl2: 1,
+      superLarge: 1
+    },
   },
 }));

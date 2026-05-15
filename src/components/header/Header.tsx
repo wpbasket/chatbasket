@@ -65,13 +65,20 @@ const styles = StyleSheet.create((theme) => ({
   },
   leftButton: {
     width: 60,
-    height: 25,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderTopLeftRadius: 30,
     borderBottomLeftRadius: 8,
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
+    _web: {
+      cursor: 'pointer',
+      transition: 'background-color 0.15s ease',
+      _hover: {
+        backgroundColor: theme.colors.backgroundElement,
+      },
+    },
   },
   activeLeftButton: {
     backgroundColor: theme.colors.neutral0,
