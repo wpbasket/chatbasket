@@ -164,7 +164,17 @@ export default function ContactsScreen() {
         ChatTransport.createChat({ recipient_id: entry.id })
       );
 
-      // 3. Navigate to conversation
+      // 3. Upsert into chat list with avatar data from contact — createChat response
+      //    omits avatars, so the header would read undefined and trigger cleanup.
+      //    Use contact data so the avatar shows immediately on first navigation.
+      $chatListState.upsertChat({
+        ...chat,
+        avatar_url: chat.avatar_url ?? entry.avatarUrl,
+        avatar_file_id: chat.avatar_file_id ?? entry.avatarFileId,
+        cached_avatar_file_id: chat.cached_avatar_file_id ?? entry.cachedAvatarFileId,
+      });
+
+      // 4. Navigate to conversation
       $chatMessagesState.isChatOpen.set(true);
       router.push({
         pathname: '/personal/home/chat/[chat_id]',
