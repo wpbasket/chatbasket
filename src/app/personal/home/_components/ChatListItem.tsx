@@ -194,7 +194,7 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 25,
-        paddingVertical: 4,
+        paddingVertical: 2,
         marginVertical: 4,
         gap: 12,
         borderRadius: 10,

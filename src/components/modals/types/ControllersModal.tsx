@@ -221,7 +221,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     paddingVertical: 6,
   },
   controller: {
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
     // borderTopColor: theme.colors.neutral2,

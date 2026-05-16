@@ -135,7 +135,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 6,
     paddingRight: 10,
     paddingLeft: 15,
-    ...theme.radii.asymmetric,
+    borderRadius: 999,
     _web: {
       cursor: 'pointer',
       transition: 'background-color 0.15s ease',
@@ -145,7 +145,6 @@ const styles = StyleSheet.create((theme) => ({
     },
   },
   activeTab: {
-    backgroundColor: theme.colors.neutral0,
   },
   tabContent: {
     flexDirection: 'row',
