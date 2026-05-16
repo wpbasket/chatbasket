@@ -8,14 +8,39 @@ const lightTheme = {
   colors: Colors.light,
   fonts: Fonts.light,
   gap: (v: number) => v * 8,
-  elevation20: 20
-
+  elevation20: 20,
+  radii: {
+    asymmetric: {
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 30,
+      borderBottomLeftRadius: 20,
+      borderBottomRightRadius: 10,
+    }
+  },
+  padding: {
+    asymmetric: {
+      paddingHorizontal: 20,
+    }
+  }
 };
 const darkTheme = {
   colors: Colors.dark,
   fonts: Fonts.dark,
   gap: (v: number) => v * 8,
-  elevation20: 0
+  elevation20: 0,
+  radii: {
+    asymmetric: {
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 30,
+      borderBottomLeftRadius: 20,
+      borderBottomRightRadius: 10,
+    }
+  },
+  padding: {
+    asymmetric: {
+      paddingHorizontal: 20,
+    }
+  }
 };
 
 type AppThemes = {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { FlatList, Pressable } from 'react-native';
+import { AppButton } from '@/components/ui/common/AppButton';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { FontAwesome5Icon } from '@/components/ui/fonts/fontAwesome5';
@@ -166,17 +167,16 @@ const PersonalHome = React.memo(() => {
 
       {/* New Chat Section */}
       <ThemedView style={styles.newChatSection}>
-        <Pressable
+        <AppButton
+          label="New Chat"
+          icon={<FontAwesome5Icon name="plus" size={14} />}
           onPress={handleNewChat}
           onPressIn={handlePressIn}
-          style={({ pressed }) => [
-            styles.newChatButton,
-            pressed && { opacity: 0.1 },
-          ]}
-        >
-          <FontAwesome5Icon name="plus" size={14} />
-          <ThemedText style={styles.newChatText} selectable={false}>New Chat</ThemedText>
-        </Pressable>
+          pressedOpacity={0.1}
+          textType="default"
+          labelStyle={styles.newChatText}
+          style={styles.newChatButton}
+        />
       </ThemedView>
 
       {/* Chat List - Isolated in Memo and driven by IDs */}
@@ -266,11 +266,11 @@ const styles = StyleSheet.create((theme, rt) => ({
     color: theme.colors.primary,
   },
   modeToggle: {
-    paddingHorizontal: 10,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 30,
-    borderBottomRightRadius: 8,
+    // padding: 8,
+    paddingLeft: 12,
+    // paddingVertical: 0,
+    paddingRight: 25,
+    ...theme.radii.asymmetric,
     backgroundColor: theme.colors.primaryDark,
   },
   modeText: {
@@ -284,19 +284,6 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   newChatButton: {
     alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.neutral2,
-    borderTopRightRadius: 30,
-    borderTopLeftRadius: 20,
-    borderBottomRightRadius: 10,
-    borderBottomLeftRadius: 20,
-    padding: 8,
-    paddingLeft: 12,
-    paddingVertical: 2,
-    paddingRight: 25,
   },
   newChatText: {
     fontSize: 14,

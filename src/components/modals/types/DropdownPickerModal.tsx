@@ -219,6 +219,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     overflow: 'hidden',
     paddingLeft: 30,
     paddingRight: 12,
+    paddingVertical: 8,
 
     // height: 300,
     width: 300,
@@ -265,10 +266,16 @@ const styles = StyleSheet.create((theme, rt) => ({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: 5,
+    paddingHorizontal: 15,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.neutral,
+    borderRadius: 10,
+    _web: {
+      cursor: 'pointer',
+      transition: 'background-color 0.15s ease',
+      _hover: {
+        backgroundColor: theme.colors.backgroundElement,
+      },
+    },
   },
   selectedItem: {
     color: theme.colors.primary,

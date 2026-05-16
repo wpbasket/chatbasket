@@ -1,4 +1,5 @@
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
+import { AppButton } from '@/components/ui/common/AppButton';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
@@ -89,22 +90,15 @@ export default function SentRequestRow({ id, onOpenActions, onUndo }: SentRowPro
       </Pressable>
       {canUndo ? (
         <ThemedView style={styles.pendingActionsRow}>
-          <Pressable
-            onPressIn={handlePressIn}
+          <AppButton
+            label={"Undo      "}
             onPress={() => onUndo(item)}
-            style={({ pressed }) => [
-              styles.pendingActionButton,
-              pressed ? styles.pendingActionButtonPressed : null,
-            ]}
-          >
-            <ThemedText
-              type='smallBold'
-              style={styles.pendingActionButtonLabelDanger}
-              selectable={false}
-            >
-              Undo{"      "}
-            </ThemedText>
-          </Pressable>
+            onPressIn={handlePressIn}
+            pressedOpacity={0.7}
+            textType='smallBold'
+            labelStyle={styles.pendingActionButtonLabelDanger}
+            style={styles.pendingActionButton}
+          />
         </ThemedView>
       ) : null}
     </ThemedView>

@@ -54,7 +54,8 @@ export default function CreateSettingsFlows({
                             placeholder="Enter new email"
                             value={currentEmail ?? ''}
                             onChangeText={(t) => setting$.email.set(t)}
-                            textContentType='emailAddress'
+                            textContentType='none'
+                            autoComplete='off'
                             placeholderTextColor="gray"
                             keyboardType="email-address"
                             autoCapitalize="none"
@@ -70,8 +71,8 @@ export default function CreateSettingsFlows({
                             keyboardType="numeric"
                             maxLength={6}
                             autoCapitalize="none"
-                            textContentType="password"
-                            autoComplete="current-password"
+                            textContentType="none"
+                            autoComplete="new-password"
                             style={[styles.modalInput, submitted && !password && styles.inputError]}
                         />
                     </View>
@@ -306,6 +307,8 @@ export default function CreateSettingsFlows({
                             placeholderTextColor="gray"
                             keyboardType="numeric"
                             maxLength={6}
+                            textContentType="none"
+                            autoComplete="one-time-code"
                             style={[styles.modalInput, submitted && !validOtp && styles.inputError]}
                         />
                         <TextInput
@@ -317,7 +320,7 @@ export default function CreateSettingsFlows({
                             placeholderTextColor="gray"
                             keyboardType="numeric"
                             maxLength={6}
-                            textContentType="newPassword"
+                            textContentType="none"
                             autoComplete="new-password"
                             style={[styles.modalInput, submitted && !validPass && styles.inputError]}
                         />

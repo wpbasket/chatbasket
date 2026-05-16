@@ -302,11 +302,8 @@ const styles = StyleSheet.create((theme) => ({
             lg: theme.colors.neutral4,
         },
         borderWidth: 1,
-        borderTopLeftRadius: 8,
-        borderBottomLeftRadius: 8,
-        borderBottomRightRadius: 8,
-        borderTopRightRadius: 25,
-        paddingHorizontal: 10,
+        ...theme.radii.asymmetric,
+        ...theme.padding.asymmetric,
         marginBottom: 10,
         color: theme.colors.text,
         outline: 'none'

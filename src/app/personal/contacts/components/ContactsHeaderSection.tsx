@@ -1,7 +1,7 @@
+import { AppButton } from '@/components/ui/common/AppButton';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
-import { Pressable } from 'react-native';
 import styles from '../contacts.styles';
 
 export type ContactsHeaderSectionProps = {
@@ -39,12 +39,9 @@ export default function ContactsHeaderSection({
   return (
     <ThemedView style={styles.headerSection}>
       <ThemedView style={styles.headerText}>
-        <Pressable
+        <AppButton
           onPress={onPressPending}
-          style={({ pressed }) => [
-            styles.pendingPill,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
+          style={styles.pendingPill}
         >
           <ThemedText
             type='small'
@@ -64,7 +61,7 @@ export default function ContactsHeaderSection({
               {pendingCount}{'  '}
             </ThemedText>
           </ThemedText>
-        </Pressable>
+        </AppButton>
 
         <ThemedText type='small' style={styles.headerSubtitle} selectable={false}>
           {subtitle}
@@ -72,24 +69,16 @@ export default function ContactsHeaderSection({
       </ThemedView>
       <ThemedView style={styles.addButtonRow}>
         {selectedTab === 'contacts' ? (
-          <Pressable
+          <AppButton
+            label="Add contact"
+            icon={<IconSymbol name='account.add' size={20} />}
             onPress={onPressAddContact}
-            style={({ pressed }) => [
-              styles.addButton,
-              { opacity: pressed ? 0.6 : 1 },
-            ]}
-          >
-            <IconSymbol name='account.add' size={20} />
-            <ThemedText
-              type='small'
-              style={styles.addButtonLabel}
-              selectable={false}
-            >
-              Add contact
-            </ThemedText>
-          </Pressable>
+            labelStyle={styles.addButtonLabel}
+            style={styles.addButton}
+          />
         ) : null}
       </ThemedView>
     </ThemedView>
   );
 }
+

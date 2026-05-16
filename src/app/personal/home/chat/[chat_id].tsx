@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
-import { FlatList, Alert, Platform, Linking, Pressable, View } from 'react-native';
+import { FlatList, Alert, Platform, Linking, View } from 'react-native';
+import { AppButton } from '@/components/ui/common/AppButton';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
     ThemedText,
@@ -708,24 +709,15 @@ const ChatContentContainer = React.memo(({
                 id: 'add_contact_from_chat',
                 content: (
                     <View style={{ width: '100%', alignItems: 'flex-start', paddingTop: 16 }}>
-                        <Pressable
+                        <AppButton
+                            label="Add to contacts"
+                            icon={<IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />}
                             onPress={() => {
                                 void addParticipantToContacts();
                             }}
-                            style={({ pressed }) => [
-                                styles.addButton,
-                                pressed ? styles.addButtonPressed : null,
-                            ]}
-                        >
-                            <IconSymbol name="account.add" size={20} color={theme.colors.whiteOrBlack} />
-                            <ThemedText
-                                type="small"
-                                style={styles.addButtonLabel}
-                                selectable={false}
-                            >
-                                Add to contacts
-                            </ThemedText>
-                        </Pressable>
+                            labelStyle={styles.addButtonLabel}
+                            style={styles.addButton}
+                        />
                     </View>
                 )
             }
@@ -1287,23 +1279,7 @@ const styles = StyleSheet.create((theme, rt) => ({
         backgroundColor: 'transparent',
     },
     addButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        borderWidth: 1,
-        borderColor: theme.colors.neutral2,
-        borderTopRightRadius: 30,
-        borderTopLeftRadius: 20,
-        borderBottomRightRadius: 10,
-        borderBottomLeftRadius: 20,
-        padding: 8,
-        paddingLeft: 10,
-        paddingVertical: 2,
-        paddingRight: 25,
         alignSelf: 'flex-end',
-    },
-    addButtonPressed: {
-        opacity: 0.6,
     },
     addButtonLabel: {
         color: theme.colors.whiteOrBlack,

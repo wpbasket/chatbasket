@@ -59,21 +59,19 @@ export default function UpdateProfileForm({
         style={[styles.bio, showBioError && styles.inputError]}
       />
 
-      <ThemedView style={[styles.profileVisibleToContainer]} >
-        <Dropdown
-          options={[
-            { label: 'Public', value: 'public' },
-            { label: 'Private', value: 'private' },
-            { label: 'Personal', value: 'personal' },
-          ]}
-          value={profileVisibleToValue ?? undefined}
-          placeholder="Select profile visibility"
-          style={styles.dropdownBorder}
-          error={showProfileVisibleToError}
-          searchable={false}
-          onSelect={(value) => onSelectProfileVisibleTo(value as 'public' | 'private' | 'personal')}
-        />
-      </ThemedView>
+      <Dropdown
+        options={[
+          { label: 'Public', value: 'public' },
+          { label: 'Private', value: 'private' },
+          { label: 'Personal', value: 'personal' },
+        ]}
+        value={profileVisibleToValue ?? undefined}
+        placeholder="Select profile visibility"
+        containerStyle={styles.profileVisibleToContainer}
+        error={showProfileVisibleToError}
+        searchable={false}
+        onSelect={(value) => onSelectProfileVisibleTo(value as 'public' | 'private' | 'personal')}
+      />
 
       <Pressable
         onPress={onSubmit}

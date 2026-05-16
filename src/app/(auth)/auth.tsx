@@ -572,11 +572,8 @@ const styles = StyleSheet.create((theme) => ({
     },
     borderWidth: 1,
     // justifyContent: 'center',
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    borderTopRightRadius: 25,
-    paddingHorizontal: 15,
+    ...theme.radii.asymmetric,
+    ...theme.padding.asymmetric,
     // marginBottom: 5,
     color: theme.colors.text,
     outline:'none'

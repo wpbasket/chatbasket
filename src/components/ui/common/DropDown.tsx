@@ -175,6 +175,13 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: theme.colors.background,
+    _web: {
+      cursor: 'pointer',
+      transition: 'background-color 0.15s ease',
+      _hover: {
+        backgroundColor: theme.colors.backgroundElement,
+      },
+    },
   },
   error: {
     borderColor: theme.colors.red,

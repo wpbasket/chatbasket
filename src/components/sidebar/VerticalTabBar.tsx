@@ -4,7 +4,7 @@ import { appMode$ } from '@/state/appMode/state.appMode'
 import { useValue } from '@legendapp/state/react'
 import { Href, useRouter, useSegments } from "expo-router"
 import { Pressable } from "react-native"
-import { StyleSheet } from "react-native-unistyles"
+import { StyleSheet } from 'react-native-unistyles';
 import { ThemedText } from "../ui/common/ThemedText"
 import { ThemedView } from "../ui/common/ThemedView"
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6'
@@ -134,11 +134,15 @@ const styles = StyleSheet.create((theme) => ({
   tabItem: {
     paddingVertical: 6,
     paddingRight: 10,
-    paddingLeft:15,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 10,
-    borderTopRightRadius: 35,
+    paddingLeft: 15,
+    ...theme.radii.asymmetric,
+    _web: {
+      cursor: 'pointer',
+      transition: 'background-color 0.15s ease',
+      _hover: {
+        backgroundColor: theme.colors.backgroundElement,
+      },
+    },
   },
   activeTab: {
     backgroundColor: theme.colors.neutral0,

@@ -90,20 +90,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     gap: 8,
   },
   pendingActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.neutral2,
-    borderTopRightRadius: 30,
-    borderTopLeftRadius: 20,
-    borderBottomRightRadius: 10,
-    borderBottomLeftRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  pendingActionButtonPressed: {
-    opacity: 0.7,
   },
   pendingActionButtonLabelPrimary: {
     color: theme.colors.primary,

@@ -192,7 +192,8 @@ const styles = StyleSheet.create((theme, rt) => ({
       sm: 300,
       md: 300,
       lg: 400
-    }
+    },
+    paddingHorizontal: 10,
 
   },
   header: {
@@ -222,8 +223,16 @@ const styles = StyleSheet.create((theme, rt) => ({
   controller: {
     paddingVertical: 14,
     paddingHorizontal: 16,
+    borderRadius: 10,
     // borderTopColor: theme.colors.neutral2,
     // borderTopWidth: 1,
+    _web: {
+      cursor: 'pointer',
+      transition: 'background-color 0.15s ease',
+      _hover: {
+        backgroundColor: theme.colors.backgroundElement,
+      },
+    },
   },
   controllerDisabled: {
     opacity: 0.5,

@@ -84,10 +84,7 @@ const styles = StyleSheet.create((theme, rt) => ({
         gap: 12,
         borderWidth: 1,
         borderColor: Platform.OS=='web'?theme.colors.neutral2:theme.colors.neutral5,
-        borderTopRightRadius: 45,
-        borderTopLeftRadius: 30,
-        borderBottomRightRadius: 15,
-        borderBottomLeftRadius: 30,
+        ...theme.radii.asymmetric,
         backgroundColor: 'transparent',
     },
     buttonText: {

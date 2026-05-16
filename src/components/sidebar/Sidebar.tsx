@@ -66,16 +66,20 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 10,
     paddingRight: 20,
     // paddingVertical: 1,
-    borderTopLeftRadius: 35,
-    borderBottomLeftRadius: 35,
-    borderTopRightRadius: 60,
-    borderBottomRightRadius: 12,
-    backgroundColor: theme.colors.primaryDark,
+    ...theme.radii.asymmetric,
+    backgroundColor: theme.colors.text,
+    _web: {
+      cursor: 'pointer',
+      transition: 'background-color 0.15s ease',
+      _hover: {
+        backgroundColor: theme.colors.primary,
+      },
+    },
   },
   modeText: {
     fontSize: 14,
     color: theme.colors.reverseText,
-    // fontWeight: 'bold',
+    fontWeight: 'bold',
   },
 
 

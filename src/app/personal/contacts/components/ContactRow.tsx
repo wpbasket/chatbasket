@@ -1,4 +1,5 @@
 import { PrivacyAvatar } from '@/components/personal/common/PrivacyAvatar';
+import { AppButton } from '@/components/ui/common/AppButton';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
@@ -84,32 +85,26 @@ export default function ContactRow({ id, kind, onOpenActions, onMessage }: Conta
         ) : null}
       </Pressable>
       {shouldShowMessageButton ? (
-        <Pressable
-          onPressIn={handlePressIn}
+        <AppButton
+          label="Message"
           onPress={() => onMessage(item)}
-          style={({ pressed }) => [
-            styles.addButton,
-            pressed ? styles.addButtonPressed : null,
-          ]}
-        >
-          <ThemedText type='smallBold' style={styles.addButtonLabel} selectable={false}>
-            Message
-          </ThemedText>
-        </Pressable>
+          onPressIn={handlePressIn}
+          pressedOpacity={0.7}
+          textType='smallBold'
+          labelStyle={styles.addButtonLabel}
+          style={styles.addButton}
+        />
       ) : null}
       {shouldShowQuickAddButton ? (
-        <Pressable
-          onPressIn={handlePressIn}
+        <AppButton
+          label="+ Add to contacts"
           onPress={() => onOpenActions(item)}
-          style={({ pressed }) => [
-            styles.addButton,
-            pressed ? styles.addButtonPressed : null,
-          ]}
-        >
-          <ThemedText type='smallBold' style={styles.addButtonLabel} selectable={false}>
-            + Add to contacts
-          </ThemedText>
-        </Pressable>
+          onPressIn={handlePressIn}
+          pressedOpacity={0.7}
+          textType='smallBold'
+          labelStyle={styles.addButtonLabel}
+          style={styles.addButton}
+        />
       ) : null}
     </ThemedView>
   );

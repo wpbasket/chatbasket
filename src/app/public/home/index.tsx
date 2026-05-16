@@ -102,12 +102,11 @@ const styles = StyleSheet.create((theme, rt) => ({
     color: theme.colors.primary,
   },
   modeToggle: {
-    paddingHorizontal: 10,
+    // padding: 8,
+    paddingLeft: 12,
     // paddingVertical: 2,
-    borderTopLeftRadius: 25,
-    borderBottomLeftRadius: 25,
-    borderTopRightRadius: 30,
-    borderBottomRightRadius: 8,
+    paddingRight: 25,
+    ...theme.radii.asymmetric,
     backgroundColor: theme.colors.primaryDark,
   },
   modeText: {
