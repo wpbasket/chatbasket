@@ -28,15 +28,21 @@ export function AppModal() {
   };
 
   const getModalPosition = (position: { x: number; y: number } | null | undefined, key: string): { overlay: ViewStyle; content: ViewStyle } => {
-    const isWide = screenWidth > 1860;
+    // Responsive padding to exclude sidebar (left) and layout padding (right)
+    // Matches ThemedViewWithSidebar breakpoints: lg:800 xl:1200 xl2:1600 superLarge:1860
+    const leftPadding = screenWidth >= 800 ? 270 : 20;   // sidebar 250 + 20 gap
+    let rightPadding = 20;
+    if (screenWidth >= 1860) rightPadding = 520;          // 500 + 20
+    else if (screenWidth >= 1600) rightPadding = 420;     // 400 + 20
+    else if (screenWidth >= 1200) rightPadding = 220;     // 200 + 20
 
     if (!position) {
-      // Default to centered modal; only apply LR padding on wide screens
       return {
         overlay: {
           justifyContent: 'center' as const,
           alignItems: 'center' as const,
-          ...(isWide ? { paddingLeft: 270, paddingRight: 520 } : { paddingLeft: 20, paddingRight: 20 }),
+          paddingLeft: leftPadding,
+          paddingRight: rightPadding,
         },
         content: {},
       };
@@ -51,11 +57,8 @@ export function AppModal() {
     const marginBottom = 16;
     const marginLR = 12;
 
-    // Effective horizontal margins considering wide layouts
-    const leftPadding = isWide ? 270 : 20;
-    const rightPadding = isWide ? 520 : 20;
     const minLeft = leftPadding + marginLR;
-    const maxRight = rightPadding + marginLR; // used to keep space from right edge when measuring width
+    const maxRight = rightPadding + marginLR;
 
     let top: number;
     let left: number;
@@ -93,7 +96,8 @@ export function AppModal() {
       overlay: {
         justifyContent: 'flex-start' as const,
         alignItems: 'flex-start' as const,
-        ...(isWide ? { paddingLeft: 270, paddingRight: 520 } : { paddingLeft: 20, paddingRight: 20 }),
+        paddingLeft: leftPadding,
+        paddingRight: rightPadding,
       },
       content: {
         position: 'absolute' as const,
