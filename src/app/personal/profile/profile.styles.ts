@@ -27,16 +27,18 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   userInfoContainer: {
     flex: 1,
-    paddingTop: 4,
+    paddingTop: 20,
     paddingRight: 15,
   },
   usernameContainer: {
     flexDirection: 'row',
+    marginTop: 8,
   },
   usernameStrings: {
     color: theme.colors.title,
     fontSize: 18,
     fontWeight: 'bold',
+    letterSpacing: 1,
   },
   usernameNumbers: {
     color: theme.colors.primary,
@@ -45,13 +47,14 @@ const styles = StyleSheet.create((theme, rt) => ({
     letterSpacing: 0.5,
   },
   avatarColumn: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 0,
   },
   profileTypeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    alignSelf: 'flex-start',
     gap: 6,
     marginTop: 4,
   },

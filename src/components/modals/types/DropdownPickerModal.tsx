@@ -160,7 +160,7 @@ export function DropdownPickerModal<T = any>({
 
                 {selected && (
                   <ThemedText type='defaultGantari' style={[styles.checkmark, modalStyles.checkmark]} selectable={false}>
-                    ✓
+                    ✔
                   </ThemedText>
                 )}
               </Pressable>
@@ -218,7 +218,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     // borderWidth: 1,
     overflow: 'hidden',
     paddingLeft: 30,
-    paddingRight: 12,
+    paddingRight: 8,
     paddingVertical: 8,
 
     // height: 300,
@@ -266,9 +266,9 @@ const styles = StyleSheet.create((theme, rt) => ({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     _web: {
       cursor: 'pointer',
       transition: 'background-color 0.15s ease',
@@ -291,7 +291,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     color: theme.colors.text,
   },
   selectedItemLabel: {
-    color: theme.colors.primary,
+    color: theme.colors.orange,
     fontWeight: 'bold',
   },
   disabledItemLabel: {
@@ -306,8 +306,8 @@ const styles = StyleSheet.create((theme, rt) => ({
     color: theme.colors.subtitle,
   },
   checkmark: {
-    fontSize: 18,
-    color: theme.colors.primary,
+    fontSize: 16,
+    color: theme.colors.orange,
     fontWeight: 'bold',
     marginLeft: 12,
   },

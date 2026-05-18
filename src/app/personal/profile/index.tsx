@@ -163,8 +163,8 @@ export default function ProfileScreen() {
                   onPress={editProfile}
                   onPressIn={handlePressIn}
                   pressedOpacity={0.1}
-                  textType="default"
-                  labelStyle={[styles.bucketText, styles.bioText]}
+                  // textType="default"
+                  // labelStyle={[styles.bucketText, styles.bioText]}
                   style={styles.editIcon}
                 />
               </ThemedView>
@@ -172,7 +172,7 @@ export default function ProfileScreen() {
               {/* ─── Profile Info Section (Avatar + User Info) ─── */}
               <ThemedView style={styles.profileInfoSection}>
 
-                {/* Left Column: Avatar + Profile Type Pill */}
+                {/* Left Column: Avatar + Username */}
                 <ThemedView style={styles.avatarColumn}>
                   {/* Avatar */}
                   <Pressable style={({ pressed }) => [
@@ -182,25 +182,7 @@ export default function ProfileScreen() {
                     <ProfileAvatar />
                   </Pressable>
 
-                  {/* Profile Type Pill */}
-                  <Memo>
-                    {() => {
-                      const profileType = $personalStateUser.user.profile_type.get();
-                      const iconName = profileType === 'private' ? 'account.lock' : 'account.unlock';
-                      return (
-                        <View style={styles.profileTypeBadge}>
-                          <FontAwesome5Icon name={iconName} size={18} color={theme.colors.primary} />
-                          <ThemedText style={styles.profileTypeBadgeText}>
-                            {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : ''}
-                          </ThemedText>
-                        </View>
-                      );
-                    }}
-                  </Memo>
-                </ThemedView>
-
-                {/* Right Column: User Info */}
-                <ThemedView style={styles.userInfoContainer}>
+                  {/* Username */}
                   <ThemedView style={styles.usernameContainer}>
                     <ThemedText
                       type='astaSansWithoutColorAndSize'
@@ -213,6 +195,25 @@ export default function ProfileScreen() {
                       />
                     </ThemedText>
                   </ThemedView>
+                </ThemedView>
+
+                {/* Right Column: User Info */}
+                <ThemedView style={styles.userInfoContainer}>
+                  {/* Profile Type Pill */}
+                  <Memo>
+                    {() => {
+                      const profileType = $personalStateUser.user.profile_type.get();
+                      const iconName = profileType === 'private' ? 'account.lock' : 'account.unlock';
+                      return (
+                        <View style={styles.profileTypeBadge}>
+                          <FontAwesome5Icon name={iconName} size={18} color={theme.colors.primary} />
+                          <ThemedText style={styles.profileTypeBadgeText} selectable={false}>
+                            {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : ''}
+                          </ThemedText>
+                        </View>
+                      );
+                    }}
+                  </Memo>
 
                   <ThemedText style={styles.bioText} selectable>
                     <Memo>
