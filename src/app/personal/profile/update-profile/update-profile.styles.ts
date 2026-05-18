@@ -102,11 +102,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     // paddingLeft: 25,
   },
   editIcon: {
-    // width: 125,
-    // backgroundColor: theme.colors.background,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
+    alignSelf: 'flex-start',
   },
   bucketText: {
     color: theme.colors.text,

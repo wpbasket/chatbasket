@@ -66,10 +66,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     paddingLeft: 25,
   },
   editIcon: {
-    width: 125,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
+    alignSelf: 'flex-start',
   },
   // Empty State Styles
   emptyStateContainer: {

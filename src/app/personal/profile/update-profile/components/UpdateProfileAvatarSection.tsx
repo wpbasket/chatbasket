@@ -1,7 +1,7 @@
-import { ThemedText } from '@/components/ui/common/ThemedText';
+import { AppButton } from '@/components/ui/common/AppButton';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
-import { Image, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import { ProfileAvatar } from '@/components/personal/profile/ProfileAvatar';
 import styles from '../update-profile.styles';
 
@@ -9,7 +9,7 @@ type UpdateProfileAvatarSectionProps = {
   avatarUri?: string | null;
   hasAvatar: boolean;
   showAvatarError: boolean;
-  onChangeAvatar: (event: any) => void;
+  onChangeAvatar: (event?: any) => void;
   onPressInChangeAvatar: () => void;
 };
 
@@ -32,19 +32,16 @@ export default function UpdateProfileAvatarSection({
         <ProfileAvatar uri={avatarUri} />
       </Pressable>
       <ThemedView style={styles.outerEditIcon}>
-        <Pressable
+        <AppButton
+          label="Change avatar"
+          icon={<MaterialCommunityIcon name='image.edit' size={15} />}
           onPress={onChangeAvatar}
           onPressIn={onPressInChangeAvatar}
-          style={({ pressed }) => [
-            { opacity: pressed ? 0.1 : 1 },
-            styles.editIcon,
-          ]}
-        >
-          <MaterialCommunityIcon name='image.edit' size={25} />
-          <ThemedText style={[styles.bucketText]} selectable={false}>
-            Change avatar
-          </ThemedText>
-        </Pressable>
+          pressedOpacity={0.1}
+          textType="default"
+          labelStyle={styles.bucketText}
+          style={styles.editIcon}
+        />
       </ThemedView>
     </ThemedView>
   );

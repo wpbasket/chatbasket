@@ -1,4 +1,5 @@
 import Header from '@/components/header/Header';
+import { AppButton } from '@/components/ui/common/AppButton';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { UsernameDisplay } from '@/components/ui/common/UsernameDisplay';
@@ -158,19 +159,16 @@ export default function ProfileScreen() {
 
               {/* Edit Icon Section */}
               <ThemedView style={styles.outerEditIcon}>
-                <Pressable
+                <AppButton
+                  label="Update Profile"
+                  icon={<MaterialCommunityIcon name='account.edit' size={20} />}
                   onPress={editProfile}
                   onPressIn={handlePressIn}
-                  style={({ pressed }) => [
-                    { opacity: pressed ? 0.1 : 1 },
-                    styles.editIcon
-                  ]}
-                >
-                  <MaterialCommunityIcon name='account.edit' size={32} />
-                  <ThemedText style={[styles.bucketText, styles.bio]} selectable={false}>
-                    Update Profile
-                  </ThemedText>
-                </Pressable>
+                  pressedOpacity={0.1}
+                  textType="default"
+                  labelStyle={[styles.bucketText, styles.bio]}
+                  style={styles.editIcon}
+                />
               </ThemedView>
               {/* Edit Icon Section End */}
 
@@ -260,6 +258,11 @@ export default function ProfileScreen() {
                       selectable={false}
                     >
                       Username:{'   '}
+                    </ThemedText>
+                    <ThemedText
+                      type='astaSansWithoutColorAndSize'
+                      selectable
+                    >
                       <UsernameDisplay
                         username={$personalStateUser.user.username.get()}
                         lettersStyle={styles.usernameStrings}
