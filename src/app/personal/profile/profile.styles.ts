@@ -3,48 +3,31 @@ import { StyleSheet } from 'react-native-unistyles';
 const styles = StyleSheet.create((theme, rt) => ({
   mainContainer: {
     flex: 1,
+    paddingTop: 10
   },
-  container: {
-    height: 290,
-    width: '100%',
-    flexDirection: 'row',
-    padding: 20,
-    // backgroundColor:'white',
+
+  // ─── Update Profile Button ───────────────────────────────
+  outerEditIcon: {
+    marginBottom: 20,
     paddingLeft: 30,
-    paddingTop: 0,
-    gap: 20,
   },
-  profilePictureContainer: {
-    // height: 290,
-    width: 80,
+  editIcon: {
+    alignSelf: 'flex-start',
+  },
+
+  // ─── Profile Info Section (Avatar + User Info) ───────────
+  profileInfoSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 30,
     gap: 20,
+    alignItems: 'flex-start',
   },
   profilePicture: {
-    // Styling now controlled by ProfileAvatar component
-  },
-  profilePictureImage: {
-    // Styling now controlled by ProfileAvatar component
-  },
-  outerBucketContainer: {
-    gap: 10,
-  },
-  bucketContainer: {
-    flexDirection: 'row',
-    width: 70,
-    gap: 10,
-    alignItems: 'center',
-  },
-  bucketColor: {
-    color: theme.colors.primary,
-  },
-  bucketText: {
-    color: theme.colors.whiteOrBlack,
+    // Styling controlled by ProfileAvatar component
   },
   userInfoContainer: {
-    width: '72%',
-    paddingTop: 20,
-    gap: 3,
-    paddingBottom: 20,
+    flex: 1,
+    paddingTop: 4,
     paddingRight: 15,
   },
   usernameContainer: {
@@ -52,23 +35,62 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   usernameStrings: {
     color: theme.colors.title,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   usernameNumbers: {
     color: theme.colors.primary,
     fontWeight: 'bold',
+    fontSize: 18,
     letterSpacing: 0.5,
   },
-  bio: {
+  avatarColumn: {
+    alignItems: 'center',
+    gap: 0,
+  },
+  profileTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  profileTypeBadgeText: {
+    color: theme.colors.icon,
     fontSize: 13,
+    fontWeight: '500',
   },
-  outerEditIcon: {
-    marginBottom: 20,
-    paddingLeft: 25,
+  bioText: {
+    fontSize: 13,
+    color: theme.colors.icon,
+    marginTop: 6,
+    lineHeight: 18,
   },
-  editIcon: {
-    alignSelf: 'flex-start',
+
+  // ─── Menu Section (Personal, Settings, Logout) ──────────
+  menuSection: {
+    paddingHorizontal: 30,
+    paddingTop: 48,
+    gap: 10,
   },
-  // Empty State Styles
+  bucketColor: {
+    color: theme.colors.primary,
+  },
+  bucketText: {
+    color: theme.colors.whiteOrBlack,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  menuItemIcon: {
+    width: 20,
+    alignItems: 'center',
+  },
+
+  // ─── Empty State ─────────────────────────────────────────
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',

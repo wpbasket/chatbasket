@@ -73,11 +73,13 @@ export function Dropdown<T = any>({
   arrowStyle,
   modalStyles,
 }: DropdownProps<T>) {
-  
   const dropdownState$ = useObservable(() => ({
     id: `dropdown-${Math.random().toString(36).substr(2, 9)}`,
-    isModalOpen: false
+    isModalOpen: false,
+    clicked: false,
   }));
+
+  const clicked = useValue(dropdownState$.clicked);
   
   // React Compiler will optimize this lookup
   const selectedOption = options.find(opt => opt.value === value);
@@ -103,6 +105,11 @@ export function Dropdown<T = any>({
       return;
     }
     
+    dropdownState$.clicked.set(true);
+    setTimeout(() => {
+      dropdownState$.clicked.set(false);
+    }, 400);
+
     // Capture the touch/click position
     const position = {
       x: event.nativeEvent.pageX || event.nativeEvent.locationX || 0,
@@ -131,6 +138,7 @@ export function Dropdown<T = any>({
         containerStyle,
         error && styles.error, 
         disabled && styles.disabled,
+        !clicked && styles.hoverEnabled,
         { opacity: pressed ? 0.1 : 1 },
         style
       ]}
@@ -175,6 +183,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: theme.colors.background,
+  },
+  hoverEnabled: {
     _web: {
       cursor: 'pointer',
       transition: 'background-color 0.15s ease',

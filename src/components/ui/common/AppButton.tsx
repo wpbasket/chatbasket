@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Platform, Pressable, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { ThemedText, type ThemedTextProps } from './ThemedText';
+import { useObservable, useValue } from '@legendapp/state/react';
 
 export type AppButtonProps = {
   /** Button text label */
@@ -24,13 +25,17 @@ export type AppButtonProps = {
   textType?: ThemedTextProps['type'];
 
   /** Press handler */
-  onPress: () => void;
+  onPress: (event?: any) => void;
   /** Optional press-in handler (for animation hooks) */
   onPressIn?: () => void;
   /** Disable the button */
   disabled?: boolean;
   /** Opacity when pressed (default: 0.6) */
   pressedOpacity?: number;
+  /** Show asymmetric border and padding. If false, sets border to none and horizontal padding to 10. Default: true. */
+  asymmetric?: boolean;
+  /** Enable hover effect on web. Default: true. */
+  hover?: boolean;
 };
 
 /**
@@ -51,18 +56,36 @@ export const AppButton = React.memo(({
   onPressIn,
   disabled = false,
   pressedOpacity = 0.6,
+  asymmetric = true,
+  hover = true,
 }: AppButtonProps) => {
+  const clicked$ = useObservable(false);
+  const clicked = useValue(clicked$);
+
+  const handlePress = React.useCallback((event: any) => {
+    clicked$.set(true);
+    setTimeout(() => {
+      clicked$.set(false);
+    }, 400);
+
+    if (onPress) {
+      onPress(event);
+    }
+  }, [onPress]);
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       onPressIn={onPressIn}
-      disabled={disabled}
+      disabled={disabled || !hover}
       style={({ pressed }) => [
         styles.container,
-        pressed && { opacity: pressedOpacity },
+        asymmetric ? styles.asymmetric : styles.symmetric,
+        pressed && !(Platform.OS === 'web' && hover) && { opacity: pressedOpacity },
         disabled && styles.disabled,
         width != null && { width: width as any },
         height != null && { height: height as any },
+        (hover && !clicked) && styles.hoverEnabled,
         style,
       ]}
     >
@@ -86,13 +109,23 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    ...theme.radii.asymmetric,
+    paddingVertical: 1.5,
+  },
+  asymmetric: {
     borderWidth: 1,
     borderColor: theme.colors.neutral2,
-    ...theme.radii.asymmetric,
-    padding: 8,
     paddingLeft: 12,
-    paddingVertical: 2,
-    paddingRight: 25,
+    paddingRight: 30,
+  },
+  symmetric: {
+    borderWidth: 0,
+    paddingLeft: 12,
+    paddingRight: 30,
+    marginLeft: -12,
+    marginRight: -30,
+  },
+  hoverEnabled: {
     _web: {
       cursor: 'pointer',
       transition: 'background-color 0.15s ease',

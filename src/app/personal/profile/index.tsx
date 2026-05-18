@@ -18,7 +18,7 @@ import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile
 import { Memo, Show, useValue } from '@legendapp/state/react';
 import { router, Stack } from 'expo-router';
 import { useCallback } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { ProfileAvatar } from '@/components/personal/profile/ProfileAvatar';
 import styles from './profile.styles';
 import { commonAuthApi } from '@/lib/commonLib/authApi/common.api.auth';
@@ -155,9 +155,7 @@ export default function ProfileScreen() {
               }
             >
 
-              {/* Header Section End */}
-
-              {/* Edit Icon Section */}
+              {/* ─── Update Profile Button ─────────────────────── */}
               <ThemedView style={styles.outerEditIcon}>
                 <AppButton
                   label="Update Profile"
@@ -166,99 +164,44 @@ export default function ProfileScreen() {
                   onPressIn={handlePressIn}
                   pressedOpacity={0.1}
                   textType="default"
-                  labelStyle={[styles.bucketText, styles.bio]}
+                  labelStyle={[styles.bucketText, styles.bioText]}
                   style={styles.editIcon}
                 />
               </ThemedView>
-              {/* Edit Icon Section End */}
 
-              {/* Profile Section: flex:row */}
-              <ThemedView style={styles.container}>
+              {/* ─── Profile Info Section (Avatar + User Info) ─── */}
+              <ThemedView style={styles.profileInfoSection}>
 
-                {/* Profile Picture Section */}
-                <ThemedView style={styles.profilePictureContainer}>
-
-                  {/* Profile Picture */}
+                {/* Left Column: Avatar + Profile Type Pill */}
+                <ThemedView style={styles.avatarColumn}>
+                  {/* Avatar */}
                   <Pressable style={({ pressed }) => [
                     { opacity: pressed ? 0.1 : 1 },
                     styles.profilePicture
                   ]}>
                     <ProfileAvatar />
                   </Pressable>
-                  {/* Profile Picture End */}
 
-                  {/* Outer Bucket Section */}
-                  <ThemedView style={styles.outerBucketContainer}>
-
-                    {/* Profile Mode */}
-                    <ThemedView style={styles.bucketContainer}>
-                      <Memo>
-                        {() => {
-                          const profileType = $personalStateUser.user.profile_type.get();
-                          return (
-                            <>
-                              <FontAwesome5Icon
-                                name={profileType === 'private' ? 'account.lock' : 'account.unlock'}
-                                size={20}
-                                color={bucketColor}
-                              />
-                              <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                                {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : profileType}
-                              </ThemedText>
-                            </>
-                          );
-                        }}
-                      </Memo>
-                    </ThemedView>
-                    {/* Profile Mode End */}
-
-
-                    {/* Settings  */}
-                    <Pressable
-                      onPress={settings}
-                      onPressIn={handlePressIn}
-                      style={({ pressed }) => [
-                        { opacity: pressed ? 0.1 : 1 },
-                        styles.bucketContainer, { marginLeft: -4.1, marginTop: -3 }
-                      ]}>
-                      <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        Settings
-                      </ThemedText>
-                    </Pressable>
-                    {/* Settings End */}
-
-                    {/* Logout */}
-                    <Pressable
-                      onPress={logoutButton}
-                      onPressIn={handlePressIn}
-                      style={({ pressed }) => [
-                        { opacity: pressed ? 0.1 : 1 },
-                        styles.bucketContainer
-                      ]}>
-                      <EntypoIcon name="account.logout" size={20} color='red' />
-                      <ThemedText type='small' style={styles.bucketText} selectable={false}>
-                        Logout
-                      </ThemedText>
-                    </Pressable>
-                    {/* Logout End */}
-
-                  </ThemedView>
-                  {/* Outer Bucket Section End */}
-
+                  {/* Profile Type Pill */}
+                  <Memo>
+                    {() => {
+                      const profileType = $personalStateUser.user.profile_type.get();
+                      const iconName = profileType === 'private' ? 'account.lock' : 'account.unlock';
+                      return (
+                        <View style={styles.profileTypeBadge}>
+                          <FontAwesome5Icon name={iconName} size={18} color={theme.colors.primary} />
+                          <ThemedText style={styles.profileTypeBadgeText}>
+                            {profileType ? profileType[0].toUpperCase() + profileType.slice(1) : ''}
+                          </ThemedText>
+                        </View>
+                      );
+                    }}
+                  </Memo>
                 </ThemedView>
-                {/* Profile Picture Section End */}
 
-                {/* User Info Section */}
+                {/* Right Column: User Info */}
                 <ThemedView style={styles.userInfoContainer}>
                   <ThemedView style={styles.usernameContainer}>
-                    <ThemedText
-                      type='astaSansWithoutColorAndSize'
-                      style={styles.usernameStrings}
-                      selectable={false}
-                    >
-                      Username:{'   '}
-                    </ThemedText>
                     <ThemedText
                       type='astaSansWithoutColorAndSize'
                       selectable
@@ -270,22 +213,52 @@ export default function ProfileScreen() {
                       />
                     </ThemedText>
                   </ThemedView>
-                  <ThemedText style={styles.bio}>
-                    <ThemedText style={styles.bio} selectable={false}>Bio:{'   '}</ThemedText>
 
-                    <ThemedText style={styles.bio} selectable>
-                      <Memo>
-                        {$personalStateUser.user.bio}
-                      </Memo>
-                    </ThemedText>
-
+                  <ThemedText style={styles.bioText} selectable>
+                    <Memo>
+                      {$personalStateUser.user.bio}
+                    </Memo>
                   </ThemedText>
-                  {/* <ThemedText style={styles.bio}>Created At:   {formatDateTime(user?.createdAt)}</ThemedText> */}
                 </ThemedView>
-                {/* User Info Section End */}
 
               </ThemedView>
-              {/* Profile Section flex:row End */}
+
+              {/* ─── Menu Section (Settings, Logout) ─── */}
+              <ThemedView style={styles.menuSection}>
+
+                {/* Settings */}
+                <AppButton
+                  label="Settings"
+                  icon={
+                    <View style={[styles.menuItemIcon, { marginLeft: -1 }]}>
+                      <MaterialCommunityIcon name="account.settings" size={25} color={bucketColor} />
+                    </View>
+                  }
+                  onPress={settings}
+                  onPressIn={handlePressIn}
+                  pressedOpacity={0.1}
+                  asymmetric={false}
+                  labelStyle={styles.bucketText}
+                  style={[styles.menuItem, { justifyContent: 'flex-start', alignSelf: 'flex-start' }]}
+                />
+
+                {/* Logout */}
+                <AppButton
+                  label="Logout"
+                  icon={
+                    <View style={styles.menuItemIcon}>
+                      <EntypoIcon name="account.logout" size={20} color='red' />
+                    </View>
+                  }
+                  onPress={logoutButton}
+                  onPressIn={handlePressIn}
+                  pressedOpacity={0.1}
+                  asymmetric={false}
+                  labelStyle={styles.bucketText}
+                  style={[styles.menuItem, { justifyContent: 'flex-start', alignSelf: 'flex-start' }]}
+                />
+
+              </ThemedView>
 
             </ScrollView>
           </ThemedView>

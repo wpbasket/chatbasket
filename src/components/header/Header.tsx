@@ -65,7 +65,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   leftButton: {
     width: 60,
-    height: 20,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
     borderTopLeftRadius: 30,
