@@ -88,6 +88,7 @@ export function DropdownPickerModal<T = any>({
       {/* Items List */}
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={true}
@@ -217,7 +218,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     // borderColor: theme.colors.neutral3,
     // borderWidth: 1,
     overflow: 'hidden',
-    paddingLeft: 30,
+    paddingLeft: 20,
     paddingRight: 8,
     paddingVertical: 8,
 
@@ -252,7 +253,9 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   scrollView: {
     maxHeight: 300,
-
+  },
+  scrollViewContent: {
+    gap: 2,
   },
   emptyContainer: {
     padding: 40,
@@ -267,7 +270,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical:8,
     borderRadius: 8,
     _web: {
       cursor: 'pointer',
@@ -279,6 +282,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   selectedItem: {
     color: theme.colors.primary,
+    backgroundColor: theme.colors.primaryOpacity,
   },
   disabledItem: {
     opacity: 0.5,
@@ -291,7 +295,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     color: theme.colors.text,
   },
   selectedItemLabel: {
-    color: theme.colors.orange,
+    color: theme.colors.primary,
     fontWeight: 'bold',
   },
   disabledItemLabel: {
@@ -307,7 +311,7 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   checkmark: {
     fontSize: 16,
-    color: theme.colors.orange,
+    color: theme.colors.primary,
     fontWeight: 'bold',
     marginLeft: 12,
   },

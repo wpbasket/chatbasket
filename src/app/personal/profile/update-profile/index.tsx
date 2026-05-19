@@ -38,6 +38,7 @@ export default function PersonalUpdateProfile() {
 
   const user = useValue($personalStateUser.user)
   const avatarUri = useValue($personalStateUser.user.avatar_url)
+  const localAvatarUri = useValue($personalStateUser.avatarUri)
   const name = useValue($personalStateUpdateProfile.name)
   const bio = useValue($personalStateUpdateProfile.bio)
   const profileVisibleTo = useValue($personalStateUpdateProfile.profileVisibleTo)
@@ -270,8 +271,8 @@ export default function PersonalUpdateProfile() {
       </ThemedView>
       <ThemedView style={styles.container}>
         <UpdateProfileAvatarSection
-          avatarUri={avatarFile?.uri || avatarUri || null}
-          hasAvatar={!!(avatarFile || (user?.avatar_url && user?.avatar_url.length > 0))}
+          avatarUri={avatarFile?.uri || (isAvatarRemoved ? null : (localAvatarUri || avatarUri || null))}
+          hasAvatar={!!(avatarFile || (!isAvatarRemoved && (localAvatarUri || avatarUri)))}
           showAvatarError={(isAvatarSubmitted || isSubmitted) && (!isAvatarChecked || !isAvatarValid)}
           onChangeAvatar={handleAvatarChange}
           onPressInChangeAvatar={handlePressIn}
