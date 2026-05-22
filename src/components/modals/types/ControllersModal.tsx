@@ -169,12 +169,12 @@ const styles = StyleSheet.create((theme, rt) => ({
     overflow: 'hidden',
 
     ...(rt.themeName == 'dark' ? {
-      backgroundColor: 'rgba(13,13,13,0.9)',
+      backgroundColor: 'rgba(13,13,13,0.95)',
       boxShadow: '0px 10px 15px rgba(15,15,15,0.2)',
       borderColor: theme.colors.neutral4,
       borderWidth: 1,
     } : {
-      backgroundColor: theme.colors.BackgroundSelect,
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
       // boxShadow: '0px 10px 15px rgba(0,0,0,0.2)',
       boxShadow: '0px 0px 100px rgba(0, 187,119, 0.1)',
       borderColor: {

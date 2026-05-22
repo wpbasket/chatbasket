@@ -200,7 +200,7 @@ const styles = StyleSheet.create((theme) => ({
     opacity: 0.5,
   },
   text: {
-    color: theme.colors.orange,
+    color: theme.colors.darkYellow,
     fontSize: 16,
     // fontWeight:'bold',
     flex: 1,
