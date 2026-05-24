@@ -7,7 +7,7 @@ import { Pressable } from "react-native"
 import { StyleSheet } from 'react-native-unistyles';
 import { ThemedText } from "../ui/common/ThemedText"
 import { ThemedView } from "../ui/common/ThemedView"
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6'
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 const publicTabs = [
   {

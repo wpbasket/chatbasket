@@ -38,8 +38,8 @@ async function main() {
         // Process only JS files directly in the web bundle output
         // (Expo router bundles are usually flat in this directory)
         const jsFiles = files
-            .filter((dirent) => dirent.isFile() && dirent.name.endsWith('.js'))
-            .map((dirent) => path.join(jsDir, dirent.name));
+            .filter((dirent: fs.Dirent) => dirent.isFile() && dirent.name.endsWith('.js'))
+            .map((dirent: fs.Dirent) => path.join(jsDir, dirent.name));
 
         if (jsFiles.length === 0) {
             console.log('No JS files found to process.');
@@ -52,7 +52,7 @@ async function main() {
 
         // Process files concurrently for better performance
         await Promise.all(
-            jsFiles.map(async (fullPath) => {
+            jsFiles.map(async (fullPath: string) => {
                 try {
                     const content = await fs.promises.readFile(fullPath, 'utf8');
 

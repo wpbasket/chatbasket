@@ -2,7 +2,7 @@ import { LoginPrompt } from "@/components/ui/common/LoginPrompt";
 import { ThemedView } from "@/components/ui/common/ThemedView";
 import { authState } from "@/state/auth/state.auth";
 import { useValue } from "@legendapp/state/react";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import { Stack } from "expo-router";
 import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
 

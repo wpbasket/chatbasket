@@ -1,4 +1,4 @@
-import { FontAwesome6 } from '@expo/vector-icons';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { useSegments } from 'expo-router';
 import {
   TabList,

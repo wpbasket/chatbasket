@@ -22,7 +22,6 @@ import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal';
 import { getChatErrorMessage, getEligibilityMessage } from '@/utils/personalUtils/util.chatErrors';
 import { LegendList } from '@legendapp/list';
 import { useValue } from '@legendapp/state/react';
-import { useFocusEffect } from '@react-navigation/native';
 import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, RefreshControl } from 'react-native';

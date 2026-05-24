@@ -1,7 +1,7 @@
 import { useUnistyles } from 'react-native-unistyles';
 import Entypo from '@expo/vector-icons/Entypo';
 import React from 'react';
-import { StyleProp, TextStyle } from 'react-native';
+import { StyleProp, TextStyle, ColorValue } from 'react-native';
 // Map SFSymbol-like names to Ionicons names (industry standard)
 const MAPPING = {
   'bucket': 'bucket',
@@ -25,7 +25,7 @@ export function EntypoIcon({
   name: EntypoIconName;
   size?: number;
   style?: StyleProp<TextStyle>;
-  color?: string;
+  color?: ColorValue;
 }) {
   // Use the color prop if provided, otherwise fall back to the theme text color
   const { theme } = useUnistyles();

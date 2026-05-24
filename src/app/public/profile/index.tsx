@@ -13,7 +13,6 @@
 // import { showConfirmDialog } from '@/utils/commonUtils/util.modal';
 // import { getUser } from '@/utils/publicUtils/public.util.profile';
 // import { useValue } from '@legendapp/state/react';
-// import { useFocusEffect } from '@react-navigation/native';
 // import { router, Stack } from 'expo-router';
 // import { useCallback } from 'react';
 // import { Image, Pressable, ScrollView } from 'react-native';

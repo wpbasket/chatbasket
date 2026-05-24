@@ -1,7 +1,7 @@
 import { useUnistyles } from 'react-native-unistyles';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import React from 'react';
-import { StyleProp, TextStyle } from 'react-native';
+import { StyleProp, TextStyle, ColorValue } from 'react-native';
 // Map SFSymbol-like names to Ionicons names (industry standard)
 const MAPPING = {
   'account.lock': 'lock',
@@ -28,7 +28,7 @@ export function FontAwesome5Icon({
   name: FontAwesome5IconName;
   size?: number;
   style?: StyleProp<TextStyle>;
-  color?: string;
+  color?: ColorValue;
 }) {
   // Use the color prop if provided, otherwise fall back to the theme text color
   const { theme } = useUnistyles();

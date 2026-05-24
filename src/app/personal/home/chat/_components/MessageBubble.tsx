@@ -593,7 +593,7 @@ const VideoInlinePlayer = memo((props: {
     const hasAutoFullscreenRef = React.useRef(false);
     const trackRef = React.useRef<View>(null);
     const isMountedRef = React.useRef(true);
-    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const isClosing$ = useObservable(false);
     const mediaId = React.useRef(generateMediaId('video')).current;
     

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
-import { StyleProp, TextStyle } from 'react-native';
+import { StyleProp, TextStyle, ColorValue } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 
 // Map SFSymbol-like names to Ionicons names (industry standard)
@@ -84,7 +84,7 @@ export function IconSymbol({
   name: IconSymbolName;
   size?: number;
   style?: StyleProp<TextStyle>;
-  color?: string;
+  color?: ColorValue;
 }) {
   const { theme } = useUnistyles();
   const color = propColor || theme.colors.text;

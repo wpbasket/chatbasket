@@ -4,7 +4,7 @@ import { PersonalStorageGetUser } from "@/lib/storage/personalStorage/profile/pe
 import { authState } from "@/state/auth/state.auth";
 import { PersonalUtilGetUser } from "@/utils/personalUtils/personal.util.profile";
 import { useValue } from "@legendapp/state/react";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
