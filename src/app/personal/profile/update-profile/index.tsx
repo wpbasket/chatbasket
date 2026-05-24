@@ -13,6 +13,7 @@ import { runWithLoading, showAlert, showControllersModal } from '@/utils/commonU
 import { utilGoBack } from '@/utils/commonUtils/util.router';
 import { buildFormDataFromAsset } from '@/utils/commonUtils/util.upload';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
+import { cacheUploadedAvatar } from '@/utils/personalUtils/util.profileAvatar';
 import { useValue } from '@legendapp/state/react';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack } from 'expo-router';
@@ -65,7 +66,7 @@ export default function PersonalUpdateProfile() {
     };
 
     const chooseFromGalary = async () => {
-      const permissionResult = await ImagePicker.getMediaLibraryPermissionsAsync();
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (permissionResult.status !== 'granted') {
         showAlert('Media library permission is required to access images.');
@@ -182,6 +183,9 @@ export default function PersonalUpdateProfile() {
 
         if (response) {
           $personalStateUpdateProfile.avatarChecked.set(true)
+          // Immediately cache the picked image locally so the profile screen
+          // shows the new pic instantly without waiting for server re-download
+          await cacheUploadedAvatar(currentAvatarFile.uri);
         }
       } catch (error) {
         if (error instanceof ApiError) {

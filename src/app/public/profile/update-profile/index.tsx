@@ -70,7 +70,7 @@ export default function UpdateProfile() {
     };
 
     const chooseFromGalary = async () => {
-      const permissionResult = await ImagePicker.getMediaLibraryPermissionsAsync();
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (permissionResult.status !== 'granted') {
         showAlert('Media library permission is required to access images.');

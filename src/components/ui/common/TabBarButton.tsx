@@ -1,4 +1,4 @@
-import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import React from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';

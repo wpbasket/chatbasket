@@ -83,7 +83,8 @@ async function getExistingAvatarUri(): Promise<string | null> {
         const { File, Directory, Paths } = await import('expo-file-system');
         const profileDir = new Directory(Paths.document, NATIVE_AVATAR_DIR);
         const avatarFile = new File(profileDir, NATIVE_AVATAR_FILE);
-        return avatarFile.exists ? avatarFile.uri : null;
+        // Append cache-buster so RN Image doesn't serve stale in-memory cached pixels
+        return avatarFile.exists ? `${avatarFile.uri}?t=${Date.now()}` : null;
     }
 }
 
@@ -107,5 +108,37 @@ async function downloadAvatar(url: string): Promise<string | null> {
     } catch (err) {
         console.error('[ProfileAvatar] Failed to download avatar:', err);
         return null;
+    }
+}
+
+// ─── Optimistic local cache after upload ──────────────────────────────────────
+// Called right after a successful avatar upload. Copies the picked file
+// (already on disk in ImagePicker cache) into the local avatar path so the
+// profile screen shows the new pic instantly without waiting for a server
+// round-trip + re-download.
+
+export async function cacheUploadedAvatar(pickedUri: string): Promise<void> {
+    try {
+        if (Platform.OS === 'web') {
+            const res = await fetch(pickedUri);
+            const blob = await res.blob();
+            const uri = await saveAvatarToIDB(blob, 'ME_PROFILE_AVATAR');
+            $personalStateUser.avatarUri.set(uri);
+        } else {
+            const { File, Directory, Paths } = await import('expo-file-system');
+            const dir = new Directory(Paths.document, NATIVE_AVATAR_DIR);
+            if (!dir.exists) dir.create({ intermediates: true });
+
+            const dest = new File(dir, NATIVE_AVATAR_FILE);
+            if (dest.exists) {
+                try { dest.delete(); } catch { /* ignore */ }
+            }
+
+            const source = new File(pickedUri);
+            source.copy(dest);
+            $personalStateUser.avatarUri.set(`${dest.uri}?t=${Date.now()}`);
+        }
+    } catch (err) {
+        console.warn('[ProfileAvatar] cacheUploadedAvatar failed (non-critical):', err);
     }
 }
