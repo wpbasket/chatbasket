@@ -153,13 +153,13 @@ const styles = StyleSheet.create((theme) => ({
     resizeMode: 'cover',
     pointerEvents: 'none',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.neutral2,
   },
   placeholder: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.neutral2,
   },
   initials: {
     color: '#FFFFFF', // White text for gradients

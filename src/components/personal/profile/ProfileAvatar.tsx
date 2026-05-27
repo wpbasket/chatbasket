@@ -100,8 +100,8 @@ export function ProfileAvatar({ size = 80, uri }: { size?: number, uri?: string 
         width: size,
         height: size,
         borderRadius: 9999,
-        borderWidth: rt.themeName === 'dark' ? 0 : 2,
-        borderColor: theme.colors.border,
+        borderWidth: 1,
+        borderColor: theme.colors.neutral2,
         overflow: 'hidden',
     } as const;
 
@@ -140,12 +140,14 @@ const styles = StyleSheet.create((theme) => ({
     image: {
         width: '100%',
         height: '100%',
+        borderRadius: 9999,
         resizeMode: 'cover',
         pointerEvents: 'none',
     },
     placeholder: {
         width: '100%',
         height: '100%',
+        borderRadius: 9999,
         alignItems: 'center',
         justifyContent: 'center',
     },

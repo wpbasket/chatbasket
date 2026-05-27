@@ -10,7 +10,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **chatbasket** (3876 symbols, 8269 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **chatbasket** (3918 symbols, 8330 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -61,6 +61,7 @@ This repository is listed under GitNexus **group(s): cb-group** (see `~/.gitnexu
 - Prefer using the global `playwright` command instead of creating local temporary Playwright installs.
 - When requiring Playwright from ad-hoc Node scripts, set `NODE_PATH` to the global npm root first in PowerShell: `$env:NODE_PATH = (npm root -g)`.
 - Microsoft Edge is available at: `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
+- **ALWAYS close Playwright MCP browser sessions after use** with `browser_close()` to clean up resources and avoid leaving browser tabs open.
 
 ---
 
