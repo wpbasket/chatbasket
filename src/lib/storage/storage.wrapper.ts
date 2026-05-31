@@ -17,48 +17,53 @@ class WebVault {
     static async getOrCreateKey(): Promise<CryptoKey> {
         if (this.cryptoKey) return this.cryptoKey;
 
-        return new Promise((resolve, reject) => {
-            if (typeof indexedDB === 'undefined') {
-                return reject(new Error('IndexedDB not supported'));
-            }
+        if (typeof indexedDB === 'undefined') {
+            throw new Error('IndexedDB not supported');
+        }
 
+        // Step 1: Read-only check for existing key
+        const existingKey = await new Promise<CryptoKey | undefined>((resolve, reject) => {
             const request = indexedDB.open(this.DB_NAME, 1);
-
             request.onupgradeneeded = () => {
                 request.result.createObjectStore(this.STORE_NAME);
             };
+            request.onsuccess = () => {
+                const db = request.result;
+                const tx = db.transaction(this.STORE_NAME, 'readonly');
+                const getReq = tx.objectStore(this.STORE_NAME).get(this.KEY_NAME);
+                getReq.onsuccess = () => resolve(getReq.result as CryptoKey | undefined);
+                getReq.onerror = () => reject(getReq.error);
+            };
+            request.onerror = () => reject(request.error);
+        });
 
+        if (existingKey) {
+            this.cryptoKey = existingKey;
+            return existingKey;
+        }
+
+        // Step 2: Generate key OUTSIDE any transaction (async crypto work)
+        const key = await window.crypto.subtle.generateKey(
+            { name: 'AES-GCM', length: 256 },
+            false, // extractable: false (CANNOT BE STOLEN BY SCRIPTS)
+            ['encrypt', 'decrypt']
+        );
+
+        // Step 3: Store key in a fresh read-write transaction
+        await new Promise<void>((resolve, reject) => {
+            const request = indexedDB.open(this.DB_NAME, 1);
             request.onsuccess = () => {
                 const db = request.result;
                 const tx = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = tx.objectStore(this.STORE_NAME);
-                const getRequest = store.get(this.KEY_NAME);
-
-                getRequest.onsuccess = async () => {
-                    if (getRequest.result) {
-                        this.cryptoKey = getRequest.result;
-                        resolve(this.cryptoKey!);
-                    } else {
-                        try {
-                            // Generate non-extractable key
-                            const key = await window.crypto.subtle.generateKey(
-                                { name: 'AES-GCM', length: 256 },
-                                false, // extractable: false (CANNOT BE STOLEN BY SCRIPTS)
-                                ['encrypt', 'decrypt']
-                            );
-                            store.put(key, this.KEY_NAME);
-                            this.cryptoKey = key;
-                            resolve(key);
-                        } catch (e) {
-                            reject(e);
-                        }
-                    }
-                };
-                getRequest.onerror = () => reject(getRequest.error);
+                const putReq = tx.objectStore(this.STORE_NAME).put(key, this.KEY_NAME);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
             };
-
             request.onerror = () => reject(request.error);
         });
+
+        this.cryptoKey = key;
+        return key;
     }
 
     static async encrypt(data: string): Promise<string> {

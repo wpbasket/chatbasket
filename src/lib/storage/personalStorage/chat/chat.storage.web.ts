@@ -15,38 +15,49 @@ let cryptoKey: CryptoKey | null = null;
 async function getOrCreateKey(): Promise<CryptoKey> {
     if (cryptoKey) return cryptoKey;
 
-    return new Promise((resolve, reject) => {
-        if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB not supported'));
+    if (typeof indexedDB === 'undefined') throw new Error('IndexedDB not supported');
 
+    // Step 1: Read-only check for existing key
+    const existingKey = await new Promise<CryptoKey | undefined>((resolve, reject) => {
         const request = indexedDB.open(VAULT_DB_NAME, 1);
         request.onupgradeneeded = () => { request.result.createObjectStore(VAULT_STORE); };
         request.onsuccess = () => {
             const db = request.result;
-            const tx = db.transaction(VAULT_STORE, 'readwrite');
-            const store = tx.objectStore(VAULT_STORE);
-            const getReq = store.get(VAULT_KEY_NAME);
-
-            getReq.onsuccess = async () => {
-                if (getReq.result) {
-                    cryptoKey = getReq.result;
-                    resolve(cryptoKey!);
-                } else {
-                    try {
-                        const key = await window.crypto.subtle.generateKey(
-                            { name: 'AES-GCM', length: 256 },
-                            false, // non-extractable
-                            ['encrypt', 'decrypt']
-                        );
-                        store.put(key, VAULT_KEY_NAME);
-                        cryptoKey = key;
-                        resolve(key);
-                    } catch (e) { reject(e); }
-                }
-            };
+            const tx = db.transaction(VAULT_STORE, 'readonly');
+            const getReq = tx.objectStore(VAULT_STORE).get(VAULT_KEY_NAME);
+            getReq.onsuccess = () => resolve(getReq.result as CryptoKey | undefined);
             getReq.onerror = () => reject(getReq.error);
         };
         request.onerror = () => reject(request.error);
     });
+
+    if (existingKey) {
+        cryptoKey = existingKey;
+        return existingKey;
+    }
+
+    // Step 2: Generate key OUTSIDE any transaction (async crypto work)
+    const key = await window.crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 },
+        false, // non-extractable
+        ['encrypt', 'decrypt']
+    );
+
+    // Step 3: Store key in a fresh read-write transaction
+    await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(VAULT_DB_NAME, 1);
+        request.onsuccess = () => {
+            const db = request.result;
+            const tx = db.transaction(VAULT_STORE, 'readwrite');
+            const putReq = tx.objectStore(VAULT_STORE).put(key, VAULT_KEY_NAME);
+            putReq.onsuccess = () => resolve();
+            putReq.onerror = () => reject(putReq.error);
+        };
+        request.onerror = () => reject(request.error);
+    });
+
+    cryptoKey = key;
+    return key;
 }
 
 async function encrypt(data: string): Promise<ArrayBuffer> {
@@ -354,31 +365,41 @@ export async function getChats(): Promise<LocalChatEntry[]> {
 
 export async function updateChatCachedAvatarFileId(chatId: string, fileId: string | null): Promise<void> {
     const db = await openDataDb();
-    const tx = db.transaction(CHATS_STORE, 'readwrite');
-    const store = tx.objectStore(CHATS_STORE);
-    const record = await idbGet<any>(store, chatId);
+
+    // Step 1: Read in a readonly transaction
+    const readTx = db.transaction(CHATS_STORE, 'readonly');
+    const record = await idbGet<any>(readTx.objectStore(CHATS_STORE), chatId);
     if (!record) return;
 
+    // Step 2: Decrypt + modify + encrypt OUTSIDE any transaction (async crypto)
     const chat = await decryptChatEntry(record);
     chat.cached_avatar_file_id = fileId;
     chat.updated_at = new Date().toISOString();
     const encrypted = await encryptChatEntry(chat);
-    await idbPut(store, encrypted);
+
+    // Step 3: Write in a fresh readwrite transaction
+    const writeTx = db.transaction(CHATS_STORE, 'readwrite');
+    await idbPut(writeTx.objectStore(CHATS_STORE), encrypted);
 }
 
 export async function updateChatCachedAvatarFileIdByUserId(userId: string, fileId: string | null): Promise<void> {
     const db = await openDataDb();
-    const tx = db.transaction(CHATS_STORE, 'readwrite');
-    const store = tx.objectStore(CHATS_STORE);
-    const records = await idbGetAll<any>(store);
 
+    // Step 1: Read all records in a readonly transaction
+    const readTx = db.transaction(CHATS_STORE, 'readonly');
+    const records = await idbGetAll<any>(readTx.objectStore(CHATS_STORE));
+
+    // Step 2: Find target, decrypt + modify + encrypt OUTSIDE any transaction
     for (const record of records) {
         const chat = await decryptChatEntry(record);
         if (chat.other_user_id === userId) {
             chat.cached_avatar_file_id = fileId;
             chat.updated_at = new Date().toISOString();
             const encrypted = await encryptChatEntry(chat);
-            await idbPut(store, encrypted);
+
+            // Step 3: Write in a fresh readwrite transaction
+            const writeTx = db.transaction(CHATS_STORE, 'readwrite');
+            await idbPut(writeTx.objectStore(CHATS_STORE), encrypted);
             return;
         }
     }
@@ -425,13 +446,15 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
         const db = await openDataDb();
 
         // Step 1: Read + decrypt OUTSIDE the write transaction (crypto awaits cause auto-commit)
-        const readTx = db.transaction(MESSAGES_STORE, 'readonly');
-        const readStore = readTx.objectStore(MESSAGES_STORE);
-        // Try temp_id index first; fall back to message_id (PK) for rows where temp_id is NULL
-        const index = readStore.index('idx_temp_id');
-        let records = await idbGetAll<any>(index, tempId);
+        // Use separate transactions for index lookup and PK fallback — the first await
+        // deactivates the transaction per W3C spec, so the fallback needs its own tx.
+        const indexTx = db.transaction(MESSAGES_STORE, 'readonly');
+        const indexStore = indexTx.objectStore(MESSAGES_STORE);
+        let records = await idbGetAll<any>(indexStore.index('idx_temp_id'), tempId);
         if (records.length === 0) {
-            const byPk = await idbGet<any>(readStore, tempId);
+            // Fresh transaction for PK fallback (previous tx already deactivated)
+            const pkTx = db.transaction(MESSAGES_STORE, 'readonly');
+            const byPk = await idbGet<any>(pkTx.objectStore(MESSAGES_STORE), tempId);
             if (byPk) records = [byPk];
         }
         if (records.length === 0) return;
@@ -622,8 +645,12 @@ export async function getStorageStats(): Promise<{ totalMessages: number; pendin
     const tx = db.transaction([MESSAGES_STORE, CHATS_STORE], 'readonly');
     const messageStore = tx.objectStore(MESSAGES_STORE);
     const chatStore = tx.objectStore(CHATS_STORE);
-    const all = await idbGetAll<any>(messageStore);
-    const chatsCount = await idbCount(chatStore);
+    // Fire both IDB requests in the same tick before awaiting — keeps tx active
+    // per W3C spec (pending requests prevent auto-commit)
+    const [all, chatsCount] = await Promise.all([
+        idbGetAll<any>(messageStore),
+        idbCount(chatStore),
+    ]);
 
     let total = 0;
     let pending = 0;
@@ -832,16 +859,19 @@ export async function clearChatMessages(chatId: string): Promise<void> {
         }
 
         // 3. Delete all message rows for chat_id (chat row is intentionally kept)
+        // Fire all delete requests in the same tick — per W3C spec, pending IDB
+        // requests keep the transaction active. Awaiting sequentially would risk
+        // auto-commit between iterations in strict browsers (Firefox).
         if (messageIds.length > 0) {
             const delMsgTx = db.transaction(MESSAGES_STORE, 'readwrite');
             const delMsgStore = delMsgTx.objectStore(MESSAGES_STORE);
-            for (const id of messageIds) {
-                await new Promise<void>((resolve, reject) => {
+            await Promise.all(messageIds.map(id =>
+                new Promise<void>((resolve, reject) => {
                     const req = delMsgStore.delete(id);
                     req.onsuccess = () => resolve();
                     req.onerror = () => reject(req.error);
-                });
-            }
+                })
+            ));
         }
 
         console.log(`[ChatStorage:Web] clearChatMessages: cleared ${messageIds.length} message(s) for chat ${chatId} (chat row preserved)`);
