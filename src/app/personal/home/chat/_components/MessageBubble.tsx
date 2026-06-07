@@ -300,8 +300,8 @@ const MessageBubble = memo(
                     <View style={styles.statusContainer}>
                         <MaterialCommunityIcon
                             name="checkmark.all"
-                            color={isRead ? theme.colors.primary : "#999"}
-                            size={16}
+                            color={isRead ? "#10B981" : "#999"}
+                            size={20}
                         />
                     </View>
                 );
@@ -309,7 +309,7 @@ const MessageBubble = memo(
 
             if (status === 'sent') return (
                 <View style={styles.statusContainer}>
-                    <MaterialCommunityIcon name="checkmark" size={16} color="#999" />
+                    <MaterialCommunityIcon name="checkmark" size={20} color="#999" />
                 </View>
             );
 
