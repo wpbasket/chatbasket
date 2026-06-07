@@ -40,21 +40,19 @@ export default function CreateProfileForm({
         style={[styles.input, showNameError && styles.inputError]}
       />
 
-      <ThemedView style={[styles.profileVisibleToContainer]}>
-        <Dropdown
-          options={[
-            { label: "Public", value: "public" },
-            { label: "Private", value: "private" },
-            { label: "Personal", value: "personal" },
-          ]}
-          value={profileTypeValue ?? undefined}
-          placeholder="Select profile visibility"
-          error={showProfileTypeError}
-          searchable={false}
-          style={styles.reverseModalBackground}
-          onSelect={(value) => onSelectProfileType(value as "public" | "private" | "personal")}
-        />
-      </ThemedView>
+      <Dropdown
+        options={[
+          { label: "Public", value: "public" },
+          { label: "Private", value: "private" },
+          { label: "Personal", value: "personal" },
+        ]}
+        value={profileTypeValue ?? undefined}
+        placeholder="Select profile visibility"
+        containerStyle={styles.profileVisibleToContainer}
+        error={showProfileTypeError}
+        searchable={false}
+        onSelect={(value) => onSelectProfileType(value as "public" | "private" | "personal")}
+      />
 
       <Pressable
         style={({ pressed }) => [

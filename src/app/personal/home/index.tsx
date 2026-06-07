@@ -61,7 +61,7 @@ const PersonalHome = React.memo(() => {
         label: 'Delete Chat',
         onPress: async () => {
           const confirmed = await showConfirmDialog(
-            'Delete all messages in this chat from this device? The chat will be hidden until a new message arrives. This cannot be undone.',
+            'Are you sure you want to delete this chat?',
             { confirmText: 'Delete', confirmVariant: 'destructive' }
           );
           if (!confirmed) return;

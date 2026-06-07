@@ -24,6 +24,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     ...theme.radii.asymmetric,
     ...theme.padding.asymmetric,
     color: theme.colors.text,
+    outline: 'none',
   },
   inputError: {
     borderColor: theme.colors.red,
@@ -50,6 +51,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     ...theme.padding.asymmetric,
     paddingVertical: 10,
     color: theme.colors.text,
+    outline: 'none',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -66,6 +68,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     height: '100%',
     color: theme.colors.text,
     paddingRight: 10,
+    outline: 'none',
   },
   inputButton: {
     justifyContent: 'center',
@@ -74,14 +77,8 @@ const styles = StyleSheet.create((theme, rt) => ({
   profileVisibleToContainer: {
     width: 350,
     height: 40,
-    ...theme.radii.asymmetric,
     borderColor: theme.colors.neutral5,
     borderWidth: 1,
-  },
-  reverseModalBackground: {
-    height: 38,
-    width: 340,
-    borderWidth: 0,
     ...theme.radii.asymmetric,
     ...theme.padding.asymmetric,
   },
