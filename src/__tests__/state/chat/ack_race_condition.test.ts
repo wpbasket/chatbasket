@@ -498,6 +498,66 @@ describe('syncPendingMessages ACK race condition', () => {
         expect(messages[1].created_at).toBe('2026-01-01T00:00:00.000Z');
     });
 
+    it('replaceMessage updates selectedMessageIds when temp ID is swapped', async () => {
+        const tempMsg = makeMessage({
+            message_id: 'temp-123',
+            temp_id: 'temp-123',
+            is_from_me: true,
+            message_type: 'text',
+            status: 'pending',
+            content: 'Hello',
+        });
+
+        await $chatMessagesState.addMessage('chat-1', tempMsg, { skipAck: true });
+
+        // Select the pending message
+        $chatMessagesState.toggleSelectMode('chat-1', true);
+        $chatMessagesState.toggleMessageSelection('chat-1', 'temp-123');
+
+        expect($chatMessagesState.chats['chat-1'].selectedMessageIds.peek()).toEqual(['temp-123']);
+
+        // Replace temp with real message
+        $chatMessagesState.replaceMessage('chat-1', 'temp-123', {
+            ...tempMsg,
+            message_id: 'real-456',
+            temp_id: null,
+            status: 'sent',
+        });
+
+        // selectedMessageIds should now have the real ID
+        expect($chatMessagesState.chats['chat-1'].selectedMessageIds.peek()).toEqual(['real-456']);
+    });
+
+    it('replaceMessage does not affect selectedMessageIds when temp ID was not selected', async () => {
+        const tempMsg = makeMessage({
+            message_id: 'temp-789',
+            temp_id: 'temp-789',
+            is_from_me: true,
+            message_type: 'text',
+            status: 'pending',
+            content: 'World',
+        });
+
+        await $chatMessagesState.addMessage('chat-1', tempMsg, { skipAck: true });
+
+        // Select a different message
+        $chatMessagesState.toggleSelectMode('chat-1', true);
+        $chatMessagesState.toggleMessageSelection('chat-1', 'other-msg');
+
+        expect($chatMessagesState.chats['chat-1'].selectedMessageIds.peek()).toEqual(['other-msg']);
+
+        // Replace temp with real message
+        $chatMessagesState.replaceMessage('chat-1', 'temp-789', {
+            ...tempMsg,
+            message_id: 'real-999',
+            temp_id: null,
+            status: 'sent',
+        });
+
+        // selectedMessageIds should be unchanged
+        expect($chatMessagesState.chats['chat-1'].selectedMessageIds.peek()).toEqual(['other-msg']);
+    });
+
     it('keeps local created_at order for all outgoing message types across out-of-order promotion and sync', async () => {
         const textTemp = makeMessage({
             message_id: 'temp-text',

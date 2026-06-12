@@ -1269,6 +1269,13 @@ const chatActions = {
             chat.messagesById[oldMessageId]?.delete();
             chat.messagesById[stableNewMessage.message_id].set(stableNewMessage);
             chat.messageIds.set(updated.map((m: MessageEntry) => m.message_id));
+
+            // Also update selectedMessageIds if the old temp ID was selected
+            const currentSelected = chat.selectedMessageIds.peek();
+            if (currentSelected.includes(oldMessageId)) {
+                const updatedSelected = currentSelected.map(id => id === oldMessageId ? stableNewMessage.message_id : id);
+                chat.selectedMessageIds.set(updatedSelected);
+            }
         });
     },
 

@@ -43,7 +43,7 @@ import { $contactRequestsState, $contactsState } from '@/state/personalState/con
 import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
 import { PersonalUtilAddContactById, isImmediateContactCode, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
-import { applyOutgoingReceiptStatus, deriveMessageTickState, canBulkUnsend } from '@/utils/personalUtils/util.messageTick';
+import { applyOutgoingReceiptStatus, deriveMessageTickState, isMessageUnsendable } from '@/utils/personalUtils/util.messageTick';
 import { mapContactToEntry, PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
 
 const READABLE_MIME_TYPES = new Set([
@@ -170,9 +170,32 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
     const messageIds = useValue(() => $chatMessagesState.chats[chatId]?.messageIds.get() || []);
 
+    // Explicit subscriptions for ALL dynamic fields that change via WebSocket
+    const messageStatus = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.status.get());
+    const messageDelivered = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.delivered_to_recipient.get());
+    const messageProgress = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.progress.get());
+    const messageLocalUri = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.local_uri.get());
+    const messageViewUrl = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.view_url.get());
+    const messageDownloadUrl = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.download_url.get());
+    const messageFileName = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.file_name.get());
+    const messageFileMimeType = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.file_mime_type.get());
+
     if (!message) return null;
 
-    const { status, delivered } = deriveMessageTickState(message);
+    // Merge snapshot with all live reactive values
+    const messageWithLiveUpdates = {
+        ...message,
+        status: messageStatus,
+        delivered_to_recipient: messageDelivered,
+        progress: messageProgress,
+        local_uri: messageLocalUri,
+        view_url: messageViewUrl,
+        download_url: messageDownloadUrl,
+        file_name: messageFileName,
+        file_mime_type: messageFileMimeType,
+    };
+
+    const { status, delivered } = deriveMessageTickState(messageWithLiveUpdates);
 
     const renderDateHeader = () => {
         const prevMessageId = messageIds[index + 1];
@@ -1231,12 +1254,22 @@ const ChatContentContainer = React.memo(({
                             const isSelectMode = $chatMessagesState.chats[chat_id]?.isSelectMode.get();
                             const selectedCount = $chatMessagesState.chats[chat_id]?.selectedMessageIds.get()?.length || 0;
 
-                            const messagesById = $chatMessagesState.chats[chat_id]?.messagesById.peek() || {};
                             const selectedIds = $chatMessagesState.chats[chat_id]?.selectedMessageIds.peek() || [];
 
                             // Show Unsend only when every selected message is:
                             // - from me, not already unsent, not read by recipient, not in a terminal state
-                            const canUnsend = canBulkUnsend(selectedIds, messagesById);
+                            // Subscribe to each selected message's key fields so read receipts
+                            // arriving via WebSocket reactively update the bar.
+                            const canUnsend = selectedIds.length > 0 && selectedIds.every(id => {
+                                const msg$ = $chatMessagesState.chats[chat_id]?.messagesById[id];
+                                if (!msg$) return false;
+                                return isMessageUnsendable({
+                                    is_from_me: msg$.is_from_me.get(),
+                                    status: msg$.status.get(),
+                                    is_unsent: msg$.is_unsent.get(),
+                                    message_type: msg$.message_type.get(),
+                                });
+                            });
 
                             if (isSelectMode) {
                                 return (
