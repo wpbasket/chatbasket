@@ -43,7 +43,7 @@ import { $contactRequestsState, $contactsState } from '@/state/personalState/con
 import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
 import { PersonalUtilAddContactById, isImmediateContactCode, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
-import { applyOutgoingReceiptStatus, deriveMessageTickState } from '@/utils/personalUtils/util.messageTick';
+import { applyOutgoingReceiptStatus, deriveMessageTickState, canBulkUnsend } from '@/utils/personalUtils/util.messageTick';
 import { mapContactToEntry, PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
 
 const READABLE_MIME_TYPES = new Set([
@@ -1233,7 +1233,10 @@ const ChatContentContainer = React.memo(({
 
                             const messagesById = $chatMessagesState.chats[chat_id]?.messagesById.peek() || {};
                             const selectedIds = $chatMessagesState.chats[chat_id]?.selectedMessageIds.peek() || [];
-                            const allFromMe = selectedIds.every(id => messagesById[id]?.is_from_me);
+
+                            // Show Unsend only when every selected message is:
+                            // - from me, not already unsent, not read by recipient, not in a terminal state
+                            const canUnsend = canBulkUnsend(selectedIds, messagesById);
 
                             if (isSelectMode) {
                                 return (
@@ -1242,7 +1245,7 @@ const ChatContentContainer = React.memo(({
                                         onUnsend={handleBulkUnsend}
                                         onDelete={handleBulkDelete}
                                         onCancel={handleCancelSelection}
-                                        showUnsend={allFromMe && selectedCount > 0}
+                                        showUnsend={canUnsend}
                                     />
                                 );
                             }

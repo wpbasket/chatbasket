@@ -52,3 +52,34 @@ export function applyOutgoingReceiptStatus<T extends ReceiptStatusInput>(message
         status: readByReceipt && delivered ? 'read' : status,
     } as T;
 }
+
+// --- Bulk Unsend eligibility ---
+
+type UnsendableMsg = Pick<MessageEntry, 'is_from_me' | 'status' | 'is_unsent' | 'message_type'>;
+
+const UNSENDABLE_TERMINAL = new Set<MessageEntry['status']>(['pending', 'sending', 'error', 'failed']);
+
+/**
+ * A message is unsendable via bulk-unsend when:
+ *   - it exists (not undefined/missing)
+ *   - it is from the current user
+ *   - it is not already unsent (flag or message_type)
+ *   - it has not been read by the recipient (double green tick)
+ *   - it is not in a terminal send-failure state
+ */
+export function isMessageUnsendable(msg: UnsendableMsg | undefined | null): boolean {
+    if (!msg) return false;
+    if (!msg.is_from_me) return false;
+    if (msg.is_unsent || msg.message_type === 'unsent') return false;
+    if (msg.status === 'read') return false;
+    if (msg.status && UNSENDABLE_TERMINAL.has(msg.status)) return false;
+    return true;
+}
+
+export function canBulkUnsend(
+    selectedIds: string[],
+    messagesById: Record<string, UnsendableMsg | undefined>,
+): boolean {
+    if (selectedIds.length === 0) return false;
+    return selectedIds.every(id => isMessageUnsendable(messagesById[id]));
+}
