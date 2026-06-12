@@ -115,7 +115,8 @@
       ],
       "expo-asset",
       "expo-image",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

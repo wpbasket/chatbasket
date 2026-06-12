@@ -122,8 +122,8 @@ export const Colors = {
     textSecondary: '#B0B4BA',
     border: '#2D2D2D',
     card: '#323235',
-    card1:'#ffffff',
-    bubbleText:'#2C3E50',
+    card1:'rgba(115, 115, 115, 0.7)',
+    bubbleText:'#ffffff',
     bubbleSentAlt: '#009966',
     greenForest: '#064E3B', // Richer deep green for dark mode
     greenSage: '#4F6F52',   // Muted sage for dark mode

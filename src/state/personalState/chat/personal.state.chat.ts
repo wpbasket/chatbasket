@@ -3,6 +3,7 @@ import { useValue } from '@legendapp/state/react';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
+import { applyOutgoingReceiptStatus } from '@/utils/personalUtils/util.messageTick';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { ApiError } from '@/lib/constantLib';
 import { $personalStateUser } from '../user/personal.state.user';
@@ -10,9 +11,63 @@ import { authState } from '../../auth/state.auth';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { downloadIncomingFile } from '@/lib/personalLib/fileSystem/file.download';
 import { normalizeChatEntries, normalizeChatEntry } from '@/lib/storage/personalStorage/chat/chat.storage.normalize';
+import {
+    processIncomingChats,
+    processIncomingMessagesWithE2EEReport,
+    shouldAckE2EEInboundFailure,
+    type E2EEInboundFailureReason,
+} from '@/lib/personalLib/e2ee/e2ee.service';
 
 
 let isSyncingPending = false;
+
+
+function classifyMediaDownloadFailure(err: unknown): E2EEInboundFailureReason {
+    const statusCode = (err as any)?.status || (err as any)?.code;
+    if (statusCode === 404) return 'media_gone';
+
+    const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+    if (message.includes('no local private key')) return 'local_key_unavailable';
+    if (message.includes('missing unwrap public key')) return 'sender_key_unavailable';
+    if (message.includes('network') || message.includes('timeout') || message.includes('abort') || /^http\s+\d+/.test(message)) {
+        return 'media_download_transient';
+    }
+    return 'auth_failed';
+}
+
+const MEDIA_MESSAGE_TYPES = ['image', 'video', 'audio', 'file'];
+
+function needsIncomingMediaLocalPersistence(m: Partial<MessageEntry> & Record<string, any>): boolean {
+    if (m.is_from_me) return false;
+    if (!MEDIA_MESSAGE_TYPES.includes(m.message_type as string)) return false;
+
+    const hasRemoteMedia = !!m.file_id || !!m.download_url;
+    if (!hasRemoteMedia) return false;
+    if (m.local_uri) return false;
+
+    // Terminal failures are locally represented; no file is still expected.
+    if (m.status === 'failed' || m.status === 'error') return false;
+
+    return true;
+}
+
+function getMessageCreatedAtMs(m: Pick<MessageEntry, 'created_at'>): number {
+    const time = new Date(String(m.created_at).replace(' ', 'T')).getTime();
+    return Number.isFinite(time) ? time : 0;
+}
+
+function sortMessagesByLocalCreatedAtDesc<T extends MessageEntry>(messages: T[]): T[] {
+    return [...messages].sort((a, b) => getMessageCreatedAtMs(b) - getMessageCreatedAtMs(a));
+}
+
+function preserveOutgoingLocalCreatedAt(incoming: MessageEntry, existing?: MessageEntry): string {
+    // Local optimistic timestamp is enqueue order. Server timestamps can be
+    // send/upload completion order, so never let sync move an already-visible
+    // outgoing message (text/image/video/audio/file).
+    if (existing?.is_from_me && existing.created_at) return existing.created_at;
+    return incoming.created_at;
+}
+
 /**
  * Auto-ACK incoming messages (Recipient ACK) AND outgoing syncs (Sender ACK).
  * Phase D: This is fire-and-forget — persistence happens BEFORE this is called.
@@ -26,19 +81,16 @@ export const ackIncomingMessages = async (messages: MessageEntry[], options?: { 
     // --- PART A: Recipient Delivery ACK (Incoming messages we haven't ACK'd) ---
     const toAck = messages.filter(m => {
         if (m.is_from_me) return false;
+        if ((m as any).e2ee_should_ack === false) return false;
 
         // Check if already ACK'd according to our role (Primary vs Non-Primary)
         const alreadyAcked = m.delivered_to_recipient && (!isPrimary || m.delivered_to_recipient_primary);
         if (alreadyAcked) return false;
 
-        // --- Safety Filter: NEVER ACK media without local persistence ---
-        // Callers that manage downloads themselves (syncPendingMessages, soft-delete)
-        // pass skipMediaCheck to bypass this guard.
+        // --- Safety Filter: NEVER ACK visible incoming media without local persistence ---
+        // Only soft-deleted rows may bypass this guard.
         if (!options?.skipMediaCheck) {
-            const isMedia = ['image', 'video', 'audio', 'file'].includes(m.message_type);
-            // ONLY block ACK if there is a URL to download and we haven't persisted it yet.
-            // If download_url is missing, it's a broken message—ACK it to stop the loop.
-            if (isMedia && m.download_url && !m.local_uri) {
+            if (needsIncomingMediaLocalPersistence(m)) {
                 return false;
             }
         }
@@ -67,6 +119,8 @@ export const ackIncomingMessages = async (messages: MessageEntry[], options?: { 
 
             batch(() => {
                 for (const msg of toAck) {
+                    msg.delivered_to_recipient = true;
+                    if (isPrimary) msg.delivered_to_recipient_primary = true;
                     const msg$ = chatMessages$.chats[msg.chat_id]?.messagesById[msg.message_id];
                     if (msg$?.peek()) {
                         msg$.delivered_to_recipient.set(true);
@@ -97,6 +151,7 @@ export const ackIncomingMessages = async (messages: MessageEntry[], options?: { 
                 await ChatStorage.updateMessageStatus(m.message_id, {
                     synced_to_sender_primary: true,
                 } as any);
+                m.synced_to_sender_primary = true;
 
                 const msg$ = chatMessages$.chats[m.chat_id]?.messagesById[m.message_id];
                 if (msg$?.peek()) msg$.synced_to_sender_primary.set(true);
@@ -194,6 +249,9 @@ const state$ = observable({
         state$.error.set(value);
     },
     async setChats(entries: ChatEntry[]) {
+        // E2EE: sync the key registry from chat metadata + decrypt incoming text
+        // previews (failure → "" per spec) BEFORE normalization/persistence.
+        await processIncomingChats(entries);
         const normalized = normalizeChatEntries(entries);
         // Mark all server-returned chats as contactable
         for (const chat of normalized) {
@@ -472,7 +530,7 @@ export { useValue };
 interface ChatMessagesState {
     setLoading: (chatId: string, value: boolean) => void;
     setError: (chatId: string, value: string | null) => void;
-    setMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) => Promise<void>;
+    setMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean; allowPersistedPlaintext?: boolean }) => Promise<void>;
     prependMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) => Promise<void>;
     addMessage: (chatId: string, entry: MessageEntry, options?: { skipAck?: boolean; skipSenderSync?: boolean }) => Promise<void>;
     updateMessageStatus: (chatId: string, messageId: string, updates: Partial<MessageEntry>) => void;
@@ -493,7 +551,7 @@ interface ChatMessagesState {
     reset: (chatId?: string) => void;
     syncPendingMessages: () => Promise<void>;
     debouncedMarkRead: (chatId: string) => void;
-    downloadMediaBatch: (chatId: string, messages: MessageEntry[]) => Promise<Set<string>>;
+    downloadMediaBatch: (chatId: string, messages: MessageEntry[], ackOptions?: { skipSenderSync?: boolean }) => Promise<Set<string>>;
     activeChatId: Observable<string | null>;
     isChatOpen: Observable<boolean>;
     chats: Observable<Record<string, ChatData>>;
@@ -553,8 +611,27 @@ const chatActions = {
         ensureChatInternal(chatId).error.set(value);
     },
 
-    async setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
+    async setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean; allowPersistedPlaintext?: boolean }) {
         const chat = ensureChatInternal(chatId);
+        const receiptState = $chatListState.chatsById[chatId]?.peek();
+        const receiptHydratedEntries = entries.map(entry => applyOutgoingReceiptStatus(entry, {
+            deliveredAt: receiptState?.other_user_last_delivered_at,
+            readAt: receiptState?.other_user_last_read_at,
+        }));
+
+        // E2EE: save sender keys + decrypt incoming text BEFORE persistence.
+        // Local storage replays may contain already-decrypted plaintext + persisted key metadata.
+        const e2eeReport = await processIncomingMessagesWithE2EEReport(receiptHydratedEntries, {
+            resolveSenderId: (m) => $chatListState.chatsById[m.chat_id]?.peek()?.other_user_id,
+            allowPersistedPlaintext: options?.allowPersistedPlaintext === true,
+        });
+        const e2eeNoAckIds = new Set(
+            e2eeReport.failures
+                .filter(f => !f.ack && f.message_id)
+                .map(f => f.message_id as string),
+        );
+        const ackEligibleEntries = receiptHydratedEntries.filter(e => !e2eeNoAckIds.has(e.message_id));
+
         const existingByIdSnapshot = chat.messagesById.peek();
 
         // Phase D: Get soft-deleted IDs to prevent resurrection via INSERT OR REPLACE.
@@ -564,13 +641,17 @@ const chatActions = {
 
         // Phase D: Persist entries, preserving local_uri from in-memory state.
         // Filter out soft-deleted messages to prevent resurrection.
-        if (entries.length > 0) {
-            const entriesToPersist = entries
+        if (receiptHydratedEntries.length > 0) {
+            const entriesToPersist = ackEligibleEntries
                 .filter(e => !deletedSet.has(e.message_id))
-                .map(e => ({
-                    ...e,
-                    local_uri: e.local_uri || existingByIdSnapshot[e.message_id]?.local_uri || null,
-                }));
+                .map(e => {
+                    const existing = existingByIdSnapshot[e.message_id];
+                    return {
+                        ...e,
+                        created_at: preserveOutgoingLocalCreatedAt(e, existing),
+                        local_uri: e.local_uri || existing?.local_uri || null,
+                    };
+                });
             if (entriesToPersist.length > 0) {
                 await ChatStorage.insertMessages(entriesToPersist);
             }
@@ -578,24 +659,29 @@ const chatActions = {
 
         batch(() => {
             const existingById = chat.messagesById.peek();
+            const currentMessages = chat.messages.peek();
 
             // Merge: Keep existing local/promoted messages, update them if server has newer info.
-            // IMPORTANT: Preserve local_uri and skip soft-deleted entries.
+            // IMPORTANT: Preserve local_uri/local outgoing created_at and skip soft-deleted entries.
             const mergedById = { ...existingById };
-            for (const entry of entries) {
+            for (const entry of ackEligibleEntries) {
                 if (deletedSet.has(entry.message_id)) continue;
                 const existing = mergedById[entry.message_id];
                 mergedById[entry.message_id] = {
                     ...(existing || {}),
                     ...entry,
                     // Preserve local fields that the server never sends
+                    created_at: preserveOutgoingLocalCreatedAt(entry, existing),
                     local_uri: entry.local_uri || existing?.local_uri || null,
                 };
             }
 
-            const mergedList = Object.values(mergedById).sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
+            const currentIds = new Set(currentMessages.map((m: MessageEntry) => m.message_id));
+            const mergedSource = [
+                ...currentMessages.map((m: MessageEntry) => mergedById[m.message_id]).filter(Boolean),
+                ...Object.values(mergedById).filter(m => !currentIds.has(m.message_id)),
+            ] as MessageEntry[];
+            const mergedList = sortMessagesByLocalCreatedAtDesc(mergedSource);
 
             chat.messages.set(mergedList);
             chat.messagesById.set(mergedById);
@@ -606,13 +692,17 @@ const chatActions = {
             $chatListState.incrementMessageCount(chatId, mergedList.length - ($chatListState.chatsById[chatId]?.local_message_count.peek() ?? 0));
         });
 
-        // Auto-Ack AFTER persist (fire-and-forget)
-        // [Phase 4b] Pickup missing media for the newly synced messages before ACK
-        const downloadFailedIds = await this.downloadMediaBatch(chatId, entries);
+        // ACK safe messages immediately; pending media is skipped by the local_uri guard.
+        ackIncomingMessages(ackEligibleEntries, options).catch(err =>
+            console.warn('[ChatState] setMessages early ACK failed', err)
+        );
+
+        // [Phase 4b] Pickup missing media; each completed media ACKs itself.
+        const downloadFailedIds = await this.downloadMediaBatch(chatId, ackEligibleEntries, options);
 
         // Filter out download-failed messages from ACK batch
         // (including soft-deleted ones) so the server stops re-delivering SUCCESSES
-        const toAck = entries.filter(m => !downloadFailedIds.has(m.message_id));
+        const toAck = ackEligibleEntries.filter(m => !downloadFailedIds.has(m.message_id));
 
         ackIncomingMessages(toAck, options).catch(err =>
             console.warn('[ChatState] setMessages ACK failed', err)
@@ -621,8 +711,13 @@ const chatActions = {
 
     async prependMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) {
         const chat = ensureChatInternal(chatId);
+        const receiptState = $chatListState.chatsById[chatId]?.peek();
+        const receiptHydratedEntries = entries.map(entry => applyOutgoingReceiptStatus(entry, {
+            deliveredAt: receiptState?.other_user_last_delivered_at,
+            readAt: receiptState?.other_user_last_read_at,
+        }));
         const existing = chat.messagesById.peek();
-        const newEntries = entries.filter((e) => !existing[e.message_id]);
+        const newEntries = receiptHydratedEntries.filter((e) => !existing[e.message_id]);
 
         if (newEntries.length === 0) {
             chat.hasMore.set(false);
@@ -636,20 +731,29 @@ const chatActions = {
         const deletedSet = new Set(deletedIds);
         const safeToPersist = newEntries.filter(e => !deletedSet.has(e.message_id));
 
+        // E2EE: save sender keys + decrypt incoming text BEFORE persistence (pagination path)
+        const e2eeReport = await processIncomingMessagesWithE2EEReport(safeToPersist, {
+            resolveSenderId: (m) => $chatListState.chatsById[m.chat_id]?.peek()?.other_user_id,
+        });
+        const e2eeNoAckIds = new Set(
+            e2eeReport.failures
+                .filter(f => !f.ack && f.message_id)
+                .map(f => f.message_id as string),
+        );
+        const ackEligibleEntries = safeToPersist.filter(e => !e2eeNoAckIds.has(e.message_id));
+
         // Phase D: Persist BEFORE ACK (Rule 1)
-        if (safeToPersist.length > 0) {
-            await ChatStorage.insertMessages(safeToPersist);
+        if (ackEligibleEntries.length > 0) {
+            await ChatStorage.insertMessages(ackEligibleEntries);
         }
 
         batch(() => {
             const current = chat.messages.get();
-            const merged = [...current, ...safeToPersist].sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
+            const merged = sortMessagesByLocalCreatedAtDesc([...current, ...ackEligibleEntries]);
 
             chat.messages.set(merged);
             const byId = { ...existing };
-            for (const entry of safeToPersist) {
+            for (const entry of ackEligibleEntries) {
                 byId[entry.message_id] = entry;
             }
             chat.messagesById.set(byId);
@@ -660,11 +764,16 @@ const chatActions = {
             $chatListState.incrementMessageCount(chatId, merged.length - ($chatListState.chatsById[chatId]?.local_message_count.peek() ?? 0));
         });
 
-        // [Phase 4b] Pickup missing media for the prepended messages before ACK
-        const downloadFailedIds = await this.downloadMediaBatch(chatId, safeToPersist);
+        // ACK safe messages immediately; pending media is skipped by the local_uri guard.
+        ackIncomingMessages(ackEligibleEntries, options).catch(err =>
+            console.warn('[ChatState] prependMessages early ACK failed', err)
+        );
+
+        // [Phase 4b] Pickup missing media; each completed media ACKs itself.
+        const downloadFailedIds = await this.downloadMediaBatch(chatId, ackEligibleEntries, options);
 
         // Filter out download-failed messages from ACK batch
-        const toAck = safeToPersist.filter(m => !downloadFailedIds.has(m.message_id));
+        const toAck = ackEligibleEntries.filter(m => !downloadFailedIds.has(m.message_id));
 
         ackIncomingMessages(toAck, options).catch(err =>
             console.warn('[ChatState] prependMessages ACK failed', err)
@@ -675,7 +784,7 @@ const chatActions = {
      * Scans a batch of messages and triggers downloads for any missing media.
      * This covers historical sync, pagination, and boot scenarios.
      */
-    async downloadMediaBatch(chatId: string, messages: MessageEntry[]): Promise<Set<string>> {
+    async downloadMediaBatch(chatId: string, messages: MessageEntry[], ackOptions?: { skipSenderSync?: boolean }): Promise<Set<string>> {
         const downloadFailedIds = new Set<string>();
         const mediaMessages = messages.filter(m =>
             ['image', 'video', 'audio', 'file'].includes(m.message_type) &&
@@ -684,9 +793,32 @@ const chatActions = {
 
         if (mediaMessages.length === 0) return downloadFailedIds;
 
+        // Refresh self-heal: server entries never carry local_uri, but the
+        // stored row may already reference a local copy — e.g. the SENDER's
+        // staged plaintext written by the outbox promotion. Restore it instead
+        // of re-downloading: a re-download of an own encrypted message would
+        // store the server-side ciphertext over the readable copy, and the
+        // insertMessages below would null the stored local_uri.
+        try {
+            const storedRows = await ChatStorage.getMessagesByIds(mediaMessages.map(m => m.message_id));
+            const storedUriById = new Map(storedRows.map(r => [r.message_id, r.local_uri]));
+            for (const msg of mediaMessages) {
+                const storedUri = storedUriById.get(msg.message_id);
+                if (storedUri) {
+                    msg.local_uri = storedUri; // mutate entry so persistence + ACK filter see it
+                    this.updateMessageStatus(chatId, msg.message_id, { local_uri: storedUri });
+                }
+            }
+        } catch (err) {
+            console.warn('[ChatActions] downloadMediaBatch: stored local_uri lookup failed', err);
+        }
+
+        const toDownload = mediaMessages.filter(m => !m.local_uri);
+        if (toDownload.length === 0) return downloadFailedIds;
+
         // Ensure tokens are fresh before starting the batch download (User Request: Refresh only for downloads)
-        await resolveMediaUrls(mediaMessages);
-        await ChatStorage.insertMessages(mediaMessages);
+        await resolveMediaUrls(toDownload);
+        await ChatStorage.insertMessages(toDownload);
 
         // Sentinel URI to mark permanently failed downloads — survives merges
         // because local_uri is preserved in setMessages/prependMessages.
@@ -696,7 +828,7 @@ const chatActions = {
         // Process in small serial batches to avoid overwhelming the network
         // We use a simple loop with await to keep concurrency low (1 at a time per batch call)
         // because multiple pagination/sync calls might run in parallel.
-        for (const msg of mediaMessages) {
+        for (const msg of toDownload) {
             try {
                 // If the message is missing a download URL, it's a permanent server-side data error.
                 // Mark with sentinel so we don't retry and the UI shows the error icon.
@@ -705,6 +837,9 @@ const chatActions = {
                     msg.local_uri = DOWNLOAD_FAILED_URI;
                     this.updateMessageStatus(chatId, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
                     await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
+                    await ackIncomingMessages([msg], ackOptions).catch(err =>
+                        console.warn('[ChatActions] downloadMediaBatch missing-url ACK failed', err)
+                    );
                     continue;
                 }
 
@@ -724,14 +859,30 @@ const chatActions = {
                         local_uri: localUri,
                         progress: 100
                     });
+                    await ackIncomingMessages([msg], ackOptions).catch(err =>
+                        console.warn('[ChatActions] downloadMediaBatch media ACK failed', err)
+                    );
                 }
             } catch (err) {
-                console.error(`[ChatActions] downloadMediaBatch failed for ${msg.message_id}`, err);
-                downloadFailedIds.add(msg.message_id);
-                // Persist sentinel so we don't retry on next reload
+                const reason = classifyMediaDownloadFailure(err);
+                const shouldAck = shouldAckE2EEInboundFailure(reason);
+                console.error(`[ChatActions] downloadMediaBatch failed for ${msg.message_id} (${reason})`, err);
+
+                if (!shouldAck) {
+                    // Recoverable: no ACK, no permanent sentinel. Server/relay can retry after key/network recovery.
+                    downloadFailedIds.add(msg.message_id);
+                    this.updateMessageStatus(chatId, msg.message_id, { progress: 0 });
+                    continue;
+                }
+
+                // Terminal: persist sentinel then allow ACK to stop permanent redelivery.
                 msg.local_uri = DOWNLOAD_FAILED_URI;
                 this.updateMessageStatus(chatId, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
                 await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
+                await ackIncomingMessages([msg], ackOptions).catch(ackErr =>
+                    console.warn('[ChatActions] downloadMediaBatch terminal-failure ACK failed', ackErr)
+                );
+                if (chatMessages$.activeChatId.peek() === chatId) this.debouncedMarkRead(chatId);
             }
         }
         return downloadFailedIds;
@@ -765,7 +916,7 @@ const chatActions = {
 
         batch(() => {
             const current = chat.messages.peek();
-            const updated = [resolvedEntry, ...current].slice(0, 1000);
+            const updated = sortMessagesByLocalCreatedAtDesc([resolvedEntry, ...current]).slice(0, 1000);
 
             chat.messages.set(updated);
             chat.messagesById[resolvedEntry.message_id].set(resolvedEntry);
@@ -819,38 +970,71 @@ const chatActions = {
     markMessagesDelivered(chatId: string, messageIds: string[]) {
         let shouldPersistChat = false;
         const changedMessageIds: string[] = [];
+        const changedReadMessageIds: string[] = [];
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const idSet = new Set(messageIds);
+            const chatEntry$ = $chatListState.chatsById[chatId];
+            const chatEntry = chatEntry$?.peek();
+            const readTargetTime = chatEntry?.other_user_last_read_at
+                ? new Date(String(chatEntry.other_user_last_read_at).replace(' ', 'T')).getTime()
+                : NaN;
 
             messageIds.forEach(id => {
                 const msg$ = chat.messagesById[id];
-                if (msg$.peek() && !msg$.delivered_to_recipient.peek()) {
+                const msg = msg$?.peek();
+                if (!msg) return;
+
+                const currentMessages = chat.messages.peek();
+                const index = currentMessages.findIndex((m: MessageEntry) => m.message_id === id);
+
+                if (!msg.delivered_to_recipient) {
                     msg$.delivered_to_recipient.set(true);
                     changedMessageIds.push(id);
-
-                    // Also update in the messages array
-                    const currentMessages = chat.messages.peek();
-                    const index = currentMessages.findIndex((m: MessageEntry) => m.message_id === id);
                     if (index !== -1) {
                         chat.messages[index].delivered_to_recipient.set(true);
                     }
                 }
+
+                const msgTime = new Date(msg.created_at).getTime();
+                if (msg.is_from_me && !isNaN(readTargetTime) && msgTime <= readTargetTime && msg.status !== 'read') {
+                    msg$.status.set('read');
+                    if (index !== -1) chat.messages[index].status.set('read');
+                    changedReadMessageIds.push(id);
+                }
             });
 
             // Update chat list preview if any of these were the last message
-            const chatEntry$ = $chatListState.chatsById[chatId];
-            const chatEntry = chatEntry$?.peek();
             if (chatEntry && chatEntry.last_message_id && idSet.has(chatEntry.last_message_id)) {
-                chatEntry$.last_message_status.set('delivered');
-                shouldPersistChat = true;
+                if (chatEntry.last_message_status !== 'read') {
+                    const lastMsgTime = chatEntry.last_message_created_at
+                        ? new Date(chatEntry.last_message_created_at).getTime()
+                        : NaN;
+                    if (chatEntry.last_message_is_from_me && !isNaN(readTargetTime) && !isNaN(lastMsgTime) && lastMsgTime <= readTargetTime) {
+                        chatEntry$.last_message_status.set('read');
+                    } else {
+                        chatEntry$.last_message_status.set('delivered');
+                    }
+                    shouldPersistChat = true;
+                }
             }
         });
         if (changedMessageIds.length > 0) {
+            const readSet = new Set(changedReadMessageIds);
             Promise.all(changedMessageIds.map(id =>
-                ChatStorage.updateMessageStatus(id, { delivered_to_recipient: true } as any)
+                ChatStorage.updateMessageStatus(id, {
+                    delivered_to_recipient: true,
+                    ...(readSet.has(id) ? { status: 'read' } : {}),
+                } as any)
             )).catch(err =>
                 console.warn(`[ChatState] markMessagesDelivered: Storage persist failed for ${chatId}`, err)
+            );
+        }
+        if (changedReadMessageIds.some(id => !changedMessageIds.includes(id))) {
+            Promise.all(changedReadMessageIds.filter(id => !changedMessageIds.includes(id)).map(id =>
+                ChatStorage.updateMessageStatus(id, { status: 'read' } as any)
+            )).catch(err =>
+                console.warn(`[ChatState] markMessagesDelivered: read-status persist failed for ${chatId}`, err)
             );
         }
         if (shouldPersistChat) {
@@ -863,6 +1047,7 @@ const chatActions = {
         console.log(`[ChatState] markMessagesDeliveredUpTo: ENTER chat=${chatId} deliveredAt=${deliveredAt}`);
         let shouldPersistChat = false;
         const changedMessageIds: string[] = [];
+        const changedReadMessageIds: string[] = [];
         batch(() => {
             const chat = ensureChatInternal(chatId);
             const targetTime = new Date(deliveredAt.replace(' ', 'T')).getTime();
@@ -877,16 +1062,28 @@ const chatActions = {
             console.log(`[ChatState] markMessagesDeliveredUpTo: targetTime=${targetTime} (Grace period removed)`);
 
             const currentMessages = chat.messages.peek();
+            const chatEntry$ = $chatListState.chatsById[chatId];
+            const chatEntry = chatEntry$?.peek();
+            const readTargetTime = chatEntry?.other_user_last_read_at
+                ? new Date(String(chatEntry.other_user_last_read_at).replace(' ', 'T')).getTime()
+                : NaN;
             let count = 0;
 
             // 1. Update individual messages
             currentMessages.forEach((m: MessageEntry, index: number) => {
                 const mTime = new Date(m.created_at).getTime();
-                if (m.is_from_me && mTime <= adjustedTargetTime && !m.delivered_to_recipient) {
-                    chat.messagesById[m.message_id].delivered_to_recipient.set(true);
-                    chat.messages[index].delivered_to_recipient.set(true);
-                    changedMessageIds.push(m.message_id);
-                    count++;
+                if (m.is_from_me && mTime <= adjustedTargetTime) {
+                    if (!m.delivered_to_recipient) {
+                        chat.messagesById[m.message_id].delivered_to_recipient.set(true);
+                        chat.messages[index].delivered_to_recipient.set(true);
+                        changedMessageIds.push(m.message_id);
+                        count++;
+                    }
+                    if (!isNaN(readTargetTime) && mTime <= readTargetTime && m.status !== 'read') {
+                        chat.messagesById[m.message_id].status.set('read');
+                        chat.messages[index].status.set('read');
+                        changedReadMessageIds.push(m.message_id);
+                    }
                 }
             });
             console.log(`[ChatState] markMessagesDeliveredUpTo: Updated ${count} individual messages`);
@@ -896,8 +1093,6 @@ const chatActions = {
             // proxy even after the underlying value has been deleted, so the
             // only safe existence check is `.peek()` on the underlying value.
             // Same pattern as `markMessagesReadUpTo` below.
-            const chatEntry$ = $chatListState.chatsById[chatId];
-            const chatEntry = chatEntry$?.peek();
             if (chatEntry) {
                 console.log(`[ChatState] markMessagesDeliveredUpTo: Updating ChatEntry in list. Setting other_user_last_delivered_at=${deliveredAt}`);
                 chatEntry$.other_user_last_delivered_at.set(deliveredAt);
@@ -907,9 +1102,14 @@ const chatActions = {
                 if (chatEntry.last_message_is_from_me && chatEntry.last_message_created_at) {
                     const lastMsgTime = new Date(chatEntry.last_message_created_at).getTime();
                     console.log(`[ChatState] markMessagesDeliveredUpTo: lastMsgTime=${lastMsgTime}, adjustedTargetTime=${adjustedTargetTime}`);
-                    if (lastMsgTime <= adjustedTargetTime && (chatEntry.last_message_status === 'sent' || chatEntry.last_message_status === 'pending')) {
-                        console.log(`[ChatState] markMessagesDeliveredUpTo: Setting last_message_status to 'delivered'`);
-                        chatEntry$.last_message_status.set('delivered');
+                    if (lastMsgTime <= adjustedTargetTime && chatEntry.last_message_status !== 'read') {
+                        if (!isNaN(readTargetTime) && lastMsgTime <= readTargetTime) {
+                            console.log(`[ChatState] markMessagesDeliveredUpTo: Setting last_message_status to 'read'`);
+                            chatEntry$.last_message_status.set('read');
+                        } else if (chatEntry.last_message_status === 'sent' || chatEntry.last_message_status === 'pending') {
+                            console.log(`[ChatState] markMessagesDeliveredUpTo: Setting last_message_status to 'delivered'`);
+                            chatEntry$.last_message_status.set('delivered');
+                        }
                     }
                 }
             } else {
@@ -917,10 +1117,21 @@ const chatActions = {
             }
         });
         if (changedMessageIds.length > 0) {
+            const readSet = new Set(changedReadMessageIds);
             Promise.all(changedMessageIds.map(id =>
-                ChatStorage.updateMessageStatus(id, { delivered_to_recipient: true } as any)
+                ChatStorage.updateMessageStatus(id, {
+                    delivered_to_recipient: true,
+                    ...(readSet.has(id) ? { status: 'read' } : {}),
+                } as any)
             )).catch(err =>
                 console.warn(`[ChatState] markMessagesDeliveredUpTo: Storage persist failed for ${chatId}`, err)
+            );
+        }
+        if (changedReadMessageIds.some(id => !changedMessageIds.includes(id))) {
+            Promise.all(changedReadMessageIds.filter(id => !changedMessageIds.includes(id)).map(id =>
+                ChatStorage.updateMessageStatus(id, { status: 'read' } as any)
+            )).catch(err =>
+                console.warn(`[ChatState] markMessagesDeliveredUpTo: read-status persist failed for ${chatId}`, err)
             );
         }
         if (shouldPersistChat) {
@@ -951,13 +1162,11 @@ const chatActions = {
             // 1. Update individual messages in the active chat store
             currentMessages.forEach((m: MessageEntry, index: number) => {
                 const mTime = new Date(m.created_at).getTime();
-                // If message was sent BEFORE or AT the read time, and is from ME, it's now read.
-                if (m.is_from_me && mTime <= adjustedTargetTime && m.status !== 'read') {
+                // Read receipt is chat-level; UI turns a specific message green only
+                // after that message also has its own delivery ACK.
+                if (m.is_from_me && mTime <= adjustedTargetTime && m.delivered_to_recipient && m.status !== 'read') {
                     chat.messagesById[m.message_id].status.set('read');
                     chat.messages[index].status.set('read');
-                    // Implicitly delivered if read
-                    chat.messagesById[m.message_id].delivered_to_recipient.set(true);
-                    chat.messages[index].delivered_to_recipient.set(true);
                     changedMessageIds.push(m.message_id);
                     count++;
                 }
@@ -973,10 +1182,18 @@ const chatActions = {
                 chatEntry$.other_user_last_read_at.set(readAt);
                 shouldPersistChat = true;
 
-                // If the last message is from me and was sent before the read time, mark preview as 'read'
+                // If the last message is from me and was sent before the read time,
+                // mark preview as read only if that last message is already delivered.
                 if (chatEntry.last_message_is_from_me && chatEntry.last_message_created_at) {
                     const lastMsgTime = new Date(chatEntry.last_message_created_at).getTime();
-                    if (lastMsgTime <= adjustedTargetTime) {
+                    const activeLastMessage = chatEntry.last_message_id
+                        ? chat.messagesById[chatEntry.last_message_id]?.peek()
+                        : null;
+                    const lastMessageDelivered =
+                        activeLastMessage?.delivered_to_recipient === true ||
+                        chatEntry.last_message_status === 'delivered' ||
+                        chatEntry.last_message_status === 'read';
+                    if (lastMsgTime <= adjustedTargetTime && lastMessageDelivered) {
                         console.log(`[ChatState] markMessagesReadUpTo: Setting last_message_status to 'read'`);
                         chatEntry$.last_message_status.set('read');
                     }
@@ -989,7 +1206,6 @@ const chatActions = {
             Promise.all(changedMessageIds.map(id =>
                 ChatStorage.updateMessageStatus(id, {
                     status: 'read',
-                    delivered_to_recipient: true,
                 } as any)
             )).catch(err =>
                 console.warn(`[ChatState] markMessagesReadUpTo: Storage persist failed for ${chatId}`, err)
@@ -1034,14 +1250,24 @@ const chatActions = {
             const chat = ensureChatInternal(chatId);
             const currentMessages = chat.messages.peek();
 
-            // Remove old message and add new in single atomic operation
-            const filtered = currentMessages.filter((m: MessageEntry) => m.message_id !== oldMessageId);
-            const updated = [newMessage, ...filtered].slice(0, 1000);
+            // Preserve local enqueue time for every outgoing message type, then
+            // sort by local created_at. Upload/server completion order must never
+            // move a temp-promoted message.
+            const existingIndex = currentMessages.findIndex((m: MessageEntry) => m.message_id === oldMessageId);
+            const existingMessage = existingIndex >= 0 ? currentMessages[existingIndex] : null;
+            const stableNewMessage = {
+                ...newMessage,
+                created_at: existingMessage?.created_at ?? newMessage.created_at,
+            };
+            const nextMessages = existingIndex >= 0
+                ? currentMessages.map((m: MessageEntry, index: number) => index === existingIndex ? stableNewMessage : m)
+                : [stableNewMessage, ...currentMessages];
+            const updated = sortMessagesByLocalCreatedAtDesc(nextMessages).slice(0, 1000);
 
             // Atomic state update - single render, no flicker
             chat.messages.set(updated);
             chat.messagesById[oldMessageId]?.delete();
-            chat.messagesById[newMessage.message_id].set(newMessage);
+            chat.messagesById[stableNewMessage.message_id].set(stableNewMessage);
             chat.messageIds.set(updated.map((m: MessageEntry) => m.message_id));
         });
     },
@@ -1211,13 +1437,21 @@ const chatActions = {
 
             // Phase D fix: Get soft-deleted IDs across ALL chats in the batch to
             // prevent INSERT OR REPLACE from resurrecting deleted_for_me = 1 rows.
-            const chatIds = [...new Set(response.messages.map(m => m.chat_id))];
+            const hydratedResponseMessages = response.messages.map(m => {
+                const receiptState = $chatListState.chatsById[m.chat_id]?.peek();
+                return applyOutgoingReceiptStatus(m, {
+                    deliveredAt: receiptState?.other_user_last_delivered_at,
+                    readAt: receiptState?.other_user_last_read_at,
+                });
+            });
+
+            const chatIds = [...new Set(hydratedResponseMessages.map(m => m.chat_id))];
             const allDeletedIds = new Set<string>();
             for (const chatId of chatIds) {
                 const deletedIds = await ChatStorage.getDeletedMessageIds(chatId);
                 for (const id of deletedIds) allDeletedIds.add(id);
             }
-            const messagesToPersist = response.messages.filter(m => !allDeletedIds.has(m.message_id));
+            const messagesToPersist = hydratedResponseMessages.filter(m => !allDeletedIds.has(m.message_id));
 
             // Normalize status: server MessageResponse has no 'status' field.
             // Without this, the storage layer defaults undefined → 'pending',
@@ -1229,31 +1463,62 @@ const chatActions = {
                 }
             }
 
+            // E2EE: save sender keys + decrypt incoming text BEFORE persistence (pending relay sync)
+            const e2eeReport = await processIncomingMessagesWithE2EEReport(messagesToPersist, {
+                resolveSenderId: (m) => $chatListState.chatsById[m.chat_id]?.peek()?.other_user_id,
+            });
+            const e2eeNoAckIds = new Set(
+                e2eeReport.failures
+                    .filter(f => !f.ack && f.message_id)
+                    .map(f => f.message_id as string),
+            );
+            const ackEligibleMessagesToPersist = messagesToPersist.filter(m => !e2eeNoAckIds.has(m.message_id));
+
             // Phase D: Persist non-deleted messages to local storage BEFORE any ACK (Rule 1)
-            if (messagesToPersist.length > 0) {
-                await ChatStorage.insertMessages(messagesToPersist);
+            if (ackEligibleMessagesToPersist.length > 0) {
+                await ChatStorage.insertMessages(ackEligibleMessagesToPersist);
             }
+
+            // ACK safe pending-sync messages now; pending media is skipped and retried
+            // as each media download/decrypt/store finishes below.
+            await ackIncomingMessages(ackEligibleMessagesToPersist).catch(err =>
+                console.warn('[ChatState] syncPendingMessages early ACK failed', err)
+            );
 
             // Phase D fix: Download media files for messages before ACK.
             // On primary devices, primary ACK triggers backend file deletion (§8.3/§8.7.4),
             // so files MUST be downloaded first or they'll be permanently lost.
             const isPrimary = authState.isPrimary.peek() === true;
             const downloadFailedIds = new Set<string>();
-            for (const msg of response.messages) {
+            for (const msg of hydratedResponseMessages) {
                 // Skip media downloads for soft-deleted messages — we'll ACK them
                 // but not process them, so downloading their files wastes bandwidth
                 // and can trap primary devices in an infinite retry loop.
                 if (allDeletedIds.has(msg.message_id)) continue;
-                if (msg.file_id && msg.download_url && msg.message_type !== 'text' && msg.message_type !== 'unsent') {
+                if (e2eeNoAckIds.has(msg.message_id)) continue;
+                if (MEDIA_MESSAGE_TYPES.includes(msg.message_type) && !msg.local_uri && (msg.file_id || msg.download_url)) {
                     try {
                         // Phase 4b: Provide progress callback for UI if chat is open during sync
                         // Ensure token is fresh before download (User Request: Refresh only for downloads)
-                        await resolveMediaUrls([msg]);
+                        if (msg.file_id) {
+                            await resolveMediaUrls([msg]);
+                        }
                         await ChatStorage.updateMessageStatus(msg.message_id, {
                             download_url: msg.download_url,
                             view_url: msg.view_url,
                             file_token_expiry: msg.file_token_expiry
                         } as any);
+
+                        if (!msg.download_url) {
+                            const DOWNLOAD_FAILED_URI = 'error://download-failed';
+                            msg.local_uri = DOWNLOAD_FAILED_URI;
+                            await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
+                            this.updateMessageStatus(msg.chat_id, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
+                            await ackIncomingMessages([msg]).catch(err =>
+                                console.warn('[ChatState] syncPendingMessages missing-url ACK failed', err)
+                            );
+                            continue;
+                        }
 
                         const localUri = await downloadIncomingFile(msg, (p) => {
                             this.updateMessageProgress(msg.chat_id, msg.message_id, p);
@@ -1266,41 +1531,38 @@ const chatActions = {
                                 local_uri: localUri,
                                 progress: 100
                             });
+                            await ackIncomingMessages([msg]).catch(err =>
+                                console.warn('[ChatState] syncPendingMessages media ACK failed', err)
+                            );
                         }
                     } catch (err) {
-                        if (isPrimary) {
-                            console.error('[ChatState] syncPendingMessages: Media download failed on PRIMARY — skipping ACK for this message', msg.message_id, err);
+                        const reason = classifyMediaDownloadFailure(err);
+                        const shouldAck = shouldAckE2EEInboundFailure(reason);
+                        console.error(`[ChatState] syncPendingMessages: Media download failed (${reason})`, msg.message_id, err);
 
-                            // 🆕 NEW: If the download fails with a 404 (Missing on Relay),
-                            // mark it as 'error' so it stops clogging the sync queue.
-                            const statusCode = (err as any)?.status || (err as any)?.code;
-                            if (statusCode === 404) {
-                                console.log('[ChatState] syncPendingMessages: Resource GONE (404) on relay — marking message as error', msg.message_id);
-                                ChatStorage.updateMessageStatus(msg.message_id, { status: 'error' } as any).catch(() => { });
-                                this.updateMessageStatus(msg.chat_id, msg.message_id, { status: 'error' });
-                            } else {
-                                // Track failed IDs so they're excluded from ACK and in-memory state
-                                downloadFailedIds.add(msg.message_id);
-                            }
+                        if (!shouldAck) {
+                            // Recoverable: no ACK and no permanent sentinel. Retry after key/network recovery.
+                            downloadFailedIds.add(msg.message_id);
                             continue;
                         }
-                        console.warn('[ChatState] syncPendingMessages: Media download failed on non-primary — skipping ACK for safety', msg.message_id, err);
-                        // Block ACK on non-primary to prevent the server from deleting media 
-                        // before other devices (or the primary) have synced it.
-                        downloadFailedIds.add(msg.message_id);
-                        // Persist sentinel so we don't retry on next reload (same as downloadMediaBatch)
+
+                        // Terminal: mark failed/error, then allow ACK so relay stops redelivery.
                         const DOWNLOAD_FAILED_URI = 'error://download-failed';
                         msg.local_uri = DOWNLOAD_FAILED_URI;
-                        this.updateMessageStatus(msg.chat_id, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' });
-                        await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status: 'failed' } as any);
+                        const status = reason === 'media_gone' ? 'error' : 'failed';
+                        await ChatStorage.updateMessageStatus(msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status } as any);
+                        this.updateMessageStatus(msg.chat_id, msg.message_id, { local_uri: DOWNLOAD_FAILED_URI, status });
+                        await ackIncomingMessages([msg]).catch(ackErr =>
+                            console.warn('[ChatState] syncPendingMessages terminal-failure ACK failed', ackErr)
+                        );
                     }
                 }
             }
 
             // Filter out download-failed messages from further processing
-            const messagesToProcess = downloadFailedIds.size > 0
-                ? response.messages.filter(m => !downloadFailedIds.has(m.message_id))
-                : response.messages;
+            const messagesToProcess = hydratedResponseMessages.filter(m =>
+                !downloadFailedIds.has(m.message_id) && !e2eeNoAckIds.has(m.message_id),
+            );
 
             // Exclude soft-deleted messages from in-memory state (but NOT from ACK —
             // they must be ACK'd so the server stops re-delivering them).
@@ -1345,16 +1607,28 @@ const chatActions = {
                         const lastMsg = sortedSynced[sortedSynced.length - 1];
 
                         const serverPreview = currentEntry.last_message_content;
-                        if (serverPreview === null || serverPreview === '') {
+                        const candidatePreview = getPreviewText(lastMsg);
+                        // E2EE: a blank/absent preview can be HEALED by the freshly
+                        // decrypted pending message. On first open `setChats` runs
+                        // BEFORE pending sync, so the chat-list pass had no local
+                        // plaintext row to restore an encrypted preview from and
+                        // blanked it to "" — without this, the blank guard below
+                        // (and the strict `isNewer` check: the blanked server
+                        // preview references the SAME pending message, equal
+                        // timestamps) kept the home screen empty until a manual
+                        // refresh. `getPreviewText` is display-safe (never cipher).
+                        const healsBlankedPreview =
+                            (serverPreview === null || serverPreview === '') && !!candidatePreview;
+                        if ((serverPreview === null || serverPreview === '') && !healsBlankedPreview) {
                             continue; // Phase D fix: was `return` which broke the entire for loop
                         }
 
                         const isNewer = !currentEntry.last_message_created_at || (new Date(lastMsg.created_at).getTime() > new Date(currentEntry.last_message_created_at).getTime());
-                        if (isNewer) {
+                        if (isNewer || healsBlankedPreview) {
                             const currentUserId = authState.userId.peek();
                             $chatListState.upsertChat({
                                 ...currentEntry,
-                                last_message_content: getPreviewText(lastMsg),
+                                last_message_content: candidatePreview,
                                 last_message_created_at: lastMsg.created_at,
                                 last_message_type: lastMsg.message_type,
                                 last_message_is_from_me: lastMsg.is_from_me,
@@ -1371,11 +1645,18 @@ const chatActions = {
                 }
             });
 
-            // ACK all successfully-downloaded messages (including soft-deleted ones)
-            // so the server stops re-delivering them. filteredToProcess excludes deleted
-            // from in-memory state, but messagesToProcess includes them for ACK.
-            await ackIncomingMessages(messagesToProcess, { skipMediaCheck: true }).catch(err =>
+            // ACK visible messages through the normal media guard: delivery ACK must
+            // not fire until incoming media has a local_uri (download/decrypt/store done).
+            const visibleMessagesToAck = messagesToProcess.filter(m => !allDeletedIds.has(m.message_id));
+            await ackIncomingMessages(visibleMessagesToAck).catch(err =>
                 console.warn('[ChatState] syncPendingMessages ACK failed', err)
+            );
+
+            // Soft-deleted rows are not displayed/downloaded; ACK them separately so
+            // the relay stops redelivery without weakening visible-media ACK safety.
+            const deletedMessagesToAck = messagesToProcess.filter(m => allDeletedIds.has(m.message_id));
+            await ackIncomingMessages(deletedMessagesToAck, { skipMediaCheck: true }).catch(err =>
+                console.warn('[ChatState] syncPendingMessages deleted ACK failed', err)
             );
 
             console.log('[ChatState] syncPendingMessages: DONE');
@@ -1398,8 +1679,11 @@ const chatActions = {
 
         const timer = setTimeout(async () => {
             timers.delete(chatId);
-            console.log(`[ChatState] debouncedMarkRead: Firing for ${chatId}`);
+
+            // A focused chat counts as read even if the user backs out before the debounce fires.
+            // Cross-server REST fallback depends on this API call; do not require activeChatId here.
             try {
+                console.log(`[ChatState] debouncedMarkRead: Firing for ${chatId}`);
                 const response = await ChatTransport.markChatRead({ chat_id: chatId });
                 if (response?.status === true) {
                     $chatListState.markChatRead(chatId);

@@ -84,10 +84,11 @@ async function decrypt(packed: ArrayBuffer): Promise<string> {
 // ─── IndexedDB Data Store ───────────────────────────────────────────────────
 
 const DATA_DB_NAME = 'ChatStorage';
-const DATA_DB_VERSION = 3;  // v3: add chats store for chat-list persistence
+const DATA_DB_VERSION = 4;  // v4: add user_keys store for the E2EE key registry
 const MESSAGES_STORE = 'messages';
 const CHATS_STORE = 'chats';
 const MEDIA_STORE = 'media';  // File blobs (per §8.6.3 / §8.5.7)
+const USER_KEYS_STORE = 'user_keys';  // E2EE persistent key registry (public keys — stored plain)
 // NOTE: No separate outbox store — outbox is a logical query on MESSAGES_STORE
 // (WHERE status IN ('pending','sending') AND is_from_me = true)
 // This is the industry-standard pattern (Signal, WhatsApp, Telegram).
@@ -133,6 +134,11 @@ function openDataDb(): Promise<IDBDatabase> {
                     mediaStore.deleteIndex('idx_cached_at');
                     mediaStore.createIndex('idx_stored_at', 'stored_at', { unique: false });
                 }
+            }
+
+            // v4 upgrade: E2EE persistent key registry — keyed by user_id
+            if (!db.objectStoreNames.contains(USER_KEYS_STORE)) {
+                db.createObjectStore(USER_KEYS_STORE, { keyPath: 'user_id' });
             }
         };
         request.onsuccess = () => { dataDb = request.result; resolve(dataDb); };
@@ -200,6 +206,8 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
         view_url: message.view_url ?? null,
         download_url: message.download_url ?? null,
         file_token_expiry: message.file_token_expiry || null,
+        sender_e2ee_public_key: message.sender_e2ee_public_key ?? null,
+        recipient_e2ee_public_key_used: (message as any).recipient_e2ee_public_key_used ?? null,
         local_uri: (message as any).local_uri ?? message.localUri ?? null,
         temp_id: (message as any).temp_id ?? message.tempId ?? null,
         acked_by_server: !!message.acked_by_server,
@@ -276,6 +284,40 @@ function idbClear(store: IDBObjectStore): Promise<void> {
         req.onsuccess = () => resolve();
         req.onerror = () => reject(req.error);
     });
+}
+
+// ─── E2EE persistent key registry (user_keys) ──────────────────────────────────────
+
+interface UserKeyRecord {
+    user_id: string;
+    e2ee_public_key: string | null;
+    updated_at: string;
+}
+
+export type StoredE2EEPublicKey = string | null | undefined;
+
+export async function getUserE2eePublicKey(userId: string): Promise<StoredE2EEPublicKey> {
+    const db = await openDataDb();
+    const tx = db.transaction(USER_KEYS_STORE, 'readonly');
+    const record = await idbGet<UserKeyRecord>(tx.objectStore(USER_KEYS_STORE), userId);
+    return record === undefined ? undefined : record.e2ee_public_key;
+}
+
+export async function setUserE2eePublicKey(userId: string, publicKey: string | null): Promise<void> {
+    const db = await openDataDb();
+    const tx = db.transaction(USER_KEYS_STORE, 'readwrite');
+    const record: UserKeyRecord = {
+        user_id: userId,
+        e2ee_public_key: publicKey,
+        updated_at: new Date().toISOString(),
+    };
+    await idbPut(tx.objectStore(USER_KEYS_STORE), record);
+}
+
+export async function clearAllUserE2eeKeys(): Promise<void> {
+    const db = await openDataDb();
+    const tx = db.transaction(USER_KEYS_STORE, 'readwrite');
+    await idbClear(tx.objectStore(USER_KEYS_STORE));
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -361,6 +403,14 @@ export async function getChats(): Promise<LocalChatEntry[]> {
         const bTime = b.last_message_created_at || b.created_at;
         return new Date(bTime).getTime() - new Date(aTime).getTime();
     });
+}
+
+export async function getChatById(chatId: string): Promise<LocalChatEntry | null> {
+    if (!chatId) return null;
+    const db = await openDataDb();
+    const tx = db.transaction(CHATS_STORE, 'readonly');
+    const record = await idbGet<any>(tx.objectStore(CHATS_STORE), chatId);
+    return record ? await decryptChatEntry(record) : null;
 }
 
 export async function updateChatCachedAvatarFileId(chatId: string, fileId: string | null): Promise<void> {
@@ -559,6 +609,21 @@ export async function messageExists(messageId: string): Promise<boolean> {
     const tx = db.transaction(MESSAGES_STORE, 'readonly');
     const record = await idbGet<any>(tx.objectStore(MESSAGES_STORE), messageId);
     return !!record;
+}
+
+export async function getMessagesByIds(messageIds: string[]): Promise<LocalMessageEntry[]> {
+    if (!messageIds || messageIds.length === 0) return [];
+    const db = await openDataDb();
+    const tx = db.transaction(MESSAGES_STORE, 'readonly');
+    const store = tx.objectStore(MESSAGES_STORE);
+    // Fire all IDB requests in the same tick before awaiting — pending requests
+    // keep the transaction active per W3C spec (decryption happens afterwards).
+    const records = await Promise.all(messageIds.map(id => idbGet<any>(store, id)));
+    const results: LocalMessageEntry[] = [];
+    for (const record of records) {
+        if (record) results.push(await decryptEntry(record));
+    }
+    return results;
 }
 
 /**

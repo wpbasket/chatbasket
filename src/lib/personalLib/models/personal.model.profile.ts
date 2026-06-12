@@ -26,3 +26,11 @@ export interface PersonalUpdateUserProfilePayload {
     profile_type?: string;  // Optional; omit to not update
 }
 
+export interface PersonalUpdateE2EEKeyPayload {
+    e2ee_public_key: string; // string, required, standard Base64 X25519 public key (exactly 44 chars)
+}
+
+export interface PersonalGetE2EEKeyResponse {
+    e2ee_public_key: string | null; // *string — null when the user has not set up E2EE
+}
+

@@ -1,0 +1,9 @@
+# Ignore Kotlin and Swift/iOS files
+*.kt
+*.kts
+*.swift
+*.m
+*.h
+modules/
+ios/
+android/

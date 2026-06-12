@@ -75,8 +75,14 @@ export const setSession = async (session: { sessionId: string; userId: string; s
 
   // Trigger hydration of personal modules (contacts, chats, etc.) 
   // immediately after successful login without requiring a manual refresh.
-  // We use a dynamic import here to avoid a circular dependency with storage.init.
-  void import('@/lib/storage/storage.init').then((m) => m.hydratePersonalModules());
+  // Use sync require inside the function so Metro bundles the module on native;
+  // runtime import() can create lazy chunk IDs that fail during cold cleanup.
+  try {
+    const { hydratePersonalModules } = require('@/lib/storage/storage.init');
+    void hydratePersonalModules();
+  } catch (error) {
+    console.log('Failed to trigger personal hydration:', error);
+  }
 };
 
 export const getSession = async () => {
@@ -109,8 +115,8 @@ export const clearSession = async (options?: { skipAuthStateReset?: boolean }) =
   // Phase D: Stop outbox queue + connection watcher FIRST — before clearing auth tokens.
   // Abort in-flight requests immediately to prevent leaked writes after logout.
   try {
-    const { connectionWatcher } = await import('@/lib/personalLib/chatApi/connection.watcher');
-    const { outboxQueue } = await import('@/lib/personalLib/chatApi/outbox.queue');
+    const { connectionWatcher } = require('@/lib/personalLib/chatApi/connection.watcher');
+    const { outboxQueue } = require('@/lib/personalLib/chatApi/outbox.queue');
     outboxQueue.abortInFlightRequests(); // Abort active HTTP requests immediately
     outboxQueue.pause(); // Stop the queue loop
     connectionWatcher.stop(); // Stop WS connection
@@ -123,7 +129,7 @@ export const clearSession = async (options?: { skipAuthStateReset?: boolean }) =
 
   // Clear preferences storage for both platforms
   try {
-    const { PreferencesStorage } = await import('./storage.preferences');
+    const { PreferencesStorage } = require('./storage.preferences');
     PreferencesStorage.clearTheme();
     PreferencesStorage.clearMode();
   } catch (error) {
@@ -132,9 +138,9 @@ export const clearSession = async (options?: { skipAuthStateReset?: boolean }) =
 
   // Clear personal user storage for both platforms (Chats, Contacts, Profile, Devices)
   try {
-    const { PersonalStorageRemoveChat } = await import('@/lib/storage/personalStorage/chat/personal.storage.chat');
-    const { PersonalStorageRemoveUser } = await import('@/lib/storage/personalStorage/profile/personal.storage.user');
-    const { PersonalStorageRemoveContacts, PersonalStorageRemoveContactRequests } = await import('../personalStorage/personal.storage.contacts');
+    const { PersonalStorageRemoveChat } = require('@/lib/storage/personalStorage/chat/personal.storage.chat');
+    const { PersonalStorageRemoveUser } = require('@/lib/storage/personalStorage/profile/personal.storage.user');
+    const { PersonalStorageRemoveContacts, PersonalStorageRemoveContactRequests } = require('../personalStorage/personal.storage.contacts');
 
     await PersonalStorageRemoveChat();
     await PersonalStorageRemoveUser();
@@ -145,15 +151,25 @@ export const clearSession = async (options?: { skipAuthStateReset?: boolean }) =
     console.log('Failed to clear personal user storage:', error);
   }
 
+  // E2EE: delete the device identity keypair. Pending messages were already
+  // fetched + decrypted earlier in the logout flow — after this point any
+  // remaining undelivered ciphertext is unrecoverable (strict E2EE by design).
+  try {
+    const { deleteLocalE2EEKeys } = require('@/lib/personalLib/e2ee/e2ee.keys');
+    await deleteLocalE2EEKeys();
+  } catch (error) {
+    console.log('Failed to delete local E2EE keys:', error);
+  }
+
   if (!options?.skipAuthStateReset) {
     resetAuthStateAfterLogout();
   }
 
   // Reset Domain Observables (In-memory Cleanup)
   try {
-    const { $contactsState, $contactRequestsState } = await import("@/state/personalState/contacts/personal.state.contacts");
-    const { $personalStateUser } = await import("@/state/personalState/user/personal.state.user");
-    const { $chatMessagesState, $chatListState } = await import("@/state/personalState/chat/personal.state.chat");
+    const { $contactsState, $contactRequestsState } = require("@/state/personalState/contacts/personal.state.contacts");
+    const { $personalStateUser } = require("@/state/personalState/user/personal.state.user");
+    const { $chatMessagesState, $chatListState } = require("@/state/personalState/chat/personal.state.chat");
 
     $contactsState.reset();
     $contactRequestsState.reset();
@@ -171,7 +187,7 @@ export const clearSession = async (options?: { skipAuthStateReset?: boolean }) =
   // immediately on re-login because the old resolved promise is still cached,
   // leaving db=null and causing "Database not initialized" errors.
   try {
-    const { resetPersonalHydration } = await import('@/lib/storage/storage.init');
+    const { resetPersonalHydration } = require('@/lib/storage/storage.init');
     resetPersonalHydration();
   } catch (error) {
     console.log('Failed to reset hydration:', error);

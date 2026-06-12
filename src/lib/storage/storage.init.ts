@@ -7,6 +7,7 @@ import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrph
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
 import { authState } from '@/state/auth/state.auth';
+import { deleteLocalE2EEKeys, initializeE2EEKeys, uploadPublicKeyIfNeeded } from '@/lib/personalLib/e2ee/e2ee.keys';
 
 let hydrationPromise: Promise<void> | null = null;
 
@@ -58,12 +59,22 @@ export const hydratePersonalModules = async (): Promise<void> => {
                 ]))
             ]);
 
+            // E2EE: load the device identity keypair (generated here only on the
+            // PRIMARY device — isPrimary was loaded by PersonalStorageGetDeviceStatus
+            // above) and upload the public key.
+            // Never throws; fire-and-forget so hydration is not blocked by network.
+            void initializeE2EEKeys();
+
             // Phase 4e: Start connection watcher + sync WebSocket state + drain outbox queue
             connectionWatcher.start();
 
             // Link WebSocket lifecycle to network connectivity
             connectionWatcher.subscribe((isOnline) => {
                 wsClient.setNetworkOnline(isOnline);
+                // E2EE: retry the public key upload whenever connectivity returns
+                if (isOnline) {
+                    void uploadPublicKeyIfNeeded();
+                }
             });
             // Handle initial state
             wsClient.setNetworkOnline(connectionWatcher.isOnline);
@@ -127,6 +138,7 @@ export const initializeAppStorage = async (): Promise<void> => {
                 await Promise.all([
                     clearAllChatStorage(),
                     clearProfileStorage(),
+                    deleteLocalE2EEKeys(),
                 ]);
                 console.log('[StorageInit] Cleaned up leftover personal storage (not logged in)');
             } catch (err) {

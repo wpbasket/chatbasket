@@ -31,6 +31,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
+import { toDisplaySafeText } from '@/lib/personalLib/e2ee/e2ee.crypto';
+import { isEncryptedMediaMessage } from '@/lib/personalLib/e2ee/e2ee.service';
 import mime from 'react-native-mime-types';
 import * as Sharing from 'expo-sharing';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -41,6 +43,7 @@ import { $contactRequestsState, $contactsState } from '@/state/personalState/con
 import { PersonalStorageSetContacts } from '@/lib/storage/personalStorage/personal.storage.contacts';
 import { PersonalUtilAddContactById, isImmediateContactCode, isRequestContactCode } from '@/utils/personalUtils/personal.util.contactActions';
 import { showContactAlert } from '@/utils/personalUtils/util.contactMessages';
+import { applyOutgoingReceiptStatus, deriveMessageTickState } from '@/utils/personalUtils/util.messageTick';
 import { mapContactToEntry, PersonalUtilFetchContacts } from '@/utils/personalUtils/personal.util.contacts';
 
 const READABLE_MIME_TYPES = new Set([
@@ -165,39 +168,11 @@ export default PersonalChatScreen;
 
 const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId: string, chatId: string, index: number }) => {
     const message = useValue(() => $chatMessagesState.chats[chatId]?.messagesById[messageId]?.get());
-    const otherUserLastReadAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_read_at?.get());
-    const otherUserLastDeliveredAt = useValue(() => $chatListState.chatsById[chatId]?.other_user_last_delivered_at?.get());
     const messageIds = useValue(() => $chatMessagesState.chats[chatId]?.messageIds.get() || []);
 
     if (!message) return null;
 
-    let status = message.status;
-    let delivered = message.delivered_to_recipient;
-
-    const parseDate = (d: string | null | undefined) => {
-        if (!d) return NaN;
-        try {
-            return new Date(d.replace(' ', 'T')).getTime();
-        } catch {
-            return NaN;
-        }
-    };
-
-    if (message.is_from_me) {
-        const msgTime = parseDate(message.created_at);
-
-        // SOURCE OF TRUTH: Compare message time against chat-level persistent delivery/read timestamps
-        const readTime = parseDate(otherUserLastReadAt);
-        if (!isNaN(readTime) && msgTime <= readTime) {
-            status = 'read';
-            delivered = true;
-        } else {
-            const deliveredTime = parseDate(otherUserLastDeliveredAt);
-            if (!isNaN(deliveredTime) && msgTime <= deliveredTime) {
-                delivered = true;
-            }
-        }
-    }
+    const { status, delivered } = deriveMessageTickState(message);
 
     const renderDateHeader = () => {
         const prevMessageId = messageIds[index + 1];
@@ -453,6 +428,24 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                     view_url: message.view_url,
                     file_token_expiry: message.file_token_expiry
                 } as any);
+
+                // E2EE: the remote object is ciphertext — opening it directly would
+                // surface encrypted garbage. Download + decrypt to a local copy
+                // first (idb:// on web, file:// on native), then open that.
+                if (isEncryptedMediaMessage(message as MessageEntry)) {
+                    try {
+                        const localUri = await downloadIncomingFile(message as MessageEntry);
+                        if (!localUri) return;
+                        await ChatStorage.updateMessageStatus(messageId, { local_uri: localUri } as any);
+                        $chatMessagesState.updateMessageStatus(chatId, messageId, { local_uri: localUri });
+                        (message as any).local_uri = localUri;
+                        activeUrl = localUri;
+                    } catch (err) {
+                        console.error('[UI] Encrypted file download-for-open failed', err);
+                        showAlert('Could not load the file. Please check your connection and try again.');
+                        return;
+                    }
+                }
             }
 
             if (!activeUrl) return;
@@ -461,9 +454,22 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 // Web: idb:// marker → open blob in new tab
                 if (activeUrl.startsWith('idb://')) {
                     const msgId = activeUrl.replace('idb://', '');
-                    getMediaBlob(msgId).then((result: { blob: Blob; mime: string } | null) => {
+                    getMediaBlob(msgId).then((result: { blob: Blob; mimeType: string; fileName: string } | null) => {
                         if (result) {
-                            const blobUrl = URL.createObjectURL(result.blob);
+                            // Blobs stored before MIME derivation existed may carry
+                            // application/octet-stream — browsers download those instead
+                            // of rendering. Heal with the message/file-name MIME.
+                            const storedMime = result.mimeType || result.blob.type || '';
+                            const knownMime = (message.file_mime_type && message.file_mime_type !== 'application/octet-stream')
+                                ? message.file_mime_type
+                                : (mime.lookup(message.file_name || result.fileName || '') || '');
+                            const effectiveMime = (storedMime && storedMime !== 'application/octet-stream')
+                                ? storedMime
+                                : (knownMime || storedMime || 'application/octet-stream');
+                            const blob = result.blob.type === effectiveMime
+                                ? result.blob
+                                : new Blob([result.blob], { type: effectiveMime });
+                            const blobUrl = URL.createObjectURL(blob);
                             window.open(blobUrl, '_blank');
                             // Revoke after a short delay to allow the new tab to load
                             setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
@@ -531,7 +537,7 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                 }
             }
         }
-    }, [chatId, messageId, message.message_type, message.download_url, message.local_uri]);
+    }, [chatId, messageId, message.message_type, message.download_url, message.local_uri, message.file_name, message.file_mime_type, message.content]);
 
     const isSelected = useValue(() => {
         const selectedIds = $chatMessagesState.chats[chatId]?.selectedMessageIds.get() || [];
@@ -545,11 +551,11 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
     });
 
     return (
-        <ThemedView style={{ backgroundColor: 'transparent' }}>
+        <ThemedView style={styles.itemContainer}>
             {renderDateHeader()}
             <MessageBubble
                 message_id={messageId}
-                text={message.content}
+                text={toDisplaySafeText(message.content, message.message_type)}
                 type={message.is_from_me ? 'me' : 'other'}
                 messageType={message.message_type}
                 status={status}
@@ -742,12 +748,16 @@ const ChatContentContainer = React.memo(({
             const localMessages = await ChatStorage.getMessagesByChat(chatId, 50, 0);
 
             if (localMessages.length > 0) {
-                const asEntries = localMessages.map(m => ({
+                const chatReceiptState = $chatListState.chatsById[chatId]?.peek();
+                const asEntries = localMessages.map(m => applyOutgoingReceiptStatus({
                     ...m,
                     status: m.status || 'sent',
-                } as MessageEntry));
+                } as MessageEntry, {
+                    deliveredAt: chatReceiptState?.other_user_last_delivered_at,
+                    readAt: chatReceiptState?.other_user_last_read_at,
+                }));
 
-                await $chatMessagesState.setMessages(chatId, asEntries);
+                await $chatMessagesState.setMessages(chatId, asEntries, { allowPersistedPlaintext: true });
 
                 batch(() => {
                     if (asEntries.length < 50) {
@@ -810,15 +820,29 @@ const ChatContentContainer = React.memo(({
                     }
                 }
 
-                // Merge any new server messages not already in local storage
-                const serverMessages = (response.messages ?? []).map(m => ({
+                // REST fallback can update receipt timestamps without a WS event.
+                // Hydrate already-rendered local messages immediately; do not wait
+                // for a second screen open or for serverMessages merge.
+                if (response.other_user_last_delivered_at) {
+                    $chatMessagesState.markMessagesDeliveredUpTo(chatId, response.other_user_last_delivered_at);
+                }
+                if (response.other_user_last_read_at) {
+                    $chatMessagesState.markMessagesReadUpTo(chatId, response.other_user_last_read_at);
+                }
+
+                // Merge any new server messages not already in local storage.
+                // REST fallback carries receipt timestamps but no WS receipt event,
+                // so hydrate per-message tick fields before merging.
+                const serverMessages = (response.messages ?? []).map(m => applyOutgoingReceiptStatus({
                     ...m,
-                    status: 'sent'
-                } as MessageEntry));
+                    status: m.status || 'sent'
+                } as MessageEntry, {
+                    deliveredAt: response.other_user_last_delivered_at,
+                    readAt: response.other_user_last_read_at,
+                }));
 
                 if (serverMessages.length > 0) {
                     await $chatMessagesState.setMessages(chatId, serverMessages);
-
                     let shouldPersistPreview = false;
                     batch(() => {
                         // Update hasMore based on combined count
@@ -1254,6 +1278,10 @@ const styles = StyleSheet.create((theme, rt) => ({
     },
     list: {
         flex: 1,
+        backgroundColor: theme.colors.background,
+    },
+    itemContainer: {
+        backgroundColor: theme.colors.background,
     },
     listContent: {
         paddingVertical: 12,

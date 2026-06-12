@@ -258,7 +258,7 @@ const MessageBubble = memo(
 
         // ── Shared media meta row (filename + size) ───────────────────────────
         const renderMediaMeta = (fallbackLabel: string) => (
-            <View style={{ paddingLeft: 20, paddingRight: 30, paddingBottom: 6, paddingTop: 4, zIndex: 1 }}>
+            <View style={{ paddingLeft: 20, paddingRight: 30, paddingBottom: 0, paddingTop: 0, zIndex: 1 }}>
                 <View style={[styles.fileHeader, { backgroundColor: 'transparent', padding: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
                     <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { fontSize: 10, flex: 1 }]}>
                         {formatFileName(fileName || fallbackLabel)}
@@ -293,9 +293,11 @@ const MessageBubble = memo(
                 </View>
             );
 
-            // Double Checkmark: Grey or Primary (for read)
-            if (delivered || status === 'delivered' || status === 'read') {
-                const isRead = status === 'read';
+            // Double Checkmark: Grey or green only after this exact message's
+            // delivery ACK. A stale/early chat-level read must not color pending
+            // messages green.
+            if (delivered) {
+                const isRead = delivered && status === 'read';
                 return (
                     <View style={styles.statusContainer}>
                         <MaterialCommunityIcon
@@ -307,7 +309,7 @@ const MessageBubble = memo(
                 );
             }
 
-            if (status === 'sent') return (
+            if (status === 'sent' || status === 'read' || status === 'delivered') return (
                 <View style={styles.statusContainer}>
                     <MaterialCommunityIcon name="checkmark" size={20} color="#999" />
                 </View>
@@ -338,7 +340,7 @@ const MessageBubble = memo(
                 if (!activeViewUrl) {
                     return (
                         <View style={styles.mediaBubbleWrapper}>
-                            <View style={[styles.mediaFrame, { justifyContent: 'center', alignItems: 'center' }]}>
+                            <View style={[styles.imageFrame, { justifyContent: 'center', alignItems: 'center' }]}>
                                 <IconSymbol name="photo.fill" size={48} color={theme.colors.border} />
                             </View>
                             {renderProgressBar()}
@@ -347,10 +349,10 @@ const MessageBubble = memo(
                 }
                 return (
                     <View style={styles.mediaBubbleWrapper} pointerEvents={isSelectMode ? 'auto' : 'box-none'}>
-                        <View style={styles.mediaFrame}>
+                        <View style={styles.imageFrame}>
                             <RNImage
                                 source={{ uri: activeViewUrl.trim() }}
-                                style={styles.mediaFrameContent}
+                                style={styles.imageFrameContent}
                                 resizeMode="cover"
                                 resizeMethod="resize"
                             />
@@ -385,7 +387,7 @@ const MessageBubble = memo(
                                     </ThemedText>
                                 </View>
                             </View>
-                            {!isVideo && renderProgressBar()}
+                            {renderProgressBar()}
                         </View>
                     );
                 }
@@ -419,7 +421,7 @@ const MessageBubble = memo(
                             </View>
                         ) : (
                             // Audio: show static shell until first tap, then mount real player
-                            <View style={{ marginTop: 8 }} pointerEvents={isSelectMode ? 'none' : 'auto'}>
+                            <View style={{ marginTop: 4 }} pointerEvents={isSelectMode ? 'none' : 'auto'}>
                                 {isMediaLoaded ? (
                                     <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} onLongPress={onLongPress} isReady={isReady} />
                                 ) : (
@@ -428,7 +430,7 @@ const MessageBubble = memo(
                             </View>
                         )}
                         {renderMediaMeta(isVideo ? 'Video' : 'Audio')}
-                        {!isVideo && renderProgressBar()}
+                        {renderProgressBar()}
                         {/* Only show caption if user-provided caption exists */}
                         {!!text && (
                             <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
@@ -508,6 +510,7 @@ const MessageBubble = memo(
                         isVideo && styles.videoBubble,
                         messageType === 'file' && styles.fileBubble,
                         isSelected && styles.selectedBubble,
+                        isImage && { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
                     ]}
                     pointerEvents="auto"
                 >
@@ -872,7 +875,6 @@ const AudioInlinePlayer = memo(({
 }) => {
     const player = ExpoAudio.useAudioPlayer(url, { updateInterval: 100 });
     const status = ExpoAudio.useAudioPlayerStatus(player);
-    const isDark = UnistylesRuntime.themeName === 'dark';
     const hasAutoPlayed = React.useRef(false);
     const isMountedRef = React.useRef(true);
     const trackRef = React.useRef<View>(null);
@@ -1050,7 +1052,7 @@ const AudioInlinePlayer = memo(({
                     style={styles.audioProgressTrack}
                     onLayout={onTrackLayout}
                 >
-                    <View style={[styles.audioProgressInner, isMe && isDark && { backgroundColor: 'black' }]} pointerEvents="none">
+                    <View style={styles.audioProgressInner} pointerEvents="none">
                         <View style={[styles.audioProgressFill, { width: `${displayProgress * 100}%` }]} />
                     </View>
                 </Pressable>
@@ -1066,7 +1068,6 @@ const AudioInlinePlayer = memo(({
 // Static shell shown before user taps — zero network cost, zero native player init.
 
 const AudioPlaceholder = memo(({ isMe, isReady, isError }: { isMe: boolean, isReady: boolean, isError: boolean }) => {
-    const isDark = UnistylesRuntime.themeName === 'dark';
     return (
         <View style={styles.inlineAudioPlayer}>
             <View style={[styles.audioPlayButton, { opacity: 0.85 }]}>
@@ -1080,7 +1081,7 @@ const AudioPlaceholder = memo(({ isMe, isReady, isError }: { isMe: boolean, isRe
             </View>
             <View style={styles.audioWaveform}>
                 <View style={styles.audioProgressTrack}>
-                    <View style={[styles.audioProgressInner, isMe && isDark && { backgroundColor: 'black' }]}>
+                    <View style={styles.audioProgressInner}>
                         <View style={[styles.audioProgressFill, { width: '0%' }]} />
                     </View>
                 </View>
@@ -1143,7 +1144,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     mediaBubbleWrapper: {
         width: 300,
-        paddingBottom: 12,
+        paddingBottom: 0,
     },
     mediaFrame: {
         width: 300,
@@ -1158,6 +1159,24 @@ const styles = StyleSheet.create((theme) => ({
     mediaFrameContent: {
         width: '100%',
         height: '100%',
+    },
+    imageFrame: {
+        width: 300,
+        height: 180,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        borderBottomLeftRadius: 2,
+        borderBottomRightRadius: 2,
+        overflow: 'hidden',
+        backgroundColor: 'rgba(0,0,0,0.06)',
+        paddingTop: 4,
+        paddingHorizontal: 4,
+        paddingBottom: 0,
+    },
+    imageFrameContent: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 12,
     },
     caption: {
         marginTop: 2,
@@ -1360,8 +1379,8 @@ const styles = StyleSheet.create((theme) => ({
         flexDirection: 'row',
         alignItems: 'center',
         borderRadius: 14,
-        padding: 10,
-        height: 52, // Increased to comfortably fit progress + timer
+        padding: 8,
+        height: 48, // Balanced size between original and slim
         justifyContent: 'center',
     },
     audioPlayButton: {
@@ -1376,11 +1395,11 @@ const styles = StyleSheet.create((theme) => ({
     audioWaveform: {
         flex: 1,
         justifyContent: 'center',
-        height: 44, // Increased to fit both children
+        height: 40, // Balanced size
         backgroundColor: 'transparent',
     },
     audioProgressTrack: {
-        height: 36,
+        height: 28, // Balanced hit area
         justifyContent: 'center',
         width: '100%',
     },
@@ -1398,7 +1417,7 @@ const styles = StyleSheet.create((theme) => ({
     },
     audioTimer: {
         fontSize: 10,
-        marginTop: 4,
+        marginTop: 3,
         opacity: 0.8,
         fontWeight: '600',
         fontVariant: ['tabular-nums'],

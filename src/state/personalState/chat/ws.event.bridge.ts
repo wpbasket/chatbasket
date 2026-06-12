@@ -22,9 +22,28 @@ import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { $contactsState } from '@/state/personalState/contacts/personal.state.contacts';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { ApiError } from '@/lib/constantLib';
+import {
+    processIncomingMessagesWithE2EEReport,
+    shouldAckE2EEInboundFailure,
+    type E2EEInboundFailureReason,
+} from '@/lib/personalLib/e2ee/e2ee.service';
 
 // Production-safe debug logger — compiled out in release builds
 const dbg = __DEV__ ? console.log.bind(console) : () => { };
+
+
+function classifyMediaDownloadFailure(err: unknown): E2EEInboundFailureReason {
+    const statusCode = (err as any)?.status || (err as any)?.code;
+    if (statusCode === 404) return 'media_gone';
+
+    const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+    if (message.includes('no local private key')) return 'local_key_unavailable';
+    if (message.includes('missing unwrap public key')) return 'sender_key_unavailable';
+    if (message.includes('network') || message.includes('timeout') || message.includes('abort') || /^http\s+\d+/.test(message)) {
+        return 'media_download_transient';
+    }
+    return 'auth_failed';
+}
 
 async function refreshChatsAuthoritatively(): Promise<void> {
     try {
@@ -62,6 +81,20 @@ async function handleNewMessage(payload: any): Promise<void> {
     const alreadyExists = await messageExists(msg.message_id);
     if (alreadyExists) {
         dbg(`[WS Bridge] new_message: DUPLICATE (storage) ${msg.message_id}, skipping`);
+        return;
+    }
+
+    // E2EE: save sender key + decrypt incoming text BEFORE persistence.
+    // Recoverable failures are not persisted/ACKed so backend can redeliver after key recovery.
+    const e2eeReport = await processIncomingMessagesWithE2EEReport([msg], {
+        resolveSenderId: (m) => $chatListState.chatsById[m.chat_id]?.peek()?.other_user_id,
+    });
+    const hasRecoverableE2EEFailure = e2eeReport.failures.some(f => !f.ack);
+    if (hasRecoverableE2EEFailure) {
+        console.warn('[WS Bridge] new_message: recoverable E2EE failure — not persisting/ACKing', {
+            messageId: msg.message_id,
+            reasons: e2eeReport.failures.map(f => f.reason),
+        });
         return;
     }
 
@@ -115,37 +148,31 @@ async function handleNewMessage(payload: any): Promise<void> {
             dbg(`[WS Bridge] new_message: DOWNLOADED media → ${localUri}`);
         }
     } catch (err) {
-        console.error(`[WS Bridge] new_message: DOWNLOAD FAILED ${msg.message_id}`, err);
+        const reason = classifyMediaDownloadFailure(err);
+        const shouldAck = shouldAckE2EEInboundFailure(reason);
+        console.error(`[WS Bridge] new_message: DOWNLOAD FAILED ${msg.message_id} (${reason})`, err);
 
-        const statusCode = (err as any)?.status || (err as any)?.code;
-        const isPermanentError = statusCode === 404;
-        const targetStatus = isPermanentError ? 'error' : 'failed';
+        if (!shouldAck) {
+            // Recoverable: no ACK and no permanent sentinel. Redelivery retries after key/network recovery.
+            $chatMessagesState.updateMessageStatus(msg.chat_id, msg.message_id, { progress: 0 });
+            return;
+        }
+
+        // Terminal: persist failed sentinel, then continue to ACK so relay stops redelivery.
+        const targetStatus = reason === 'media_gone' ? 'error' : 'failed';
         const DOWNLOAD_FAILED_URI = 'error://download-failed';
-        
-        // Persist error status + sentinel to storage
-        await updateMessageStatus(msg.message_id, { 
+        await updateMessageStatus(msg.message_id, {
             status: targetStatus,
-            local_uri: DOWNLOAD_FAILED_URI 
+            local_uri: DOWNLOAD_FAILED_URI,
         } as any).catch(e => console.warn('[WS Bridge] Failed to persist download error', e));
 
-        // Mark as error so the UI stops the loader and shows error icon
         $chatMessagesState.updateMessageStatus(msg.chat_id, msg.message_id, {
             status: targetStatus,
             local_uri: DOWNLOAD_FAILED_URI,
-            progress: 0
+            progress: 0,
         });
 
-        // Rule 7: Primary MUST block ACK on failure so it retries on next boot/connect.
-        // Non-primary devices SHOULD continue to ACK if they've marked it with a sentinel,
-        // otherwise they'll be stuck in an infinite "ActivityIndicator" loop because
-        // they can't fetch from the other session's local backend.
-        if (isPrimary) {
-            dbg(`[WS Bridge] new_message: Primary session blocking ACK for failed download ${msg.message_id}`);
-            return;
-        }
-        
-        dbg(`[WS Bridge] new_message: Non-primary session allowing ACK for failed download (sentinel set)`);
-        // Continue to ACK logic below...
+        dbg(`[WS Bridge] new_message: terminal media failure marked; allowing ACK ${msg.message_id}`);
     }
 
     // Explicitly fire Part B (sender-sync ACK) for cross-device sync of our own messages.
@@ -286,8 +313,8 @@ function handleDeliveryAck(payload: any): void {
         const chat_id = payload.chat_id;
         const delivered_at = payload.delivered_at;
 
-        if (messageIds.length === 0) {
-            console.warn('[WS Bridge] delivery_ack: MISSING message_ids, skipping');
+        if (messageIds.length === 0 && !delivered_at) {
+            console.warn('[WS Bridge] delivery_ack: MISSING message_ids/delivered_at, skipping');
             return;
         }
 
@@ -300,12 +327,14 @@ function handleDeliveryAck(payload: any): void {
         dbg(`[WS Bridge] delivery_ack: targetChatId=${targetChatId} (fromPayload=${chat_id}, active=${activeChatId})`);
 
         if (targetChatId) {
-            if (delivered_at) {
-                dbg(`[WS Bridge] delivery_ack: CALLING markMessagesDeliveredUpTo(${targetChatId}, ${delivered_at})`);
-                $chatMessagesState.markMessagesDeliveredUpTo(targetChatId, delivered_at);
-            } else {
+            // Exact per-message ACK wins. `delivered_at` is chat/timestamp metadata and
+            // must not mark other older pending/uploading messages as delivered/read.
+            if (messageIds.length > 0) {
                 dbg(`[WS Bridge] delivery_ack: CALLING markMessagesDelivered(${targetChatId}, ${messageIds.length} ids)`);
                 $chatMessagesState.markMessagesDelivered(targetChatId, messageIds);
+            } else if (delivered_at) {
+                dbg(`[WS Bridge] delivery_ack: FALLBACK markMessagesDeliveredUpTo(${targetChatId}, ${delivered_at})`);
+                $chatMessagesState.markMessagesDeliveredUpTo(targetChatId, delivered_at);
             }
         } else {
             console.warn('[WS Bridge] delivery_ack: NO targetChatId found, cannot update state');
@@ -416,7 +445,7 @@ function handleSyncAction(payload: any): void {
 
 // ─── Event Router ───────────────────────────────────────────────────────────
 
-function routeWSEvent(event: WSEvent): void {
+export function routeWSEvent(event: WSEvent): void {
     // Drop events that contain a ref field (already handled by wsClient.send promise logic)
     if (event.ref) {
         // dbg(`[WS Bridge] Ignoring response event (ref=${event.ref})`);

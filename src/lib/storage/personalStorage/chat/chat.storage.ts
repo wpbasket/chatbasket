@@ -60,6 +60,10 @@ export const getPendingOutboxMessages: typeof import('./chat.storage.native').ge
     (...args: any[]) => (ChatStorageImpl.getPendingOutboxMessages as any)(...args);
 export const getMessageByTempId: typeof import('./chat.storage.native').getMessageByTempId =
     (...args: any[]) => (ChatStorageImpl.getMessageByTempId as any)(...args);
+export const getMessagesByIds: typeof import('./chat.storage.native').getMessagesByIds =
+    (...args: any[]) => (ChatStorageImpl.getMessagesByIds as any)(...args);
+export const getChatById: typeof import('./chat.storage.native').getChatById =
+    (...args: any[]) => (ChatStorageImpl.getChatById as any)(...args);
 export const messageExists: typeof import('./chat.storage.native').messageExists =
     (...args: any[]) => (ChatStorageImpl.messageExists as any)(...args);
 export const getMessageCountsByChatId: typeof import('./chat.storage.native').getMessageCountsByChatId =
@@ -84,6 +88,14 @@ export const clearAllChatStorage = async (): Promise<void> => {
 };
 export const recordFailedInsert: typeof import('./chat.storage.native').recordFailedInsert =
     (...args: any[]) => (ChatStorageImpl.recordFailedInsert as any)(...args);
+
+// E2EE persistent key registry (user_keys)
+export const getUserE2eePublicKey: typeof import('./chat.storage.native').getUserE2eePublicKey =
+    (...args: any[]) => (ChatStorageImpl.getUserE2eePublicKey as any)(...args);
+export const setUserE2eePublicKey: typeof import('./chat.storage.native').setUserE2eePublicKey =
+    (...args: any[]) => (ChatStorageImpl.setUserE2eePublicKey as any)(...args);
+export const clearAllUserE2eeKeys: typeof import('./chat.storage.native').clearAllUserE2eeKeys =
+    (...args: any[]) => (ChatStorageImpl.clearAllUserE2eeKeys as any)(...args);
 export const getStorageStats: typeof import('./chat.storage.native').getStorageStats =
     (...args: any[]) => (ChatStorageImpl.getStorageStats as any)(...args);
 

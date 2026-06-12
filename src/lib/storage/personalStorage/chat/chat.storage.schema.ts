@@ -26,6 +26,10 @@ export interface LocalMessageEntry {
     download_url: string | null;
     file_token_expiry: string | null;
 
+    // E2EE key metadata (persisted for strict decrypt/key-rotation robustness)
+    sender_e2ee_public_key: string | null;
+    recipient_e2ee_public_key_used: string | null;
+
     // Local-only fields
     local_uri: string | null;      // Local file path (before upload)
     temp_id: string | null;        // Client-generated ID before server response

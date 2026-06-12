@@ -12,6 +12,7 @@
 import { Platform } from 'react-native';
 import mime from 'react-native-mime-types';
 import type { MessageEntry } from '@/lib/personalLib';
+import { decryptIncomingMediaBytes, hydrateEncryptedMediaMetadata, isEncryptedMediaMessage, resolveMediaUnwrapKey } from '@/lib/personalLib/e2ee/e2ee.service';
 import { storeMediaBlob, getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -41,6 +42,53 @@ export const FALLBACK_MIME_TYPE = 'application/octet-stream';
 
 /** Tracks active downloads to prevent multiple concurrent requests for the same file */
 const activeDownloads = new Map<string, Promise<string | null>>();
+
+// Large Appwrite media streams can throttle badly when multiple 1MB+ downloads
+// run in parallel (web and native). Serialize only large downloads; small
+// files/images still download immediately.
+const LARGE_DOWNLOAD_BYTES = 1 * 1024 * 1024;
+let activeLargeDownloads = 0;
+const queuedLargeDownloads: Array<() => void> = [];
+
+function runQueuedLargeDownload<T>(
+    messageId: string,
+    fileSize: number | null | undefined,
+    task: () => Promise<T>,
+): Promise<T> {
+    const normalizedSize = Number(fileSize) || 0;
+    if (normalizedSize < LARGE_DOWNLOAD_BYTES) {
+        return task();
+    }
+
+    return new Promise<T>((resolve, reject) => {
+        const run = () => {
+            activeLargeDownloads += 1;
+            console.log(TAG, 'Large download: started', {
+                messageId,
+                platform: Platform.OS,
+                fileSize: normalizedSize,
+                queued: queuedLargeDownloads.length,
+            });
+            task().then(resolve, reject).finally(() => {
+                activeLargeDownloads = Math.max(0, activeLargeDownloads - 1);
+                const next = queuedLargeDownloads.shift();
+                if (next) next();
+            });
+        };
+
+        if (activeLargeDownloads === 0) {
+            run();
+        } else {
+            queuedLargeDownloads.push(run);
+            console.log(TAG, 'Large download: queued', {
+                messageId,
+                platform: Platform.OS,
+                fileSize: normalizedSize,
+                position: queuedLargeDownloads.length,
+            });
+        }
+    });
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -114,11 +162,12 @@ export async function downloadIncomingFile(
 
     const downloadPromise = (async () => {
         try {
-            if (Platform.OS === 'web') {
-                return await downloadForWeb(msg, onProgress);
-            } else {
+            return await runQueuedLargeDownload(messageId, msg.file_size, async () => {
+                if (Platform.OS === 'web') {
+                    return await downloadForWeb(msg, onProgress);
+                }
                 return await downloadForNative(msg, onProgress);
-            }
+            });
         } finally {
             // Always cleanup so future manual retries can re-attempt if it failed
             activeDownloads.delete(messageId);
@@ -146,6 +195,13 @@ async function downloadForNative(
         chatDir.create({ intermediates: true });
     }
 
+    const encrypted = isEncryptedMediaMessage(msg);
+    let unwrapKeyForEncrypted: string | null | undefined;
+    if (encrypted) {
+        unwrapKeyForEncrypted = await resolveMediaUnwrapKey(msg);
+        hydrateEncryptedMediaMetadata(msg, unwrapKeyForEncrypted);
+    }
+
     // Build destination: chatFiles/<messageId><ext>
     const ext = inferExtension(msg);
     const destFile = new File(chatDir, `${msg.message_id}${ext}`);
@@ -155,16 +211,54 @@ async function downloadForNative(
         return destFile.uri;
     }
 
+    const startedAt = Date.now();
+    const elapsed = () => Date.now() - startedAt;
+    const fileSizeHint = Number(msg.file_size) || 0;
+
+    console.log(TAG, 'Native download: start', {
+        messageId: msg.message_id,
+        messageType: msg.message_type,
+        fileSize: msg.file_size ?? null,
+        mimeType: msg.file_mime_type ?? null,
+        encrypted,
+    });
+
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('GET', msg.download_url!, true);
         xhr.responseType = 'arraybuffer'; // Modern & compatible way to handle binary in RN
         xhr.timeout = 15000; // 15-second timeout
 
+        let lastLoggedPercent = 0;
+        let lastLoggedAt = Date.now();
+
         xhr.onprogress = (event) => {
-            if (event.lengthComputable && event.total > 0) {
-                const progress = (event.loaded / event.total) * 100;
-                onProgress?.(progress);
+            const progressTotal = (event.lengthComputable && event.total > 0) ? event.total : fileSizeHint;
+            if (progressTotal) {
+                const rawPercent = Math.min(100, (event.loaded / progressTotal) * 100);
+                const displayPercent = Math.min(99, rawPercent);
+                onProgress?.(displayPercent);
+                const shouldLogPercent = displayPercent - lastLoggedPercent >= 25;
+                const shouldLogTime = Date.now() - lastLoggedAt >= 5000;
+                if (shouldLogPercent || shouldLogTime) {
+                    console.log(TAG, 'Native download: progress', {
+                        messageId: msg.message_id,
+                        receivedBytes: event.loaded,
+                        progressTotal,
+                        progressTotalSource: event.lengthComputable ? 'content-length' : 'file_size',
+                        percent: Math.round(displayPercent),
+                        elapsedMs: elapsed(),
+                    });
+                    lastLoggedPercent = displayPercent;
+                    lastLoggedAt = Date.now();
+                }
+            } else if (Date.now() - lastLoggedAt >= 5000) {
+                console.log(TAG, 'Native download: progress unknown-size', {
+                    messageId: msg.message_id,
+                    receivedBytes: event.loaded,
+                    elapsedMs: elapsed(),
+                });
+                lastLoggedAt = Date.now();
             }
         };
 
@@ -172,10 +266,38 @@ async function downloadForNative(
             if (xhr.status >= 200 && xhr.status < 300) {
                 try {
                     const buffer = xhr.response;
-                    const uint8Array = new Uint8Array(buffer);
-                    
-                    // Write to Modern FileSystem
+                    let uint8Array = new Uint8Array(buffer);
+                    console.log(TAG, 'Native download: body complete', {
+                        messageId: msg.message_id,
+                        receivedBytes: uint8Array.byteLength,
+                        progressTotal: fileSizeHint || null,
+                        elapsedMs: elapsed(),
+                    });
+
+                    // E2EE: decrypt in memory before persisting — unwraps the media
+                    // key from msg.content (sender key for incoming, recipient key
+                    // for own messages) and opens the secretbox. A failure throws
+                    // and is treated as a download failure (no ACK on primary).
+                    const decryptStartedAt = Date.now();
+                    if (encrypted) {
+                        uint8Array = decryptIncomingMediaBytes(msg, uint8Array, unwrapKeyForEncrypted);
+                        console.log(TAG, 'Native download: decrypt complete', {
+                            messageId: msg.message_id,
+                            decryptMs: Date.now() - decryptStartedAt,
+                            plainBytes: uint8Array.byteLength,
+                            elapsedMs: elapsed(),
+                        });
+                    }
+
+                    // Write to Modern FileSystem (always the DECRYPTED bytes)
+                    const writeStartedAt = Date.now();
                     destFile.write(uint8Array);
+                    console.log(TAG, 'Native download: stored to file', {
+                        messageId: msg.message_id,
+                        writeMs: Date.now() - writeStartedAt,
+                        totalMs: elapsed(),
+                        bytes: uint8Array.byteLength,
+                    });
                     
                     resolve(destFile.uri);
                 } catch (writeErr) {
@@ -202,17 +324,40 @@ async function downloadForWeb(
     onProgress?: (p: number) => void
 ): Promise<string | null> {
     const idbUri = `idb://${msg.message_id}`;
+    const startedAt = Date.now();
+    const elapsed = () => Date.now() - startedAt;
 
     // Idempotent: skip if already in IndexedDB
     const existing = await getMediaBlob(msg.message_id);
     if (existing) {
+        console.log(TAG, 'Web download: already in IDB', {
+            messageId: msg.message_id,
+            messageType: msg.message_type,
+            elapsedMs: elapsed(),
+        });
         return idbUri;
     }
 
+    const encrypted = isEncryptedMediaMessage(msg);
+    let unwrapKeyForEncrypted: string | null | undefined;
+    if (encrypted) {
+        unwrapKeyForEncrypted = await resolveMediaUnwrapKey(msg);
+        hydrateEncryptedMediaMetadata(msg, unwrapKeyForEncrypted);
+    }
+
+    console.log(TAG, 'Web download: start', {
+        messageId: msg.message_id,
+        messageType: msg.message_type,
+        fileSize: msg.file_size ?? null,
+        mimeType: msg.file_mime_type ?? null,
+        encrypted,
+    });
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout to response headers
 
     try {
+        const fetchStartedAt = Date.now();
         const projectId = new URL(msg.download_url!).searchParams.get('project');
         const response = await fetch(msg.download_url!, {
             headers: projectId ? { 'X-Appwrite-Project': projectId } : {},
@@ -227,31 +372,110 @@ async function downloadForWeb(
         }
 
         // --- Stream progress handling ---
-        const contentLength = +(response.headers.get('Content-Length') || '0');
+        const headerContentLength = +(response.headers.get('Content-Length') || '0');
+        const fileSizeHint = Number(msg.file_size) || 0;
+        const progressTotal = headerContentLength || fileSizeHint;
+        console.log(TAG, 'Web download: headers received', {
+            messageId: msg.message_id,
+            status: response.status,
+            contentLength: headerContentLength || null,
+            progressTotal: progressTotal || null,
+            progressTotalSource: headerContentLength ? 'content-length' : fileSizeHint ? 'file_size' : 'unknown',
+            headerMs: Date.now() - fetchStartedAt,
+            elapsedMs: elapsed(),
+        });
+
         const reader = response.body?.getReader();
         if (!reader) throw new Error('Response body is not readable');
 
         const chunks: Uint8Array[] = [];
         let receivedLength = 0;
+        let lastLoggedPercent = 0;
+        let lastLoggedAt = Date.now();
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             chunks.push(value);
             receivedLength += value.length;
-            if (contentLength) onProgress?.((receivedLength / contentLength) * 100);
+            if (progressTotal) {
+                const rawPercent = Math.min(100, (receivedLength / progressTotal) * 100);
+                const displayPercent = Math.min(99, rawPercent);
+                onProgress?.(displayPercent);
+                const shouldLogPercent = displayPercent - lastLoggedPercent >= 25;
+                const shouldLogTime = Date.now() - lastLoggedAt >= 5000;
+                if (shouldLogPercent || shouldLogTime) {
+                    console.log(TAG, 'Web download: progress', {
+                        messageId: msg.message_id,
+                        receivedBytes: receivedLength,
+                        progressTotal,
+                        percent: Math.round(displayPercent),
+                        elapsedMs: elapsed(),
+                    });
+                    lastLoggedPercent = displayPercent;
+                    lastLoggedAt = Date.now();
+                }
+            } else if (Date.now() - lastLoggedAt >= 5000) {
+                console.log(TAG, 'Web download: progress unknown-size', {
+                    messageId: msg.message_id,
+                    receivedBytes: receivedLength,
+                    elapsedMs: elapsed(),
+                });
+                lastLoggedAt = Date.now();
+            }
         }
 
-        const blob = new Blob(chunks as any);
+        console.log(TAG, 'Web download: body complete', {
+            messageId: msg.message_id,
+            receivedBytes: receivedLength,
+            progressTotal: progressTotal || null,
+            elapsedMs: elapsed(),
+        });
+
+        // E2EE: decrypt in memory before persisting — unwraps the media key from
+        // msg.content (sender key for incoming, recipient key for own messages)
+        // and opens the secretbox. A failure throws and is treated as
+        // a download failure (no ACK on primary; the relay retains the file).
+        let blob: Blob;
+        const decryptStartedAt = Date.now();
+        if (encrypted) {
+            const encryptedBytes = new Uint8Array(receivedLength);
+            let offset = 0;
+            for (const chunk of chunks) {
+                encryptedBytes.set(chunk, offset);
+                offset += chunk.length;
+            }
+            blob = new Blob([decryptIncomingMediaBytes(msg, encryptedBytes, unwrapKeyForEncrypted)] as any);
+            console.log(TAG, 'Web download: decrypt complete', {
+                messageId: msg.message_id,
+                decryptMs: Date.now() - decryptStartedAt,
+                plainBytes: blob.size,
+                elapsedMs: elapsed(),
+            });
+        } else {
+            blob = new Blob(chunks as any);
+        }
         // --------------------------------
         const mimeType = msg.file_mime_type || blob.type || FALLBACK_MIME_TYPE;
         const fileName = msg.file_name || `${msg.message_id}${inferExtension(msg)}`;
 
+        const storeStartedAt = Date.now();
         await storeMediaBlob(msg.message_id, blob, mimeType, fileName);
-        console.log(TAG, `Stored in IDB → ${msg.message_id}`);
+        console.log(TAG, 'Web download: stored in IDB', {
+            messageId: msg.message_id,
+            storeMs: Date.now() - storeStartedAt,
+            totalMs: elapsed(),
+            blobBytes: blob.size,
+        });
         return idbUri;
     } catch (err) {
-        console.error(TAG, `Failed to download ${msg.message_id}:`, err);
+        clearTimeout(timeoutId);
+        console.error(TAG, `Failed to download ${msg.message_id}:`, {
+            messageId: msg.message_id,
+            messageType: msg.message_type,
+            elapsedMs: elapsed(),
+            error: err,
+        });
         throw err; // let caller decide (Rule 7: primary blocks ACK, non-primary continues)
     }
 }

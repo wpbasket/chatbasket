@@ -17,10 +17,36 @@ import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 import { DEFAULT_MIME_TYPES, FALLBACK_MIME_TYPE } from '@/lib/personalLib/fileSystem/file.download';
+import {
+    createE2EERecipientKeyRefreshPass,
+    encryptOutgoingTextStrict,
+    prepareOutgoingMediaStrict,
+    type E2EERecipientKeyRefreshPass,
+    type E2EEStrictSendFailureReason,
+    type EncryptedMediaUpload,
+    type EncryptedMediaBlobUpload,
+} from '@/lib/personalLib/e2ee/e2ee.service';
 
 const TAG = '[OutboxQueue]';
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2_000;
+
+
+class E2EESecureSendBlockedError extends Error {
+    readonly code = 'E2EE_SECURE_SEND_BLOCKED';
+    constructor(
+        readonly reason: E2EEStrictSendFailureReason,
+        readonly messageId: string,
+    ) {
+        super(`Secure send blocked: ${reason}`);
+        this.name = 'E2EESecureSendBlockedError';
+    }
+}
+
+function isE2EESecureSendBlockedError(err: unknown): err is E2EESecureSendBlockedError {
+    return err instanceof E2EESecureSendBlockedError ||
+        (err instanceof Error && (err as any).code === 'E2EE_SECURE_SEND_BLOCKED');
+}
 
 /**
  * Error classification for queue ordering decisions.
@@ -34,6 +60,10 @@ type ErrorClassification = 'BLOCKING' | 'NON_BLOCKING' | 'ABORT';
  * This is critical for preserving message order while not blocking on permanent failures.
  */
 export function classifyError(err: unknown): ErrorClassification {
+    if (isE2EESecureSendBlockedError(err)) {
+        return 'NON_BLOCKING';
+    }
+
     // Abort errors - user initiated cancellation (logout/pause)
     if (err instanceof Error && err.name === 'AbortError') {
         return 'ABORT';
@@ -257,6 +287,7 @@ class OutboxQueue {
 
                 console.log(`${TAG} Found ${pending.length} pending message(s)`);
                 let nextRetryMs: number | null = null;
+                const recipientKeyRefreshPass = createE2EERecipientKeyRefreshPass();
                 
                 for (const msg of pending) {
                     if (this._paused) {
@@ -285,7 +316,7 @@ class OutboxQueue {
                         continue;
                     }
 
-                    await this.processMessage(msg);
+                    await this.processMessage(msg, recipientKeyRefreshPass);
                 }
 
                 if (nextRetryMs != null) {
@@ -305,7 +336,7 @@ class OutboxQueue {
         return `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }
 
-    private async processMessage(msg: LocalMessageEntry): Promise<void> {
+    private async processMessage(msg: LocalMessageEntry, recipientKeyRefreshPass: E2EERecipientKeyRefreshPass): Promise<void> {
         const id = msg.message_id;
         console.log(`${TAG} Processing ${id} (type=${msg.message_type}, retry=${msg.retry_count})`);
 
@@ -318,22 +349,35 @@ class OutboxQueue {
 
         try {
             if (msg.message_type === 'text') {
-                await this.sendText(msg, this._currentAbortController.signal);
+                await this.sendText(msg, this._currentAbortController.signal, recipientKeyRefreshPass);
             } else {
-                await this.sendFile(msg, this._currentAbortController.signal);
+                await this.sendFile(msg, this._currentAbortController.signal, recipientKeyRefreshPass);
             }
         } catch (err) {
-            // handleFailure now handles ABORT classification internally
+            // handleFailure classifies secure/E2EE blocks as NON_BLOCKING so later messages continue.
             await this.handleFailure(msg, err);
         } finally {
             this._currentAbortController = null;
         }
     }
 
-    private async sendText(msg: LocalMessageEntry, signal?: AbortSignal): Promise<void> {
+    private async sendText(
+        msg: LocalMessageEntry,
+        signal: AbortSignal | undefined,
+        recipientKeyRefreshPass: E2EERecipientKeyRefreshPass,
+    ): Promise<void> {
+        // Strict E2EE: encrypt at send time. Any local/self/recipient key failure
+        // blocks transport; plaintext is never sent from the outbox path.
+        const encrypted = await encryptOutgoingTextStrict(msg.recipient_id, msg.content || '', {
+            recipientKeyRefreshPass,
+        });
+        if (!encrypted.ok) {
+            throw new E2EESecureSendBlockedError(encrypted.reason, msg.message_id);
+        }
+
         const response = await ChatTransport.sendMessage({
             recipient_id: msg.recipient_id,
-            content: msg.content || '',
+            content: encrypted.wire,
             message_type: 'text',
         }, signal);
 
@@ -345,79 +389,147 @@ class OutboxQueue {
             status: 'sent',
             acked_by_server: true,
             error_message: null,
+            recipient_e2ee_public_key_used: encrypted.recipient_e2ee_public_key_used,
             file_id: response.file_id ?? null,
             view_url: response.view_url ?? null,
             download_url: response.download_url ?? null,
-            created_at: response.created_at,
+            // Preserve optimistic enqueue time so UI order stays stable even if
+            // uploads finish out of order (video before later audio, etc.).
+            created_at: msg.created_at || response.created_at,
             expires_at: response.expires_at ?? null,
             file_token_expiry: response.file_token_expiry ?? null,
         });
 
-        const sentMessage: MessageEntry = {
+        const sentMessage = {
             ...response,
             status: 'sent',
-            content: response.content || msg.content || '',
+            // E2EE: prefer the LOCAL plaintext — the server echoes ciphertext the
+            // sender cannot decrypt (crypto_box is recipient-keyed).
+            content: msg.content || response.content || '',
             message_type: response.message_type || 'text',
             chat_id: response.chat_id || msg.chat_id,
             recipient_id: response.recipient_id || msg.recipient_id,
             is_from_me: true,
             delivered_to_recipient: response.delivered_to_recipient ?? false,
             synced_to_sender_primary: response.synced_to_sender_primary ?? true,
-        };
+            recipient_e2ee_public_key_used: encrypted.recipient_e2ee_public_key_used,
+        } as MessageEntry;
 
         await this.promoteTempMessage(msg, sentMessage);
         console.log(`${TAG} Text sent: ${msg.message_id} -> ${response.message_id}`);
     }
 
-    private async sendFile(msg: LocalMessageEntry, signal?: AbortSignal): Promise<void> {
-        const formData = await this.buildFormDataForRetry(msg);
-        const response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
-            this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
-                status: 'sending',
-                progress,
-            });
-        }, signal);
+    private async sendFile(
+        msg: LocalMessageEntry,
+        signal: AbortSignal | undefined,
+        recipientKeyRefreshPass: E2EERecipientKeyRefreshPass,
+    ): Promise<void> {
+        // Strict E2EE: build encrypted upload copy + wrapped key only. Missing
+        // staged bytes/key/prep failure blocks transport; plaintext upload never runs.
+        let e2ee: EncryptedMediaUpload | EncryptedMediaBlobUpload | null = null;
+        let recipientKeyUsed: string | null = null;
+
+        if (Platform.OS === 'web') {
+            const media = await getMediaBlob(msg.message_id);
+            if (!media?.blob) {
+                throw new E2EESecureSendBlockedError('invalid_payload', msg.message_id);
+            }
+            const prepared = await prepareOutgoingMediaStrict({
+                kind: 'blob',
+                recipientId: msg.recipient_id,
+                blob: media.blob,
+                originalFileName: msg.file_name || media.fileName || 'file',
+                originalMimeType: msg.file_mime_type || media.mimeType || media.blob.type || null,
+                originalSize: msg.file_size ?? media.blob.size ?? null,
+                messageType: msg.message_type,
+            }, { recipientKeyRefreshPass });
+            if (!prepared.ok) {
+                throw new E2EESecureSendBlockedError(prepared.reason, msg.message_id);
+            }
+            e2ee = prepared.media;
+            recipientKeyUsed = prepared.recipient_e2ee_public_key_used;
+        } else {
+            if (!msg.local_uri) {
+                throw new E2EESecureSendBlockedError('invalid_payload', msg.message_id);
+            }
+            const prepared = await prepareOutgoingMediaStrict({
+                kind: 'file',
+                recipientId: msg.recipient_id,
+                localUri: msg.local_uri,
+                originalFileName: msg.file_name || 'file',
+                originalMimeType: msg.file_mime_type || null,
+                originalSize: msg.file_size ?? null,
+                messageType: msg.message_type,
+            }, { recipientKeyRefreshPass });
+            if (!prepared.ok) {
+                throw new E2EESecureSendBlockedError(prepared.reason, msg.message_id);
+            }
+            e2ee = prepared.media;
+            recipientKeyUsed = prepared.recipient_e2ee_public_key_used;
+        }
+
+        let response: Awaited<ReturnType<typeof ChatTransport.uploadFileWithProgress>>;
+        try {
+            const formData = await this.buildFormDataForRetry(msg, e2ee);
+            response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
+                this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
+                    status: 'sending',
+                    progress,
+                });
+            }, signal);
+        } finally {
+            // Always delete the encrypted temp copy once the upload settles
+            e2ee.cleanup();
+        }
 
         if (!response?.message_id) {
             throw new Error(`Server returned no message_id for file ${msg.message_id}`);
         }
 
+        // E2EE: prefer LOCAL file metadata — for encrypted uploads the server
+        // echoes `<name>.enc` / application/octet-stream / the encrypted size,
+        // while the sender keeps the original staged file.
         await swapTempIdToRealId(msg.message_id, response.message_id, {
             status: 'sent',
             acked_by_server: true,
             error_message: null,
+            content: e2ee.wrappedKey,
+            recipient_e2ee_public_key_used: recipientKeyUsed,
             file_id: response.file_id ?? null,
-            file_name: response.file_name ?? msg.file_name,
-            file_size: response.file_size ?? msg.file_size,
-            file_mime_type: response.file_mime_type ?? msg.file_mime_type,
+            file_name: msg.file_name ?? response.file_name,
+            file_size: msg.file_size ?? response.file_size,
+            file_mime_type: msg.file_mime_type ?? response.file_mime_type,
             view_url: response.view_url ?? null,
             download_url: response.download_url ?? null,
-            created_at: response.created_at,
+            // Preserve optimistic enqueue time so UI order stays stable even if
+            // uploads finish out of order (video before later audio, etc.).
+            created_at: msg.created_at || response.created_at,
             expires_at: response.expires_at ?? null,
             file_token_expiry: response.file_token_expiry ?? null,
         });
 
-        const sentMessage: MessageEntry = {
+        const sentMessage = {
             ...response,
             chat_id: msg.chat_id,
             recipient_id: msg.recipient_id,
             is_from_me: true,
             message_type: msg.message_type,
-            content: msg.content || '',
+            content: e2ee.wrappedKey,
             status: 'sent',
             delivered_to_recipient: false,
             synced_to_sender_primary: true,
             local_uri: msg.local_uri,
-            file_name: response.file_name ?? msg.file_name,
-            file_size: response.file_size ?? msg.file_size,
-            file_mime_type: response.file_mime_type ?? msg.file_mime_type,
+            file_name: msg.file_name ?? response.file_name,
+            file_size: msg.file_size ?? response.file_size,
+            file_mime_type: msg.file_mime_type ?? response.file_mime_type,
             view_url: response.view_url || msg.local_uri || undefined,
             download_url: response.download_url,
             progress: 100,
             file_id: response.file_id ?? null,
             expires_at: response.expires_at,
             file_token_expiry: response.file_token_expiry,
-        };
+            recipient_e2ee_public_key_used: recipientKeyUsed,
+        } as MessageEntry;
 
         await this.promoteTempMessage(msg, sentMessage);
         console.log(`${TAG} File sent: ${msg.message_id} -> ${response.message_id}`);
@@ -425,7 +537,12 @@ class OutboxQueue {
 
     private async promoteTempMessage(msg: LocalMessageEntry, sentMessage: MessageEntry): Promise<void> {
         // Handle async operations BEFORE the synchronous batch
-        let resolvedEntry = { ...sentMessage };
+        let resolvedEntry = {
+            ...sentMessage,
+            // Server created_at reflects upload completion; keep local enqueue
+            // time to avoid message jumps during temp-id promotion.
+            created_at: msg.created_at || sentMessage.created_at,
+        };
 
         // Resolve media URLs if needed (async)
         if (resolvedEntry.file_id && !resolvedEntry.local_uri) {
@@ -459,30 +576,30 @@ class OutboxQueue {
         } as ChatEntry);
     }
 
-    private async buildFormDataForRetry(msg: LocalMessageEntry): Promise<FormData> {
+    private async buildFormDataForRetry(
+        msg: LocalMessageEntry,
+        e2ee: EncryptedMediaUpload | EncryptedMediaBlobUpload,
+    ): Promise<FormData> {
         const formData = new FormData();
         formData.append('recipient_id', msg.recipient_id);
         formData.append('message_type', msg.message_type);
-        formData.append('caption', msg.content || '');
+        // E2EE: encrypted media envelope travels as caption → stored as message content.
+        // No plaintext caption/file branch exists in strict outbox transport.
+        formData.append('caption', e2ee.wrappedKey);
 
-        if (Platform.OS === 'web') {
-            const media = await getMediaBlob(msg.message_id);
-            if (!media) {
-                throw new Error(`No blob found in IDB for ${msg.message_id}`);
-            }
-            const file = new File([media.blob], msg.file_name || media.fileName || 'file', {
-                type: msg.file_mime_type || media.mimeType || FALLBACK_MIME_TYPE,
+        if (Platform.OS === 'web' && 'encryptedBlob' in e2ee) {
+            const encryptedFile = new File([e2ee.encryptedBlob], e2ee.uploadFileName, {
+                type: FALLBACK_MIME_TYPE,
             });
-            formData.append('file', file);
-        } else {
-            if (!msg.local_uri) {
-                throw new Error(`No local_uri for native file retry: ${msg.message_id}`);
-            }
+            formData.append('file', encryptedFile);
+        } else if (Platform.OS !== 'web' && 'encryptedUri' in e2ee) {
             formData.append('file', {
-                uri: msg.local_uri,
-                name: msg.file_name || 'file',
-                type: msg.file_mime_type || FALLBACK_MIME_TYPE,
+                uri: e2ee.encryptedUri,
+                name: e2ee.uploadFileName,
+                type: FALLBACK_MIME_TYPE,
             } as any);
+        } else {
+            throw new E2EESecureSendBlockedError('invalid_payload', msg.message_id);
         }
 
         return formData;
@@ -506,10 +623,16 @@ class OutboxQueue {
         }
 
         const retryCount = (msg.retry_count || 0) + 1;
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const secureBlocked = isE2EESecureSendBlockedError(err);
+        const fallbackErrorMessage = msg.message_type === 'text'
+            ? 'Message could not be sent.'
+            : 'File could not be sent.';
+        const errorMessage = secureBlocked
+            ? fallbackErrorMessage
+            : err instanceof Error ? err.message : String(err);
         
-        // NON_BLOCKING errors (4xx client errors, business logic errors):
-        // Mark as terminal immediately - don't waste retries on permanent failures
+        // NON_BLOCKING errors (4xx/client/business/security-policy errors):
+        // Mark as terminal immediately - don't waste retries or block later messages
         const isNonBlocking = classification === 'NON_BLOCKING';
         const terminal = isNonBlocking || retryCount >= MAX_RETRIES;
 
@@ -540,7 +663,9 @@ class OutboxQueue {
             
             $chatMessagesState.setError(msg.chat_id, userMessage);
             
-            if (isNonBlocking) {
+            if (secureBlocked) {
+                console.warn(`${TAG} Secure send blocked for ${msg.message_id} (${err.reason}) - marking non-blocking error, no transport call`);
+            } else if (isNonBlocking) {
                 console.warn(`${TAG} Non-blocking error (${classification}) for ${msg.message_id} - marking as error, will skip: ${errorMessage}`);
             } else {
                 console.error(`${TAG} Failed permanently (${retryCount}/${MAX_RETRIES}): ${msg.message_id} - ${errorMessage}`);
