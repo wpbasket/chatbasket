@@ -213,7 +213,7 @@ describe('short-message round trips after sodium is ready', () => {
 
         expect(wire).not.toBe('hi');
         expect(isEncryptedContent(wire)).toBe(true);
-        expect(mockGetE2EEKey).toHaveBeenCalledWith(ALICE_ID); // strict send backend-refreshes recipient key
+        expect(mockGetE2EEKey).not.toHaveBeenCalled(); // registry-first: cached key used, no backend call
         expect(decryptText(wire, bob.publicKey, alice.privateKey)).toBe('hi');
     });
 });

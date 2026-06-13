@@ -275,7 +275,7 @@ describe('encryptOutgoingMediaFile (upload prep, dummy staged file)', () => {
         expect(e2ee!.encryptedUri.startsWith(TEMP_DIR_PREFIX)).toBe(true);
         expect(e2ee!.encryptedUri.endsWith('.enc')).toBe(true);
         expect(isEncryptedContent(e2ee!.wrappedKey)).toBe(true); // caption payload
-        expect(mockGetE2EEKey).toHaveBeenCalledWith(BOB_ID); // strict send backend-refreshes recipient key
+        expect(mockGetE2EEKey).not.toHaveBeenCalled(); // registry-first: cached key used, no backend call
 
         // The encrypted copy exists, is ciphertext, and carries nonce+MAC overhead
         const encryptedBytes = mockFs.files.get(e2ee!.encryptedUri)!;

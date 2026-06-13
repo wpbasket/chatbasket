@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
 import { ChatTransport } from './chat.transport';
+import { isRecipientKeyChangedError, extractFreshKeyFromError } from './outbox.errors';
 import {
     getPendingOutboxMessages,
     getMediaBlob,
@@ -21,6 +22,7 @@ import {
     createE2EERecipientKeyRefreshPass,
     encryptOutgoingTextStrict,
     prepareOutgoingMediaStrict,
+    saveUserPublicKey,
     type E2EERecipientKeyRefreshPass,
     type E2EEStrictSendFailureReason,
     type EncryptedMediaUpload,
@@ -354,7 +356,49 @@ class OutboxQueue {
                 await this.sendFile(msg, this._currentAbortController.signal, recipientKeyRefreshPass);
             }
         } catch (err) {
-            // handleFailure classifies secure/E2EE blocks as NON_BLOCKING so later messages continue.
+            // Handle recipient_key_changed: save fresh key from error response, retry once.
+            // sendText/sendFile will re-encrypt from registry (now has the fresh key).
+            if (isRecipientKeyChangedError(err)) {
+                const freshKey = extractFreshKeyFromError(err);
+                if (freshKey) {
+                    console.log(`${TAG} ⚠️ RECIPIENT KEY CHANGED — saving fresh key to registry`, {
+                        messageId: msg.message_id,
+                        recipientId: msg.recipient_id,
+                        freshKeyPrefix: freshKey.substring(0, 8) + '...',
+                    });
+                    await saveUserPublicKey(msg.recipient_id, freshKey);
+                    console.log(`${TAG} ✅ Fresh key saved to registry — retrying send`, {
+                        messageId: msg.message_id,
+                        messageType: msg.message_type,
+                    });
+                } else {
+                    console.warn(`${TAG} ⚠️ RECIPIENT KEY CHANGED but could not extract fresh key from error`, {
+                        messageId: msg.message_id,
+                        recipientId: msg.recipient_id,
+                    });
+                }
+                try {
+                    if (msg.message_type === 'text') {
+                        await this.sendText(msg, this._currentAbortController.signal, recipientKeyRefreshPass);
+                    } else {
+                        await this.sendFile(msg, this._currentAbortController.signal, recipientKeyRefreshPass);
+                    }
+                    console.log(`${TAG} ✅ Retry SUCCEEDED after key change`, {
+                        messageId: msg.message_id,
+                        recipientId: msg.recipient_id,
+                    });
+                    return; // retry succeeded
+                } catch (retryErr) {
+                    console.error(`${TAG} ❌ Retry FAILED after key change — falling through to handleFailure`, {
+                        messageId: msg.message_id,
+                        recipientId: msg.recipient_id,
+                        retryError: retryErr instanceof Error ? retryErr.message : String(retryErr),
+                    });
+                    await this.handleFailure(msg, retryErr);
+                    return;
+                }
+            }
+            // All other errors → normal failure handling
             await this.handleFailure(msg, err);
         } finally {
             this._currentAbortController = null;
@@ -372,13 +416,27 @@ class OutboxQueue {
             recipientKeyRefreshPass,
         });
         if (!encrypted.ok) {
+            if (encrypted.reason === 'recipient_key_unavailable') {
+                console.error(`${TAG} 🚫 SEND BLOCKED — recipient ${msg.recipient_id} has no E2EE key`, {
+                    messageId: msg.message_id,
+                    recipientId: msg.recipient_id,
+                    reason: encrypted.reason,
+                });
+            }
             throw new E2EESecureSendBlockedError(encrypted.reason, msg.message_id);
         }
+
+        console.log(`${TAG} sendText: sending with recipient key`, {
+            messageId: msg.message_id,
+            recipientId: msg.recipient_id,
+            recipientKeyPrefix: encrypted.recipient_e2ee_public_key_used?.substring(0, 8) + '...' ?? 'null',
+        });
 
         const response = await ChatTransport.sendMessage({
             recipient_id: msg.recipient_id,
             content: encrypted.wire,
             message_type: 'text',
+            recipient_e2ee_public_key_used: encrypted.recipient_e2ee_public_key_used,
         }, signal);
 
         if (!response?.message_id) {
@@ -470,7 +528,7 @@ class OutboxQueue {
 
         let response: Awaited<ReturnType<typeof ChatTransport.uploadFileWithProgress>>;
         try {
-            const formData = await this.buildFormDataForRetry(msg, e2ee);
+            const formData = await this.buildFormDataForRetry(msg, e2ee, recipientKeyUsed);
             response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
                 this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
                     status: 'sending',
@@ -579,13 +637,23 @@ class OutboxQueue {
     private async buildFormDataForRetry(
         msg: LocalMessageEntry,
         e2ee: EncryptedMediaUpload | EncryptedMediaBlobUpload,
+        recipientKeyUsed: string | null,
     ): Promise<FormData> {
+        console.log(`${TAG} sendFile: building FormData with recipient key`, {
+            messageId: msg.message_id,
+            recipientId: msg.recipient_id,
+            recipientKeyPrefix: recipientKeyUsed?.substring(0, 8) + '...' ?? 'null',
+            messageType: msg.message_type,
+        });
         const formData = new FormData();
         formData.append('recipient_id', msg.recipient_id);
         formData.append('message_type', msg.message_type);
         // E2EE: encrypted media envelope travels as caption → stored as message content.
         // No plaintext caption/file branch exists in strict outbox transport.
         formData.append('caption', e2ee.wrappedKey);
+        if (recipientKeyUsed) {
+            formData.append('recipient_e2ee_public_key_used', recipientKeyUsed);
+        }
 
         if (Platform.OS === 'web' && 'encryptedBlob' in e2ee) {
             const encryptedFile = new File([e2ee.encryptedBlob], e2ee.uploadFileName, {

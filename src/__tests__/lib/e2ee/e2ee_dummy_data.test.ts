@@ -105,6 +105,7 @@ import {
     processIncomingMessages,
     resolveMediaUnwrapKey,
     resolveRecipientPublicKey,
+    resolveRecipientPublicKeyStrict,
 } from '@/lib/personalLib/e2ee/e2ee.service';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib/models/personal.model.chat';
 
@@ -258,7 +259,7 @@ describe('encryptOutgoingText (send-time hook)', () => {
 
         expect(wire).not.toBe('queued plaintext message');
         expect(isEncryptedContent(wire)).toBe(true);
-        expect(mockGetE2EEKey).toHaveBeenCalledWith(BOB_ID); // strict send backend-refreshes recipient key
+        expect(mockGetE2EEKey).not.toHaveBeenCalled(); // registry-first: cached key used, no backend call
 
         expect(decryptText(wire, alice.publicKey, bob.privateKey)).toBe('queued plaintext message');
     });
@@ -291,6 +292,69 @@ describe('encryptOutgoingText (send-time hook)', () => {
     it('resolveRecipientPublicKey survives endpoint failure (returns null)', async () => {
         mockGetE2EEKey.mockRejectedValue(new Error('network down'));
         await expect(resolveRecipientPublicKey(BOB_ID)).resolves.toBeNull();
+    });
+});
+
+// ── 3b. resolveRecipientPublicKeyStrict — registry-first, backend-fallback ──
+
+describe('resolveRecipientPublicKeyStrict (registry-first key resolution)', () => {
+    it('registry HIT: returns cached key without calling the backend', async () => {
+        mockRegistry.set(BOB_ID, bob.publicKey);
+
+        const result = await resolveRecipientPublicKeyStrict(BOB_ID);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.publicKey).toBe(bob.publicKey);
+        expect(mockGetE2EEKey).not.toHaveBeenCalled(); // no network call
+    });
+
+    it('registry NULL: user explicitly has no E2EE — returns recipient_key_unavailable', async () => {
+        mockRegistry.set(BOB_ID, null); // server previously confirmed "no E2EE"
+
+        const result = await resolveRecipientPublicKeyStrict(BOB_ID);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('recipient_key_unavailable');
+        expect(mockGetE2EEKey).not.toHaveBeenCalled(); // no network call
+    });
+
+    it('registry MISS: falls back to backend and persists the result', async () => {
+        // Registry has no entry for BOB_ID (undefined) — triggers backend fetch
+        mockGetE2EEKey.mockResolvedValue({ e2ee_public_key: bob.publicKey });
+
+        const result = await resolveRecipientPublicKeyStrict(BOB_ID);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.publicKey).toBe(bob.publicKey);
+        expect(mockGetE2EEKey).toHaveBeenCalledWith(BOB_ID); // backend called
+        expect(mockRegistry.get(BOB_ID)).toBe(bob.publicKey); // persisted to registry
+    });
+
+    it('registry MISS + backend returns null — returns recipient_key_unavailable', async () => {
+        mockGetE2EEKey.mockResolvedValue({ e2ee_public_key: null });
+
+        const result = await resolveRecipientPublicKeyStrict(BOB_ID);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('recipient_key_unavailable');
+        expect(mockRegistry.get(BOB_ID)).toBeNull(); // "no E2EE" persisted
+    });
+
+    it('registry MISS + backend failure — returns recipient_key_fetch_failed', async () => {
+        mockGetE2EEKey.mockRejectedValue(new Error('offline'));
+
+        const result = await resolveRecipientPublicKeyStrict(BOB_ID);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('recipient_key_fetch_failed');
+    });
+
+    it('empty recipientId — returns invalid_recipient', async () => {
+        const result = await resolveRecipientPublicKeyStrict('');
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toBe('invalid_recipient');
+        expect(mockGetE2EEKey).not.toHaveBeenCalled();
     });
 });
 

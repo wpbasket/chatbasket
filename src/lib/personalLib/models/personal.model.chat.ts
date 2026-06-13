@@ -204,6 +204,7 @@ export interface SendMessagePayload {
     recipient_id: string;
     content: string;
     message_type: string;    // text|image|video|audio|file
+    recipient_e2ee_public_key_used: string;
 }
 
 export interface AckDeliveryPayload {

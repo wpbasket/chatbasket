@@ -21,6 +21,7 @@ const CHAT_ERROR_MAP: Record<string, string> = {
     messaging_not_allowed_blocked_by_me: 'You have blocked this person. Unblock to send a message.',
     messaging_not_allowed_admin_blocked: 'This account has been restricted.',
     messaging_not_allowed_no_primary_device: 'This account is not available for messaging.',
+    messaging_not_allowed_no_e2ee: 'This account is not available for messaging.',
     messaging_not_allowed_recipient_not_found: 'This account is no longer active.',
 
     // ── Access errors ──
@@ -95,6 +96,7 @@ export function getEligibilityMessage(reason: string, options?: { name?: string 
         blocked_by_me: 'You have blocked this person. Unblock to send a message.',
         admin_blocked: 'This account has been restricted.',
         no_primary_device: 'This account is not available for messaging.',
+        no_e2ee: 'This account is not available for messaging.',
         recipient_not_found: 'This account is no longer active.',
     };
     let message = map[reason] ?? 'This account is not available for messaging.';

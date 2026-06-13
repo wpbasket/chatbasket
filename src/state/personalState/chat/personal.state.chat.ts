@@ -571,6 +571,7 @@ interface ChatData {
     selectedMessageIds: string[];
     isEligible: boolean;
     eligibilityReason: string | null;
+    lastEligibilityCheckAt: number | null;
 }
 
 const createDefaultChatData = (): ChatData => ({
@@ -587,6 +588,7 @@ const createDefaultChatData = (): ChatData => ({
     selectedMessageIds: [],
     isEligible: true,
     eligibilityReason: null,
+    lastEligibilityCheckAt: null,
 });
 
 const chatMessages$ = observable({

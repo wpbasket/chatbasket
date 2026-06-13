@@ -343,8 +343,29 @@ export async function resolveRecipientPublicKeyStrict(
     if (!recipientId) return { ok: false, reason: 'invalid_recipient' };
 
     try {
+        // 1. Registry-first: use cached key when available (avoids network round-trip).
+        //    The persistent registry is kept fresh by natural refresh paths:
+        //    chat list sync, incoming WS messages, pending message sync, and app hydration.
+        const stored = await ChatStorage.getUserE2eePublicKey(recipientId);
+        if (isValidPublicKeyB64(stored)) {
+            e2eeLog(TAG, 'Strict resolve key: registry HIT', {
+                recipientId,
+                key: keyFp(stored),
+            });
+            return { ok: true, publicKey: stored };
+        }
+        if (stored === null) {
+            // Registry explicitly records "user has no E2EE"
+            e2eeLog(TAG, 'Strict resolve key: registry says no E2EE', { recipientId });
+            console.warn(`${TAG} 🚫 Recipient ${recipientId} has NO E2EE key — send blocked`);
+            return { ok: false, reason: 'recipient_key_unavailable' };
+        }
+
+        // 2. Registry miss (undefined) — fall back to backend refresh
+        e2eeLog(TAG, 'Strict resolve key: registry MISS, backend fallback', { recipientId });
         const key = await fetchRecipientPublicKeyFromBackend(recipientId, options?.recipientKeyRefreshPass);
         if (!isValidPublicKeyB64(key)) {
+            console.warn(`${TAG} 🚫 Recipient ${recipientId} has NO E2EE key (confirmed by server) — send blocked`);
             return { ok: false, reason: 'recipient_key_unavailable' };
         }
         return { ok: true, publicKey: key };

@@ -259,7 +259,8 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
         // Only show "Delete for Me" for messages that exist on the server (not temp IDs)
         // or for failed outgoing messages (safe local-only delete)
         const isErrorState = status === 'error' || status === 'failed' || message.local_uri === 'error://download-failed';
-        if (!messageId.startsWith('temp_') && (status !== 'pending' || isErrorState)) {
+        const isTempId = messageId.startsWith('temp-') || messageId.startsWith('temp_');
+        if (!isTempId && (status !== 'pending' || isErrorState)) {
             controllers.push({
                 id: 'delete',
                 label: 'Delete for Me',
@@ -280,6 +281,20 @@ const MessageItemWrapper = React.memo(({ messageId, chatId, index }: { messageId
                         console.error('[UI] Delete failed', err);
                         showAlert(getChatErrorMessage(err, 'Could not delete message.'));
                     }
+                }
+            });
+        }
+
+        // Failed temp messages: local-only delete (never reached server)
+        if (isTempId && isErrorState) {
+            controllers.push({
+                id: 'delete_local',
+                label: 'Delete',
+                onPress: async () => {
+                    $chatMessagesState.removeMessages(chatId, [messageId]);
+                    $chatListState.clearPreviewIfLastMessage(chatId, [messageId]);
+                    ChatStorage.deleteMessage(messageId)
+                        .catch(err => console.warn('[UI] Local delete failed', err));
                 }
             });
         }
@@ -636,8 +651,19 @@ const ChatContentContainer = React.memo(({
                             if (chat$.peek()) {
                                 chat$.isEligible.set(res.allowed);
                                 chat$.eligibilityReason.set(!res.allowed ? (res.reason || null) : null);
+                                chat$.lastEligibilityCheckAt.set(Date.now());
                             }
                         });
+                        // React to eligibility result immediately on screen open
+                        // Only show modal/alert if user is still on this chat screen
+                        if (!res.allowed && res.reason &&
+                            $chatMessagesState.activeChatId.peek() === chat_id) {
+                            if (res.reason === 'not_in_contacts') {
+                                showAddContactFromChatModal();
+                            } else {
+                                showAlert(getEligibilityMessage(res.reason, { name: displayName }));
+                            }
+                        }
                     })
                     .catch(err => {
                         console.error('[Chat] Eligibility check failed', err);
@@ -928,16 +954,15 @@ const ChatContentContainer = React.memo(({
         const currentChat = $chatMessagesState.chats[chat_id];
         const chatData = currentChat.peek();
 
-        // Check eligibility before proceeding
-        if (!chatData.isEligible) {
+        // Block send only if eligibility check is fresh (< 1 min) and not eligible.
+        // Stale results (> 1 min) are untrusted — let the server decide.
+        if (!chatData.isEligible && chatData.lastEligibilityCheckAt &&
+            (Date.now() - chatData.lastEligibilityCheckAt) < 60_000) {
             const reason = chatData.eligibilityReason;
-
             if (reason === 'not_in_contacts') {
                 showAddContactFromChatModal();
             } else {
-                // For all other reasons, show the specific error message from eligibility helper
-                const errorMsg = getEligibilityMessage(reason as string, { name: displayName });
-                showAlert(errorMsg);
+                showAlert(getEligibilityMessage(reason as string, { name: displayName }));
             }
             return;
         }
@@ -1005,16 +1030,14 @@ const ChatContentContainer = React.memo(({
         const currentChat = $chatMessagesState.chats[chat_id];
         const chatData = currentChat.peek();
 
-        // Check eligibility before proceeding
-        if (!chatData.isEligible) {
+        // Block attach only if eligibility check is fresh (< 1 min) and not eligible.
+        if (!chatData.isEligible && chatData.lastEligibilityCheckAt &&
+            (Date.now() - chatData.lastEligibilityCheckAt) < 60_000) {
             const reason = chatData.eligibilityReason;
-
             if (reason === 'not_in_contacts') {
                 showAddContactFromChatModal();
             } else {
-                // For all other reasons, show the specific error message from eligibility helper
-                const errorMsg = getEligibilityMessage(reason as string, { name: displayName });
-                showAlert(errorMsg);
+                showAlert(getEligibilityMessage(reason as string, { name: displayName }));
             }
             return;
         }
@@ -1150,44 +1173,65 @@ const ChatContentContainer = React.memo(({
         const selectedIds = $chatMessagesState.chats[chat_id].selectedMessageIds.peek();
         if (selectedIds.length === 0) return;
 
-        // Filter out messages with temp IDs (pending/error status) - they only exist locally
         const messagesById = $chatMessagesState.chats[chat_id].messagesById.peek() || {};
-        const validIds = selectedIds.filter(id => {
-            const msg = messagesById[id];
-            // Skip messages with temp IDs (start with 'temp_') or pending/error status
-            return msg && !id.startsWith('temp_') && msg.status !== 'pending' && msg.status !== 'error';
-        });
 
-        if (validIds.length === 0) {
+        // Separate into server IDs and local-only IDs (temp/failed messages)
+        const serverIds: string[] = [];
+        const localIds: string[] = [];
+        for (const id of selectedIds) {
+            const msg = messagesById[id];
+            if (!msg) continue;
+            if (msg.status === 'pending') continue; // skip in-flight messages
+            const isTempId = id.startsWith('temp-') || id.startsWith('temp_');
+            const isErrorState = msg.status === 'error' || msg.status === 'failed';
+            if (isTempId || isErrorState) {
+                localIds.push(id); // never reached server or failed — local delete only
+            } else {
+                serverIds.push(id); // exists on server — server delete
+            }
+        }
+
+        const totalIds = serverIds.length + localIds.length;
+        if (totalIds === 0) {
             $chatMessagesState.toggleSelectMode(chat_id, false);
             $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
             return;
         }
 
         const confirmed = await showConfirmDialog(
-            `Are you sure you want to delete ${validIds.length} message${validIds.length > 1 ? 's' : ''} for you?`,
+            `Are you sure you want to delete ${totalIds} message${totalIds > 1 ? 's' : ''} for you?`,
             { confirmText: 'Delete', cancelText: 'Cancel', confirmVariant: 'destructive' }
         );
 
         if (confirmed) {
-            try {
-                const response = await ChatTransport.deleteMessageForMe({ message_ids: validIds });
-                if (!response?.status) {
-                    throw new Error(response?.message || 'Bulk delete failed');
+            const allDeletedIds = [...localIds];
+
+            // Delete server messages
+            if (serverIds.length > 0) {
+                try {
+                    const response = await ChatTransport.deleteMessageForMe({ message_ids: serverIds });
+                    if (!response?.status) {
+                        throw new Error(response?.message || 'Bulk delete failed');
+                    }
+                    allDeletedIds.push(...serverIds);
+                } catch (err) {
+                    console.error('[UI] Bulk Delete (server) failed', err);
+                    $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Could not delete selected messages.', { name: recipient_name }));
+                    // Still proceed with local deletes even if server fails
                 }
-
-                $chatMessagesState.removeMessages(chat_id, validIds);
-                $chatListState.clearPreviewIfLastMessage(chat_id, validIds);
-                $chatMessagesState.toggleSelectMode(chat_id, false);
-                $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
-
-                // Phase D: Mark as soft-deleted in local storage so they won't reappear on next load
-                Promise.all(validIds.map(id => ChatStorage.deleteMessage(id)))
-                    .catch(err => console.warn('[UI] Storage bulk soft-delete failed', err));
-            } catch (err) {
-                console.error('[UI] Bulk Delete failed', err);
-                $chatMessagesState.setError(chat_id, getChatErrorMessage(err, 'Could not delete selected messages.', { name: recipient_name }));
             }
+
+            // Remove all deleted messages from UI and storage
+            if (allDeletedIds.length > 0) {
+                $chatMessagesState.removeMessages(chat_id, allDeletedIds);
+                $chatListState.clearPreviewIfLastMessage(chat_id, allDeletedIds);
+
+                Promise.all(allDeletedIds.map(id => ChatStorage.deleteMessage(id)))
+                    .catch(err => console.warn('[UI] Storage bulk soft-delete failed', err));
+            }
+
+            $chatMessagesState.toggleSelectMode(chat_id, false);
+            $chatMessagesState.chats[chat_id]?.selectedMessageIds.set([]);
         }
     }, [chat_id, recipient_name]);
 
