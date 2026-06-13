@@ -651,9 +651,35 @@ export async function processIncomingMessages(
                     plaintextChars: localChars,
                 });
             } else {
-                msg.content = E2EE_FAILED_TO_LOAD_TEXT;
-                stats.ownEchoBlanked++;
-                e2eeLog(TAG, 'Ingress: own encrypted echo failed placeholder (is_from_me)', { messageId: msg.message_id });
+                let decrypted = null;
+                const recipientKey = (msg as any).recipient_e2ee_public_key_used ||
+                                     (msg.recipient_id ? await resolveRecipientPublicKey(msg.recipient_id) : null) ||
+                                     (async () => {
+                                         const counterpartId = await resolveChatCounterpartUserId(msg.chat_id);
+                                         return counterpartId ? await resolveRecipientPublicKey(counterpartId) : null;
+                                     })();
+                const resolvedKey = recipientKey instanceof Promise ? await recipientKey : recipientKey;
+
+                if (isValidPublicKeyB64(resolvedKey) && myPrivateKey) {
+                    try {
+                        decrypted = decryptText(msg.content, resolvedKey, myPrivateKey);
+                    } catch (err) {
+                        console.warn('[E2EE] Fallback decryption of own text message failed', err);
+                    }
+                }
+
+                if (decrypted !== null) {
+                    msg.content = decrypted;
+                    stats.ownEchoRestored++;
+                    e2eeLog(TAG, 'Ingress: own echo decrypted from server ciphertext', {
+                        messageId: msg.message_id,
+                        plaintextChars: decrypted.length,
+                    });
+                } else {
+                    msg.content = E2EE_FAILED_TO_LOAD_TEXT;
+                    stats.ownEchoBlanked++;
+                    e2eeLog(TAG, 'Ingress: own encrypted echo failed placeholder (is_from_me)', { messageId: msg.message_id });
+                }
             }
             continue;
         }
@@ -842,8 +868,23 @@ export async function processIncomingChats(chats: ChatEntry[]): Promise<ChatEntr
                 chat.last_message_content = localContent;
                 stats.restored++;
             } else {
-                markChatPreviewAsFailed(chat);
-                stats.blanked++;
+                const recipientKey = getKnownChatKey(chat);
+                let decrypted = null;
+                if (isValidPublicKeyB64(recipientKey) && myPrivateKey) {
+                    try {
+                        decrypted = decryptText(chat.last_message_content as string, recipientKey, myPrivateKey);
+                    } catch (err) {
+                        console.warn('[E2EE] Fallback decryption of own preview failed', err);
+                    }
+                }
+
+                if (decrypted !== null) {
+                    chat.last_message_content = decrypted;
+                    stats.decrypted++;
+                } else {
+                    markChatPreviewAsFailed(chat);
+                    stats.blanked++;
+                }
             }
             continue;
         }

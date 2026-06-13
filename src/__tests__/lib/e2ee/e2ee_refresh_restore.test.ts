@@ -226,6 +226,21 @@ describe('processIncomingMessages — own encrypted echo restore (refresh self-h
         expect(msg.content).toBe(E2EE_FAILED_TO_LOAD_TEXT);
     });
 
+    it('decrypts an own encrypted echo when no local row exists but recipient key is available', async () => {
+        const wire = encryptText('decrypted from server', bob.publicKey, alice.privateKey);
+        const msg = makeMessage({ 
+            message_id: 'm-own-3-decrypted', 
+            content: wire, 
+            is_from_me: true,
+            recipient_id: BOB_ID
+        });
+        mockRegistry.set(BOB_ID, bob.publicKey);
+
+        await processIncomingMessages([msg]);
+
+        expect(msg.content).toBe('decrypted from server');
+    });
+
     it('never resurrects ciphertext from the local row (cold-start incident artifact)', async () => {
         const wire = encryptText('current echo', bob.publicKey, alice.privateKey);
         const staleCipher = encryptText('older echo', bob.publicKey, alice.privateKey);
@@ -317,7 +332,7 @@ describe('processIncomingChats — own encrypted preview restore', () => {
         expect(mockGetMessagesByIds).toHaveBeenCalledWith(['m-prev-1']);
     });
 
-    it('blanks the own preview when no last_message_id is present', async () => {
+    it('decrypts the own preview when no last_message_id is present but recipient key is available', async () => {
         const wire = encryptText('no id preview', bob.publicKey, alice.privateKey);
         const chat = makeChat({
             last_message_content: wire,
@@ -327,16 +342,30 @@ describe('processIncomingChats — own encrypted preview restore', () => {
 
         await processIncomingChats([chat]);
 
-        expect(chat.last_message_content).toBe(E2EE_FAILED_TO_LOAD_TEXT);
+        expect(chat.last_message_content).toBe('no id preview');
         expect(mockGetMessagesByIds).not.toHaveBeenCalled();
     });
 
-    it('blanks the own preview when the local row is missing', async () => {
+    it('decrypts the own preview when the local row is missing but recipient key is available', async () => {
         const wire = encryptText('gone preview', bob.publicKey, alice.privateKey);
         const chat = makeChat({
             last_message_content: wire,
             last_message_is_from_me: true,
             last_message_id: 'm-prev-2',
+        });
+
+        await processIncomingChats([chat]);
+
+        expect(chat.last_message_content).toBe('gone preview');
+    });
+
+    it('blanks the own preview when local row is missing and recipient key is unavailable', async () => {
+        const wire = encryptText('no key preview', bob.publicKey, alice.privateKey);
+        const chat = makeChat({
+            last_message_content: wire,
+            last_message_is_from_me: true,
+            last_message_id: 'm-prev-2',
+            other_user_e2ee_public_key: null,
         });
 
         await processIncomingChats([chat]);
