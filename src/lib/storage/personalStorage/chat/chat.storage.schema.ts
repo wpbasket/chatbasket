@@ -11,7 +11,7 @@ export interface LocalMessageEntry {
     recipient_id: string;
     content: string | null;
     message_type: 'text' | 'file' | 'image' | 'video' | 'audio' | 'unsent';
-    status: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed';
+    status: 'preparing' | 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed';
     is_from_me: boolean;
     delivered_to_recipient: boolean;
     delivered_to_recipient_primary: boolean;
@@ -37,8 +37,9 @@ export interface LocalMessageEntry {
     deleted_for_me: boolean;       // True after "delete for me"
     inserted_at: string;           // Local insertion timestamp
     updated_at: string;            // Last update timestamp
+    local_seq: number;             // Monotonic local sequence (tie-breaker for inserted_at ordering)
 
-    // Outbox retry fields (only meaningful for is_from_me messages with status pending/sending/error)
+    // Outbox retry fields (only meaningful for is_from_me messages with status preparing/pending/sending/error)
     retry_count: number;           // Number of send attempts (0 = first attempt)
     last_retry_at: string | null;  // ISO timestamp of last retry attempt
     error_message: string | null;  // Last error message (cleared on successful send)
@@ -74,7 +75,7 @@ export interface LocalChatEntry {
 
 // NOTE: OutboxEntry has been removed. Outbox operations use LocalMessageEntry directly.
 // The "outbox" is a logical concept — a filtered query on the messages table:
-//   WHERE status IN ('pending', 'sending') AND is_from_me = true
+//   WHERE status IN ('preparing', 'pending', 'sending') AND is_from_me = true
 // Retry fields (retry_count, last_retry_at, error_message) are on LocalMessageEntry.
 //
 // Design rationale (Correction #36 — best industry standard):

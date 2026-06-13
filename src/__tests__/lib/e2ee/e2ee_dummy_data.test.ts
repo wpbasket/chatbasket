@@ -514,13 +514,32 @@ describe('processIncomingChats (chat list previews)', () => {
         expect(mockRegistry.get(BOB_ID)).toBe(bob.publicKey);
     });
 
-    it('blanks own encrypted preview (sender cannot decrypt own crypto_box)', async () => {
+    it('blanks own encrypted preview when recipient key is unavailable', async () => {
+        // crypto_box is bidirectional — with both keys present the sender CAN
+        // unwrap their own echo. This test exercises the actual fallback path:
+        // no recipient key in chat AND no key in registry → fallback must fail.
+        const wire = encryptText('my own preview', bob.publicKey, alice.privateKey);
+        mockRegistry.set(BOB_ID, null);
+        const chat = makeChat({
+            last_message_content: wire,
+            last_message_is_from_me: true,
+            other_user_e2ee_public_key: null,
+        });
+
+        await processIncomingChats([chat]);
+
+        expect(chat.last_message_content).toBe(E2EE_FAILED_TO_LOAD_TEXT);
+    });
+
+    it('decrypts own encrypted preview via fallback when recipient key is available', async () => {
+        // The bidirectional crypto_box property: sender can unwrap their own
+        // echo when both recipient pubkey and sender privkey are available.
         const wire = encryptText('my own preview', bob.publicKey, alice.privateKey);
         const chat = makeChat({ last_message_content: wire, last_message_is_from_me: true });
 
         await processIncomingChats([chat]);
 
-        expect(chat.last_message_content).toBe(E2EE_FAILED_TO_LOAD_TEXT);
+        expect(chat.last_message_content).toBe('my own preview');
     });
 
     it('leaves plaintext previews untouched and records "no key" users', async () => {

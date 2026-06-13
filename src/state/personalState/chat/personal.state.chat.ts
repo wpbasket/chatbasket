@@ -51,7 +51,12 @@ function needsIncomingMediaLocalPersistence(m: Partial<MessageEntry> & Record<st
     return true;
 }
 
-function getMessageCreatedAtMs(m: Pick<MessageEntry, 'created_at'>): number {
+function getMessageCreatedAtMs(m: Pick<MessageEntry, 'created_at' | 'local_seq'>): number {
+    // Use local_seq for outgoing messages (stable press order)
+    // Fall back to created_at for incoming messages (server time)
+    if (m.local_seq !== undefined && m.local_seq !== null) {
+        return m.local_seq;
+    }
     const time = new Date(String(m.created_at).replace(' ', 'T')).getTime();
     return Number.isFinite(time) ? time : 0;
 }
@@ -60,11 +65,7 @@ function sortMessagesByLocalCreatedAtDesc<T extends MessageEntry>(messages: T[])
     return [...messages].sort((a, b) => getMessageCreatedAtMs(b) - getMessageCreatedAtMs(a));
 }
 
-function preserveOutgoingLocalCreatedAt(incoming: MessageEntry, existing?: MessageEntry): string {
-    // Local optimistic timestamp is enqueue order. Server timestamps can be
-    // send/upload completion order, so never let sync move an already-visible
-    // outgoing message (text/image/video/audio/file).
-    if (existing?.is_from_me && existing.created_at) return existing.created_at;
+function preserveOutgoingLocalCreatedAt(incoming: MessageEntry, _existing?: MessageEntry): string {
     return incoming.created_at;
 }
 
@@ -1252,15 +1253,11 @@ const chatActions = {
             const chat = ensureChatInternal(chatId);
             const currentMessages = chat.messages.peek();
 
-            // Preserve local enqueue time for every outgoing message type, then
-            // sort by local created_at. Upload/server completion order must never
-            // move a temp-promoted message.
+            // Use server created_at for ordering (not local enqueue time).
+            // The outbox queue ensures messages are sent in order, so server time
+            // reflects the actual send order.
             const existingIndex = currentMessages.findIndex((m: MessageEntry) => m.message_id === oldMessageId);
-            const existingMessage = existingIndex >= 0 ? currentMessages[existingIndex] : null;
-            const stableNewMessage = {
-                ...newMessage,
-                created_at: existingMessage?.created_at ?? newMessage.created_at,
-            };
+            const stableNewMessage = { ...newMessage };
             const nextMessages = existingIndex >= 0
                 ? currentMessages.map((m: MessageEntry, index: number) => index === existingIndex ? stableNewMessage : m)
                 : [stableNewMessage, ...currentMessages];

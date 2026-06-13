@@ -454,7 +454,7 @@ describe('syncPendingMessages ACK race condition', () => {
         expect($chatListState.chatsById['chat-1'].last_message_status.peek()).toBe('pending');
     });
 
-    it('replaceMessage keeps optimistic enqueue position when uploads finish out of order', async () => {
+    it('replaceMessage uses server created_at for ordering when uploads finish', async () => {
         const videoTemp = makeMessage({
             message_id: 'temp-video',
             temp_id: 'temp-video',
@@ -492,10 +492,10 @@ describe('syncPendingMessages ACK race condition', () => {
 
         const messages = $chatMessagesState.chats['chat-1'].messages.peek();
         expect(messages.map((m: any) => m.message_id)).toEqual([
-            'temp-audio',
             'real-video',
+            'temp-audio',
         ]);
-        expect(messages[1].created_at).toBe('2026-01-01T00:00:00.000Z');
+        expect(messages[0].created_at).toBe('2026-01-01T00:00:05.000Z');
     });
 
     it('replaceMessage updates selectedMessageIds when temp ID is swapped', async () => {
@@ -558,7 +558,7 @@ describe('syncPendingMessages ACK race condition', () => {
         expect($chatMessagesState.chats['chat-1'].selectedMessageIds.peek()).toEqual(['other-msg']);
     });
 
-    it('keeps local created_at order for all outgoing message types across out-of-order promotion and sync', async () => {
+    it('uses server created_at order for outgoing messages after promotion and sync', async () => {
         const textTemp = makeMessage({
             message_id: 'temp-text',
             temp_id: 'temp-text',
@@ -596,40 +596,43 @@ describe('syncPendingMessages ACK race condition', () => {
             'temp-text',
         ]);
 
+        // After promotion, messages use server created_at (not local)
         $chatMessagesState.replaceMessage('chat-1', 'temp-video', {
             ...videoTemp,
             message_id: 'real-video',
             temp_id: null,
             status: 'sent',
-            created_at: '2026-01-01T00:00:10.000Z',
+            created_at: '2026-01-01T00:00:10.000Z', // Server time
         });
         $chatMessagesState.replaceMessage('chat-1', 'temp-text', {
             ...textTemp,
             message_id: 'real-text',
             temp_id: null,
             status: 'sent',
-            created_at: '2026-01-01T00:00:12.000Z',
+            created_at: '2026-01-01T00:00:12.000Z', // Server time (latest)
         });
         $chatMessagesState.replaceMessage('chat-1', 'temp-audio', {
             ...audioTemp,
             message_id: 'real-audio',
             temp_id: null,
             status: 'sent',
-            created_at: '2026-01-01T00:00:11.000Z',
+            created_at: '2026-01-01T00:00:11.000Z', // Server time
         });
 
         let messages = $chatMessagesState.chats['chat-1'].messages.peek();
+        // Order by server created_at DESC: text (12) → audio (11) → video (10)
         expect(messages.map((m: any) => m.message_id)).toEqual([
+            'real-text',
             'real-audio',
             'real-video',
-            'real-text',
         ]);
         expect(messages.map((m: any) => m.created_at)).toEqual([
-            '2026-01-01T00:00:02.000Z',
-            '2026-01-01T00:00:01.000Z',
-            '2026-01-01T00:00:00.000Z',
+            '2026-01-01T00:00:12.000Z',
+            '2026-01-01T00:00:11.000Z',
+            '2026-01-01T00:00:10.000Z',
         ]);
 
+        // Sync should also use server times (preserveOutgoingLocalCreatedAt now uses server time)
         await $chatMessagesState.setMessages('chat-1', [
             { ...messages[0], created_at: '2026-01-01T00:00:20.000Z' },
             { ...messages[1], created_at: '2026-01-01T00:00:21.000Z' },
@@ -637,15 +640,16 @@ describe('syncPendingMessages ACK race condition', () => {
         ], { skipSenderSync: true });
 
         messages = $chatMessagesState.chats['chat-1'].messages.peek();
+        // Order by new server created_at DESC: 22 → 21 → 20
         expect(messages.map((m: any) => m.message_id)).toEqual([
-            'real-audio',
             'real-video',
+            'real-audio',
             'real-text',
         ]);
         expect(messages.map((m: any) => m.created_at)).toEqual([
-            '2026-01-01T00:00:02.000Z',
-            '2026-01-01T00:00:01.000Z',
-            '2026-01-01T00:00:00.000Z',
+            '2026-01-01T00:00:22.000Z',
+            '2026-01-01T00:00:21.000Z',
+            '2026-01-01T00:00:20.000Z',
         ]);
     });
 

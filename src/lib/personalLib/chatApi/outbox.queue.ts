@@ -239,7 +239,7 @@ class OutboxQueue {
             file_mime_type: fileMimeType,
             created_at: now,
             expires_at: now,
-            status: 'pending',
+            status: 'preparing',
             delivered_to_recipient: false,
             synced_to_sender_primary: true,
             acked_by_server: false,
@@ -248,19 +248,48 @@ class OutboxQueue {
             progress: 0,
         };
 
-        const copyResult = await copyFileToPrivateDir(
-            input.asset.uri,
-            tempId,
-            fileName,
-            fileMimeType || undefined,
-            Platform.OS === 'web' ? input.asset.file : undefined,
-        );
-
-        optimisticMsg.local_uri = copyResult.localUri;
-        // file_url removed from optimistic message
-
         await $chatMessagesState.addMessage(input.chatId, optimisticMsg);
         this.upsertOutgoingPreview(input.chatId, optimisticMsg, input.recipientId, input.recipientName);
+        void this.processQueue();
+
+        try {
+            const copyResult = await copyFileToPrivateDir(
+                input.asset.uri,
+                tempId,
+                fileName,
+                fileMimeType || undefined,
+                Platform.OS === 'web' ? input.asset.file : undefined,
+            );
+
+            await updateMessageStatus(tempId, {
+                status: 'pending',
+                local_uri: copyResult.localUri,
+                file_name: fileName,
+                file_size: fileSize,
+                file_mime_type: fileMimeType,
+                error_message: null,
+                error_is_blocking: null,
+            });
+            this.syncInMemoryMessageStatus(input.chatId, tempId, {
+                status: 'pending',
+                local_uri: copyResult.localUri,
+                file_name: fileName,
+                file_size: fileSize,
+                file_mime_type: fileMimeType,
+            } as Partial<MessageEntry>);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            await updateMessageStatus(tempId, {
+                status: 'failed',
+                error_message: message,
+                error_is_blocking: false,
+            });
+            this.syncInMemoryMessageStatus(input.chatId, tempId, {
+                status: 'failed',
+                error_message: message,
+                error_is_blocking: false,
+            });
+        }
 
         void this.processQueue();
         return tempId;
@@ -290,11 +319,23 @@ class OutboxQueue {
                 console.log(`${TAG} Found ${pending.length} pending message(s)`);
                 let nextRetryMs: number | null = null;
                 const recipientKeyRefreshPass = createE2EERecipientKeyRefreshPass();
+                const blockedChats = new Set<string>();
                 
                 for (const msg of pending) {
                     if (this._paused) {
                         console.log(`${TAG} Paused mid-queue.`);
                         break;
+                    }
+
+                    if (blockedChats.has(msg.chat_id)) {
+                        console.log(`${TAG} Skipping ${msg.message_id} (chat blocked by earlier preparing message)`);
+                        continue;
+                    }
+
+                    if (msg.status === 'preparing') {
+                        blockedChats.add(msg.chat_id);
+                        console.log(`${TAG} Blocking chat ${msg.chat_id}: ${msg.message_id} is still preparing`);
+                        continue;
                     }
 
                     // Skip messages that have terminal error status (non-blocking errors already failed permanently)
@@ -451,9 +492,7 @@ class OutboxQueue {
             file_id: response.file_id ?? null,
             view_url: response.view_url ?? null,
             download_url: response.download_url ?? null,
-            // Preserve optimistic enqueue time so UI order stays stable even if
-            // uploads finish out of order (video before later audio, etc.).
-            created_at: msg.created_at || response.created_at,
+            created_at: response.created_at,
             expires_at: response.expires_at ?? null,
             file_token_expiry: response.file_token_expiry ?? null,
         });
@@ -559,9 +598,7 @@ class OutboxQueue {
             file_mime_type: msg.file_mime_type ?? response.file_mime_type,
             view_url: response.view_url ?? null,
             download_url: response.download_url ?? null,
-            // Preserve optimistic enqueue time so UI order stays stable even if
-            // uploads finish out of order (video before later audio, etc.).
-            created_at: msg.created_at || response.created_at,
+            created_at: response.created_at,
             expires_at: response.expires_at ?? null,
             file_token_expiry: response.file_token_expiry ?? null,
         });
@@ -597,9 +634,11 @@ class OutboxQueue {
         // Handle async operations BEFORE the synchronous batch
         let resolvedEntry = {
             ...sentMessage,
-            // Server created_at reflects upload completion; keep local enqueue
-            // time to avoid message jumps during temp-id promotion.
-            created_at: msg.created_at || sentMessage.created_at,
+            created_at: sentMessage.created_at,
+            // Preserve local_seq from optimistic message so UI sort stays stable
+            // after server ACK. Without this, sort falls back to server created_at
+            // which can be later than a subsequent still-pending message, causing a jump.
+            local_seq: msg.local_seq,
         };
 
         // Resolve media URLs if needed (async)

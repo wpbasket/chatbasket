@@ -98,6 +98,19 @@ describe('applyOutgoingReceiptStatus', () => {
         });
     });
 
+    it('does not hydrate preparing local messages from chat-level receipts', () => {
+        expect(applyOutgoingReceiptStatus({
+            ...base,
+            status: 'preparing' as const,
+        }, {
+            deliveredAt: '2026-06-12T10:01:00.000Z',
+            readAt: '2026-06-12T10:01:00.000Z',
+        })).toEqual({
+            ...base,
+            status: 'preparing',
+        });
+    });
+
     it('ignores incoming messages', () => {
         expect(applyOutgoingReceiptStatus({
             ...base,
@@ -172,6 +185,15 @@ describe('isMessageUnsendable', () => {
         })).toBe(false);
     });
 
+    it('returns false for preparing messages', () => {
+        expect(isMessageUnsendable({
+            is_from_me: true,
+            status: 'preparing',
+            is_unsent: false,
+            message_type: 'text',
+        })).toBe(false);
+    });
+
     it('returns false for pending messages', () => {
         expect(isMessageUnsendable({
             is_from_me: true,
@@ -215,6 +237,7 @@ describe('canBulkUnsend', () => {
     const read = { is_from_me: true, status: 'read' as const, is_unsent: false, message_type: 'text' };
     const unsent = { is_from_me: true, status: 'sent' as const, is_unsent: true, message_type: 'text' };
     const pending = { is_from_me: true, status: 'pending' as const, is_unsent: false, message_type: 'text' };
+    const preparing = { is_from_me: true, status: 'preparing' as const, is_unsent: false, message_type: 'text' };
 
     it('returns false for empty selection', () => {
         expect(canBulkUnsend([], { msg1: outgoing })).toBe(false);
@@ -242,6 +265,11 @@ describe('canBulkUnsend', () => {
 
     it('returns false when any selected message is in a terminal state', () => {
         const msgs = { msg1: outgoing, msg2: pending };
+        expect(canBulkUnsend(['msg1', 'msg2'], msgs)).toBe(false);
+    });
+
+    it('returns false when any selected message is still preparing', () => {
+        const msgs = { msg1: outgoing, msg2: preparing };
         expect(canBulkUnsend(['msg1', 'msg2'], msgs)).toBe(false);
     });
 

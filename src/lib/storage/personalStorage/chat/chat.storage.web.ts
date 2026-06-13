@@ -90,10 +90,20 @@ const CHATS_STORE = 'chats';
 const MEDIA_STORE = 'media';  // File blobs (per §8.6.3 / §8.5.7)
 const USER_KEYS_STORE = 'user_keys';  // E2EE persistent key registry (public keys — stored plain)
 // NOTE: No separate outbox store — outbox is a logical query on MESSAGES_STORE
-// (WHERE status IN ('pending','sending') AND is_from_me = true)
+// (WHERE status IN ('preparing','pending','sending') AND is_from_me = true)
 // This is the industry-standard pattern (Signal, WhatsApp, Telegram).
 
 let dataDb: IDBDatabase | null = null;
+
+/**
+ * Monotonic local sequence counter for outbox ordering tie-breaker (web).
+ * JS single-threaded → `_webLocalSeq++` is atomic within event loop.
+ */
+let _webLocalSeq = 1;
+
+function getNextWebLocalSeq(): number {
+    return _webLocalSeq++;
+}
 
 function openDataDb(): Promise<IDBDatabase> {
     if (dataDb) return Promise.resolve(dataDb);
@@ -218,6 +228,7 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
         error_is_blocking: null,
         inserted_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        local_seq: message.local_seq ?? getNextWebLocalSeq(),
     };
 }
 
@@ -512,6 +523,9 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
         const entry = await decryptEntry(records[0]);
         const oldMessageId = entry.message_id;
 
+        // Preserve local_seq from temp entry (like inserted_at)
+        const preservedLocalSeq = entry.local_seq;
+
         // Prepare the updated entry
         entry.message_id = realId;
         entry.temp_id = null;
@@ -519,6 +533,9 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
         entry.error_message = null;      // Clear error on successful send
         entry.error_is_blocking = null;  // Clear error flag on successful send
         entry.updated_at = new Date().toISOString();
+        if (preservedLocalSeq !== undefined) {
+            entry.local_seq = preservedLocalSeq;
+        }
         if (updates) Object.assign(entry, updates);
         const encrypted = await encryptEntry(entry);
 
@@ -588,11 +605,14 @@ export async function getPendingOutboxMessages(): Promise<LocalMessageEntry[]> {
 
     const results: LocalMessageEntry[] = [];
     for (const record of all) {
-        if ((record.status === 'pending' || record.status === 'sending') && record.is_from_me && !record.deleted_for_me) {
+        if ((record.status === 'preparing' || record.status === 'pending' || record.status === 'sending') && record.is_from_me && !record.deleted_for_me) {
             results.push(await decryptEntry(record));
         }
     }
-    return results.sort((a, b) => a.inserted_at.localeCompare(b.inserted_at));
+    return results.sort((a, b) => {
+        const cmp = a.inserted_at.localeCompare(b.inserted_at);
+        return cmp !== 0 ? cmp : a.local_seq - b.local_seq;
+    });
 }
 
 export async function getMessageByTempId(tempId: string): Promise<LocalMessageEntry | null> {
@@ -721,7 +741,7 @@ export async function getStorageStats(): Promise<{ totalMessages: number; pendin
     let pending = 0;
     for (const r of all) {
         if (!r.deleted_for_me) total++;
-        if (r.status === 'pending' || r.status === 'sending') pending++;
+        if (r.status === 'preparing' || r.status === 'pending' || r.status === 'sending') pending++;
     }
     return { totalMessages: total, pendingMessages: pending, chatsCount, failedInserts: _failedInserts };
 }
@@ -972,9 +992,9 @@ export async function cleanupOrphanedMedia(): Promise<void> {
                 validMessageIds.add(tempKey);
             }
 
-            // Race condition fix: Protect message_id (used as tempId) for pending/sending messages
-            // This prevents cleanup from deleting blobs that are being uploaded but not yet in DB
-            if (entry.status === 'pending' || entry.status === 'sending') {
+            // Race condition fix: Protect message_id (used as tempId) for preparing/pending/sending messages
+            // This prevents cleanup from deleting blobs that are being copied or uploaded but not yet in DB
+            if (entry.status === 'preparing' || entry.status === 'pending' || entry.status === 'sending') {
                 validMessageIds.add(entry.message_id);
             }
 

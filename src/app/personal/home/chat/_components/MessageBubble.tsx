@@ -66,7 +66,7 @@ type MessageBubbleProps = {
     text: string;
     type: 'me' | 'other';
     messageType?: string;
-    status?: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed';
+    status?: 'preparing' | 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'failed';
     delivered?: boolean;
     createdAt: string;
     onLongPress?: (event: import('react-native').GestureResponderEvent) => void;
@@ -190,7 +190,7 @@ const MessageBubble = memo(
         const isError = status === 'error' || status === 'failed' || isDownloadFailed;
         const isReady = useValue(() => {
             if (messageType === 'text' || messageType === 'unsent') return true;
-            const isPending = status === 'pending' || status === 'sending';
+            const isPending = status === 'preparing' || status === 'pending' || status === 'sending';
             // Optimization: Detect if we have an incoming download that hasn't started yet
             const isIncomingMissing = !isMe && !localUri && !isError;
             
@@ -271,7 +271,7 @@ const MessageBubble = memo(
         );
 
         const renderProgressBar = () => {
-            const isPendingLike = status === 'pending' || status === 'sending';
+            const isPendingLike = status === 'preparing' || status === 'pending' || status === 'sending';
             const isIncomingDownload = !isMe && !resolvedLocalUri && status !== 'error';
             
             // Show progress bar for any media while it is downloading or uploading
@@ -287,7 +287,7 @@ const MessageBubble = memo(
             if (messageType === 'unsent') return isMe ? <View style={styles.statusPlaceholder} /> : null;
             if (!isMe) return null;
 
-            if (status === 'pending' || status === 'sending') return (
+            if (status === 'preparing' || status === 'pending' || status === 'sending') return (
                 <View style={styles.statusContainer}>
                     <IconSymbol name="clock" size={15} color="#999" />
                 </View>
@@ -383,7 +383,7 @@ const MessageBubble = memo(
                                         {formatFileName(fileName || (isVideo ? 'Video' : 'Audio'))}
                                     </ThemedText>
                                     <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
-                                        {(status === 'pending' || status === 'sending') ? 'Preparing...' : 'Resolving...'}
+                                        {(status === 'preparing' || status === 'pending' || status === 'sending') ? 'Preparing...' : 'Resolving...'}
                                     </ThemedText>
                                 </View>
                             </View>

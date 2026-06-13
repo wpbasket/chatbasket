@@ -142,7 +142,7 @@ export const ChatListItem = memo(({ chatId, onPress, onLongPress, onContextMenu 
                                 }
                             }
 
-                            if (status === 'pending' || status === 'sending') {
+                            if (status === 'preparing' || status === 'pending' || status === 'sending') {
                                 return <IconSymbol name="clock" size={14} color="#999" style={styles.statusIcon} />;
                             }
 

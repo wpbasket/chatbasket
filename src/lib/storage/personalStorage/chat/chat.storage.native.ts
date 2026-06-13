@@ -101,7 +101,8 @@ export async function initChatStorage(): Promise<void> {
             sender_e2ee_public_key TEXT,
             recipient_e2ee_public_key_used TEXT,
             inserted_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT
+            updated_at TEXT,
+            local_seq INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE INDEX IF NOT EXISTS idx_messages_chat_id       ON messages(chat_id);
@@ -117,15 +118,14 @@ export async function initChatStorage(): Promise<void> {
         );
     `);
 
-    // Migration-safe additions for existing SQLite DBs. Duplicate-column errors are ignored.
-    for (const sql of [
-        `ALTER TABLE messages ADD COLUMN sender_e2ee_public_key TEXT`,
-        `ALTER TABLE messages ADD COLUMN recipient_e2ee_public_key_used TEXT`,
-    ]) {
-        try { await db.execAsync(sql); } catch { /* column already exists */ }
-    }
 
     console.log('[ChatStorage:Native] Database initialized');
+}
+
+let _nextLocalSeq = 1;
+
+async function getNextLocalSeq(): Promise<number> {
+    return _nextLocalSeq++;
 }
 
 /*
@@ -146,6 +146,7 @@ export async function initChatStorage(): Promise<void> {
 
 export async function insertMessage(message: MessageEntry & { tempId?: string; localUri?: string }): Promise<void> {
     const d = getDb();
+    const seq = message.local_seq ?? await getNextLocalSeq();
     await d.runAsync(
         `INSERT OR REPLACE INTO messages (
             message_id, chat_id, recipient_id, content, message_type,
@@ -153,8 +154,8 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             synced_to_sender_primary, created_at, expires_at, file_id, file_name,
             file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
             acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
-            file_token_expiry, sender_e2ee_public_key, recipient_e2ee_public_key_used, inserted_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            file_token_expiry, sender_e2ee_public_key, recipient_e2ee_public_key_used, inserted_at, updated_at, local_seq
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             message.message_id,
             message.chat_id,
@@ -186,7 +187,8 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             message.sender_e2ee_public_key ?? null,
             (message as any).recipient_e2ee_public_key_used ?? null,
             new Date().toISOString(),
-            new Date().toISOString()
+            new Date().toISOString(),
+            seq
         ]
     );
 }
@@ -324,6 +326,9 @@ export async function updateMessageStatus(messageId: string, updates: Partial<Lo
     if (updates.synced_to_sender_primary !== undefined) { fields.push('synced_to_sender_primary = ?'); values.push(updates.synced_to_sender_primary ? 1 : 0); }
     if (updates.acked_by_server !== undefined) { fields.push('acked_by_server = ?'); values.push(updates.acked_by_server ? 1 : 0); }
     if (updates.local_uri !== undefined) { fields.push('local_uri = ?'); values.push(updates.local_uri); }
+    if (updates.file_name !== undefined) { fields.push('file_name = ?'); values.push(updates.file_name); }
+    if (updates.file_size !== undefined) { fields.push('file_size = ?'); values.push(updates.file_size); }
+    if (updates.file_mime_type !== undefined) { fields.push('file_mime_type = ?'); values.push(updates.file_mime_type); }
     if (updates.retry_count !== undefined) { fields.push('retry_count = ?'); values.push(updates.retry_count); }
     if (updates.last_retry_at !== undefined) { fields.push('last_retry_at = ?'); values.push(updates.last_retry_at); }
     if (updates.error_message !== undefined) { fields.push('error_message = ?'); values.push(updates.error_message); }
@@ -361,6 +366,7 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
             ...base,
             local_uri: tempEntry.local_uri ?? base.local_uri,
             inserted_at: tempEntry.inserted_at || base.inserted_at,
+            local_seq: tempEntry.local_seq || base.local_seq,
             ...(updates || {}),
             message_id: realId,
             temp_id: null,
@@ -382,8 +388,8 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 synced_to_sender_primary, created_at, expires_at, file_id, file_name,
                 file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
                 acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
-                file_token_expiry, sender_e2ee_public_key, recipient_e2ee_public_key_used, inserted_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                file_token_expiry, sender_e2ee_public_key, recipient_e2ee_public_key_used, inserted_at, updated_at, local_seq
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 promoted.message_id,
                 promoted.chat_id,
@@ -416,6 +422,7 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 promoted.recipient_e2ee_public_key_used ?? null,
                 promoted.inserted_at,
                 promoted.updated_at,
+                promoted.local_seq,
             ]
         );
     });
@@ -455,7 +462,7 @@ export async function getLastMessageTimestamp(chatId?: string): Promise<string |
 export async function getPendingOutboxMessages(): Promise<LocalMessageEntry[]> {
     const d = getDb();
     const rows = await d.getAllAsync<Record<string, any>>(
-        `SELECT * FROM messages WHERE status IN ('pending', 'sending') AND is_from_me = 1 AND deleted_for_me = 0 ORDER BY inserted_at ASC`, []
+        `SELECT * FROM messages WHERE status IN ('preparing', 'pending', 'sending') AND is_from_me = 1 AND deleted_for_me = 0 ORDER BY inserted_at ASC, local_seq ASC`, []
     );
     return (rows || []).map(sqliteRowToLocal);
 }
@@ -608,7 +615,7 @@ export function recordFailedInsert() { _failedInserts++; }
 export async function getStorageStats(): Promise<{ totalMessages: number; pendingMessages: number; chatsCount: number; failedInserts: number }> {
     const d = getDb();
     const total = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM messages WHERE deleted_for_me = 0`, []);
-    const pending = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM messages WHERE status IN ('pending', 'sending')`, []);
+    const pending = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM messages WHERE status IN ('preparing', 'pending', 'sending')`, []);
     const chats = await d.getFirstAsync<{ count: number }>(`SELECT COUNT(*) as count FROM chats`, []);
     return {
         totalMessages: total?.count || 0,
@@ -738,7 +745,7 @@ export async function cleanupOrphanedMedia(): Promise<void> {
         const activeRows = await d.getAllAsync<{ local_uri: string }>(
             `SELECT local_uri FROM messages
              WHERE local_uri IS NOT NULL
-             AND status NOT IN ('pending', 'sending')`,
+             AND status NOT IN ('preparing', 'pending', 'sending')`,
             []
         );
         cleanupOrphanedFiles(activeRows.map(r => r.local_uri));
@@ -764,6 +771,7 @@ function sqliteRowToLocal(row: Record<string, any>): LocalMessageEntry {
         file_token_expiry: row.file_token_expiry || null,
         sender_e2ee_public_key: row.sender_e2ee_public_key || null,
         recipient_e2ee_public_key_used: row.recipient_e2ee_public_key_used || null,
+        local_seq: Number(row.local_seq),
     } as LocalMessageEntry;
 }
 

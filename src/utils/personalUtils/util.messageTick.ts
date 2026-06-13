@@ -35,7 +35,7 @@ export function applyOutgoingReceiptStatus<T extends ReceiptStatusInput>(message
     if (!message.is_from_me) return message;
 
     const status = message.status ?? 'sent';
-    if (status === 'pending' || status === 'sending' || status === 'error' || status === 'failed') {
+    if (status === 'preparing' || status === 'pending' || status === 'sending' || status === 'error' || status === 'failed') {
         return message;
     }
 
@@ -57,7 +57,7 @@ export function applyOutgoingReceiptStatus<T extends ReceiptStatusInput>(message
 
 type UnsendableMsg = Pick<MessageEntry, 'is_from_me' | 'status' | 'is_unsent' | 'message_type'>;
 
-const UNSENDABLE_TERMINAL = new Set<MessageEntry['status']>(['pending', 'sending', 'error', 'failed']);
+const UNSENDABLE_TERMINAL = new Set<MessageEntry['status']>(['preparing', 'pending', 'sending', 'error', 'failed']);
 
 /**
  * A message is unsendable via bulk-unsend when:
