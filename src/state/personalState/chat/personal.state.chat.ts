@@ -51,18 +51,22 @@ function needsIncomingMediaLocalPersistence(m: Partial<MessageEntry> & Record<st
     return true;
 }
 
-function getMessageCreatedAtMs(m: Pick<MessageEntry, 'created_at' | 'local_seq'>): number {
-    // Use local_seq for outgoing messages (stable press order)
-    // Fall back to created_at for incoming messages (server time)
-    if (m.local_seq !== undefined && m.local_seq !== null) {
-        return m.local_seq;
-    }
+function getMessageCreatedAtMs(m: Pick<MessageEntry, 'created_at'>): number {
     const time = new Date(String(m.created_at).replace(' ', 'T')).getTime();
     return Number.isFinite(time) ? time : 0;
 }
 
+// Primary key: server `created_at` (epoch ms) — same scale for all messages.
+// Tie-breaker: `local_seq` (monotonic local counter) — only matters when two
+// messages share the exact same millisecond (rare). It guarantees a stable,
+// deterministic order for outgoing messages even in the same-millisecond case.
 function sortMessagesByLocalCreatedAtDesc<T extends MessageEntry>(messages: T[]): T[] {
-    return [...messages].sort((a, b) => getMessageCreatedAtMs(b) - getMessageCreatedAtMs(a));
+    return [...messages].sort((a, b) => {
+        const timeDiff = getMessageCreatedAtMs(b) - getMessageCreatedAtMs(a);
+        if (timeDiff !== 0) return timeDiff;
+        // Tie-breaker: local_seq (fallback 0 for incoming messages without it)
+        return (b.local_seq || 0) - (a.local_seq || 0);
+    });
 }
 
 function preserveOutgoingLocalCreatedAt(incoming: MessageEntry, _existing?: MessageEntry): string {
