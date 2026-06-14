@@ -1,0 +1,45 @@
+name: Deploy web to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: chatbasket
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.16.0'
+          cache: npm
+          cache-dependency-path: chatbasket/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build-web
+
+      - name: Fix Cloudflare Pages (headers / SPA fallback)
+        run: npx tsx scripts/fix-cloudflare-pages.ts
+
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy dist --project-name cb-cloudlfare --branch main --commit-dirty=true --skip-caching
+
+      - name: Prune older deployments (keep newest only)
+        run: npx tsx scripts/prune-pages-deployments.ts
+        continue-on-error: true

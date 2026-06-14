@@ -11,7 +11,7 @@
     "lint": "expo lint",
     "test": "jest --forceExit",
     "build-web": "npx expo export -p web -c",
-    "deploy-web": "npm run build-web && npx tsx scripts/fix-cloudflare-pages.ts && npx wrangler pages deploy dist",
+    "deploy-web": "npm run build-web && npx tsx scripts/fix-cloudflare-pages.ts && npx wrangler pages deploy dist && npx tsx scripts/prune-pages-deployments.ts",
     "deploy-android": "eas build --platform android --profile development"
   },
   "dependencies": {
