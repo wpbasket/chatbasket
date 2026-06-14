@@ -15,7 +15,7 @@
     "deploy-android": "eas build --platform android --profile development"
   },
   "dependencies": {
-    "@config-plugins/react-native-webrtc": "^14.0.0",
+    "@config-plugins/react-native-webrtc": "^15.0.1",
     "@expo/vector-icons": "^15.1.1",
     "@legendapp/list": "^2.0.19",
     "@legendapp/motion": "^2.5.3",
