@@ -25,8 +25,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.16.0'
-          cache: npm
-          cache-dependency-path: chatbasket/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -38,7 +36,7 @@ jobs:
         run: npx tsx scripts/fix-cloudflare-pages.ts
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy dist --project-name cb-cloudlfare --branch main --commit-dirty=true --skip-caching
+        run: npx wrangler pages deploy dist --project-name cb-cloudlfare --branch main --commit-dirty=true
 
       - name: Prune older deployments (keep newest only)
         run: npx tsx scripts/prune-pages-deployments.ts
