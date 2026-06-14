@@ -19,6 +19,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPO_PUBLIC_CB_MAIN_API: ${{ secrets.EXPO_PUBLIC_CB_MAIN_API }}
     steps:
       - uses: actions/checkout@v6
 
