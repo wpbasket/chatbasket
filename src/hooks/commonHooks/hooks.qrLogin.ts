@@ -14,6 +14,15 @@ type QRWebSocketEvent = {
   event?: string;
 };
 
+type RTCIceCandidateLike = RTCIceCandidate & {
+  type?: string;
+  protocol?: string;
+  address?: string;
+  port?: number;
+  relatedAddress?: string;
+  relatedPort?: number;
+};
+
 const QR_WEBRTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -22,6 +31,37 @@ const QR_WEBRTC_CONFIG: RTCConfiguration = {
 
 function getEventType(event: QRWebSocketEvent) {
   return event.type || event.event;
+}
+
+function tokenPrefix(value: string) {
+  return value.length > 8 ? `${value.slice(0, 8)}…` : value;
+}
+
+function candidateSummary(candidate: RTCIceCandidateLike) {
+  return {
+    type: candidate.type,
+    protocol: candidate.protocol,
+    address: candidate.address,
+    port: candidate.port,
+    relatedAddress: candidate.relatedAddress,
+    relatedPort: candidate.relatedPort,
+    sdpMid: candidate.sdpMid,
+    sdpMLineIndex: candidate.sdpMLineIndex,
+    length: candidate.candidate?.length || 0,
+  };
+}
+
+function logQRLogin(step: string, data?: Record<string, unknown>) {
+  console.log('[QRLogin]', step, data || {});
+}
+
+function logQRLoginError(step: string, error: unknown) {
+  const err = error as { message?: string; code?: unknown; type?: unknown };
+  console.log('[QRLogin]', step, {
+    message: err?.message || String(error),
+    code: err?.code,
+    type: err?.type,
+  });
 }
 
 function waitForWebSocketOpen(ws: WebSocket) {
@@ -42,12 +82,17 @@ function candidateKey(candidate: string) {
 }
 
 async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] | undefined, seen: Set<string>) {
-  if (!pc.remoteDescription) return;
+  if (!pc.remoteDescription) {
+    logQRLogin('candidate:remote:skipped:no-remote-description', { count: candidates?.length || 0 });
+    return;
+  }
   for (const candidate of candidates || []) {
     const key = candidateKey(candidate);
     if (seen.has(key)) continue;
     seen.add(key);
-    await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+    const parsed = new RTCIceCandidate(JSON.parse(candidate));
+    logQRLogin('candidate:remote:add', candidateSummary(parsed as RTCIceCandidateLike));
+    await pc.addIceCandidate(parsed);
   }
 }
 
@@ -57,8 +102,12 @@ function waitForIceGatheringComplete(pc: RTCPeerConnection) {
   }
 
   return new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 5000);
+    const timeout = setTimeout(() => {
+      logQRLogin('peer:icegathering:timeout', { state: pc.iceGatheringState });
+      resolve();
+    }, 5000);
     pc.onicegatheringstatechange = () => {
+      logQRLogin('peer:icegatheringstatechange', { state: pc.iceGatheringState });
       if (pc.iceGatheringState === 'complete') {
         clearTimeout(timeout);
         resolve();
@@ -111,6 +160,7 @@ export function useQRLogin() {
   const closedByCleanupRef = useRef(false);
 
   const cleanup = useCallback(() => {
+    logQRLogin('cleanup');
     closedByCleanupRef.current = true;
     if (expiryTimerRef.current) {
       clearTimeout(expiryTimerRef.current);
@@ -127,6 +177,7 @@ export function useQRLogin() {
 
   const fail = useCallback((message: string) => {
     if (completedRef.current) return;
+    logQRLogin('fail', { message });
     setStatus('error');
     setError(message);
     cleanup();
@@ -137,12 +188,15 @@ export function useQRLogin() {
     completedRef.current = true;
     setStatus('approved');
     try {
+      logQRLogin('callback:start', { token: tokenPrefix(qrToken) });
       const session = normalizeQRSession(await authApi.callbackQRLogin({ qr_token: qrToken }));
+      logQRLogin('callback:done', { hasUserId: Boolean(session.userId), hasSessionId: Boolean(session.sessionId) });
       await setSession(session);
       setAppMode('personal');
       setStatus('done');
       router.replace('/personal/home');
-    } catch {
+    } catch (error) {
+      logQRLoginError('callback:error', error);
       completedRef.current = false;
       fail('Could not finish QR login. Please try again.');
     }
@@ -153,9 +207,13 @@ export function useQRLogin() {
     if (!pc) return;
     setStatus('answering');
     try {
+      logQRLogin('answer:fetch:start', { token: tokenPrefix(qrToken) });
       const answer = await authApi.signalQRLogin({ qr_token: qrToken, role: 'browser', sdp: '' });
+      logQRLogin('answer:fetch:done', { hasSdp: Boolean(answer.sdp), sdpLength: answer.sdp?.length || 0, candidates: answer.candidates?.length || 0 });
       if (answer.sdp && !pc.remoteDescription) {
+        logQRLogin('peer:setRemoteDescription:start', { type: 'answer' });
         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answer.sdp }));
+        logQRLogin('peer:setRemoteDescription:done', { type: 'answer' });
       }
       await addRemoteCandidates(pc, answer.candidates, appliedCandidateKeysRef.current);
       if (!answer.sdp) {
@@ -163,13 +221,15 @@ export function useQRLogin() {
         return;
       }
       setStatus('waiting');
-    } catch {
+    } catch (error) {
+      logQRLoginError('answer:fetch:error', error);
       fail('Could not connect both devices. Please keep them on the same network and try again.');
     }
   }, [fail]);
 
   const handleEvent = useCallback((qrToken: string, event: QRWebSocketEvent) => {
     const eventType = getEventType(event);
+    logQRLogin('ws:event', { eventType });
     switch (eventType) {
       case 'signal':
       case 'ANSWER_SAVED':
@@ -193,7 +253,9 @@ export function useQRLogin() {
     setError(null);
     setStatus('loading');
     try {
+      logQRLogin('initiate:start');
       const initiated = await authApi.initiateQRLogin();
+      logQRLogin('initiate:done', { token: tokenPrefix(initiated.qr_token), expiresIn: initiated.expires_in });
       const expiresInMs = initiated.expires_in * 1000;
       setToken(initiated.qr_token);
       setExpiresAt(new Date(Date.now() + expiresInMs).toISOString());
@@ -202,25 +264,41 @@ export function useQRLogin() {
       }, expiresInMs);
 
       const pc = createPeerConnection();
+      logQRLogin('peer:create', { config: QR_WEBRTC_CONFIG });
       pcRef.current = pc;
       pc.onicecandidate = (event) => {
-        if (!event.candidate) return;
+        if (!event.candidate) {
+          logQRLogin('candidate:local:complete');
+          return;
+        }
+        logQRLogin('candidate:local', candidateSummary(event.candidate as RTCIceCandidateLike));
         void authApi.signalQRLogin({
           qr_token: initiated.qr_token,
           role: 'browser',
           sdp: '',
           candidate: JSON.stringify(event.candidate.toJSON()),
-        }).catch(() => undefined);
+        })
+          .then(() => logQRLogin('candidate:local:sent'))
+          .catch((error) => logQRLoginError('candidate:local:send:error', error));
       };
       pc.oniceconnectionstatechange = () => {
-        if (['failed', 'disconnected', 'closed'].includes(pc.iceConnectionState)) {
-          console.log('QR WebRTC connection state', pc.iceConnectionState);
-        }
+        logQRLogin('peer:iceconnectionstatechange', { state: pc.iceConnectionState });
+      };
+      pc.onconnectionstatechange = () => {
+        logQRLogin('peer:connectionstatechange', { state: pc.connectionState });
+      };
+      pc.onsignalingstatechange = () => {
+        logQRLogin('peer:signalingstatechange', { state: pc.signalingState });
       };
 
       const channel = pc.createDataChannel('qr-login');
       channelRef.current = channel;
+      logQRLogin('datachannel:create', { label: channel.label, readyState: channel.readyState });
+      channel.onopen = () => logQRLogin('datachannel:open', { readyState: channel.readyState });
+      channel.onerror = () => logQRLogin('datachannel:error', { readyState: channel.readyState });
+      channel.onclose = () => logQRLogin('datachannel:close', { readyState: channel.readyState });
       channel.onmessage = (message) => {
+        logQRLogin('datachannel:message', { length: String(message.data).length });
         try {
           const event = JSON.parse(String(message.data)) as QRWebSocketEvent;
           if (getEventType(event) === 'APPROVED' || getEventType(event) === 'approve') {
@@ -231,9 +309,12 @@ export function useQRLogin() {
         }
       };
 
-      const ws = new WebSocket(buildQRWebSocketUrl(initiated.qr_token));
+      const wsUrl = buildQRWebSocketUrl(initiated.qr_token);
+      logQRLogin('ws:connect:start', { url: wsUrl.replace(initiated.qr_token, tokenPrefix(initiated.qr_token)) });
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       await waitForWebSocketOpen(ws);
+      logQRLogin('ws:connect:open');
       setStatus('waiting');
       ws.onmessage = (message) => {
         try {
@@ -242,8 +323,12 @@ export function useQRLogin() {
           console.log('Unknown QR websocket message', message.data);
         }
       };
-      ws.onerror = () => fail('QR WebSocket failed. Please try again.');
-      ws.onclose = () => {
+      ws.onerror = () => {
+        logQRLogin('ws:error');
+        fail('QR WebSocket failed. Please try again.');
+      };
+      ws.onclose = (event) => {
+        logQRLogin('ws:close', { code: event.code, reason: event.reason, wasClean: event.wasClean, completed: completedRef.current, cleanup: closedByCleanupRef.current });
         if (!completedRef.current && !closedByCleanupRef.current) {
           setStatus((current) => current === 'done' || current === 'approved' ? current : 'error');
           setError('QR connection closed. Please try again.');
@@ -251,10 +336,16 @@ export function useQRLogin() {
       };
 
       const offer = await pc.createOffer();
+      logQRLogin('offer:create:done', { sdpLength: offer.sdp?.length || 0 });
       await pc.setLocalDescription(offer);
+      logQRLogin('offer:setLocalDescription:done', { iceGatheringState: pc.iceGatheringState });
       await waitForIceGatheringComplete(pc);
-      await authApi.signalQRLogin({ qr_token: initiated.qr_token, role: 'browser', sdp: pc.localDescription?.sdp || offer.sdp || '' });
-    } catch {
+      const offerSdp = pc.localDescription?.sdp || offer.sdp || '';
+      logQRLogin('offer:send:start', { sdpLength: offerSdp.length });
+      await authApi.signalQRLogin({ qr_token: initiated.qr_token, role: 'browser', sdp: offerSdp });
+      logQRLogin('offer:send:done');
+    } catch (error) {
+      logQRLoginError('start:error', error);
       fail('Could not start QR login. Please try again.');
     }
   }, [cleanup, fail, finishLogin, handleEvent]);

@@ -8,9 +8,22 @@ type QRDataChannelEvent = {
   type: 'APPROVED';
 };
 
+type RTCIceCandidateLike = {
+  candidate?: string;
+  type?: string;
+  protocol?: string;
+  address?: string;
+  port?: number;
+  relatedAddress?: string;
+  relatedPort?: number;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  toJSON?: () => unknown;
+};
+
 type PeerConnectionWithEvents = RTCPeerConnection & {
-  addEventListener(type: 'icegatheringstatechange' | 'iceconnectionstatechange', listener: () => void): void;
-  addEventListener(type: 'icecandidate', listener: (event: { candidate: { toJSON?: () => unknown } | null }) => void): void;
+  addEventListener(type: 'icegatheringstatechange' | 'iceconnectionstatechange' | 'connectionstatechange' | 'signalingstatechange', listener: () => void): void;
+  addEventListener(type: 'icecandidate', listener: (event: { candidate: RTCIceCandidateLike | null }) => void): void;
   addEventListener(type: 'datachannel', listener: (event: { channel: RTCDataChannel }) => void): void;
 };
 
@@ -33,13 +46,32 @@ function candidateKey(candidate: string) {
   }
 }
 
+function candidateSummary(candidate: RTCIceCandidateLike) {
+  return {
+    type: candidate.type,
+    protocol: candidate.protocol,
+    address: candidate.address,
+    port: candidate.port,
+    relatedAddress: candidate.relatedAddress,
+    relatedPort: candidate.relatedPort,
+    sdpMid: candidate.sdpMid,
+    sdpMLineIndex: candidate.sdpMLineIndex,
+    length: candidate.candidate?.length || 0,
+  };
+}
+
 async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] | undefined, seen: Set<string>) {
-  if (!pc.remoteDescription) return;
+  if (!pc.remoteDescription) {
+    logQRScanner('candidate:remote:skipped:no-remote-description', { count: candidates?.length || 0 });
+    return;
+  }
   for (const candidate of candidates || []) {
     const key = candidateKey(candidate);
     if (seen.has(key)) continue;
     seen.add(key);
-    await pc.addIceCandidate(JSON.parse(candidate));
+    const parsed = JSON.parse(candidate) as RTCIceCandidateLike;
+    logQRScanner('candidate:remote:add', candidateSummary(parsed));
+    await pc.addIceCandidate(parsed);
   }
 }
 
@@ -49,8 +81,12 @@ function waitForIceGatheringComplete(pc: RTCPeerConnection) {
   }
 
   return new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 5000);
+    const timeout = setTimeout(() => {
+      logQRScanner('peer:icegathering:timeout', { state: pc.iceGatheringState });
+      resolve();
+    }, 5000);
     withEvents(pc).addEventListener('icegatheringstatechange', () => {
+      logQRScanner('peer:icegatheringstatechange', { state: pc.iceGatheringState });
       if (pc.iceGatheringState === 'complete') {
         clearTimeout(timeout);
         resolve();
@@ -151,17 +187,26 @@ export function useQRScanner() {
       const pcEvents = withEvents(pc);
       pcRef.current = pc;
       pcEvents.addEventListener('icecandidate', (event) => {
-        if (!event.candidate) return;
-        const candidate = typeof event.candidate.toJSON === 'function' ? event.candidate.toJSON() : event.candidate;
+        if (!event.candidate) {
+          logQRScanner('candidate:local:complete');
+          return;
+        }
+        const candidate = typeof event.candidate.toJSON === 'function' ? event.candidate.toJSON() as RTCIceCandidateLike : event.candidate;
+        logQRScanner('candidate:local', candidateSummary(candidate as RTCIceCandidateLike));
         void authApi.signalQRLogin({
           qr_token: qrToken,
           role: 'mobile',
           sdp: '',
           candidate: JSON.stringify(candidate),
-        }).catch(() => undefined);
+        })
+          .then(() => logQRScanner('candidate:local:sent'))
+          .catch((error) => logQRScannerError('candidate:local:send:error', error));
       });
       pcEvents.addEventListener('datachannel', (event) => {
-        logQRScanner('datachannel:received', { readyState: event.channel.readyState });
+        logQRScanner('datachannel:received', { label: event.channel.label, readyState: event.channel.readyState });
+        event.channel.onopen = () => logQRScanner('datachannel:open', { readyState: event.channel.readyState });
+        event.channel.onerror = () => logQRScanner('datachannel:error', { readyState: event.channel.readyState });
+        event.channel.onclose = () => logQRScanner('datachannel:close', { readyState: event.channel.readyState });
         channelRef.current = event.channel;
       });
       pcEvents.addEventListener('iceconnectionstatechange', () => {
@@ -169,6 +214,12 @@ export function useQRScanner() {
         if (['failed', 'disconnected'].includes(pc.iceConnectionState)) {
           logQRScanner('peer:optional-datachannel-unavailable', { state: pc.iceConnectionState });
         }
+      });
+      pcEvents.addEventListener('connectionstatechange', () => {
+        logQRScanner('peer:connectionstatechange', { state: pc.connectionState });
+      });
+      pcEvents.addEventListener('signalingstatechange', () => {
+        logQRScanner('peer:signalingstatechange', { state: pc.signalingState });
       });
 
       logQRScanner('peer:setRemoteDescription:start');
@@ -180,6 +231,7 @@ export function useQRScanner() {
       await pc.setLocalDescription(answer);
       logQRScanner('peer:setLocalDescription:done', { iceGatheringState: pc.iceGatheringState });
       await waitForIceGatheringComplete(pc);
+      logQRScanner('peer:icegathering:after-wait', { state: pc.iceGatheringState });
       const answerSdp = pc.localDescription?.sdp || answer.sdp || '';
       logQRScanner('answer:send:start', { sdpLength: answerSdp.length });
       await authApi.signalQRLogin({ qr_token: qrToken, role: 'mobile', sdp: answerSdp });
