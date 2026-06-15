@@ -82,10 +82,7 @@ function candidateKey(candidate: string) {
 }
 
 async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] | undefined, seen: Set<string>) {
-  if (!pc.remoteDescription) {
-    logQRLogin('candidate:remote:skipped:no-remote-description', { count: candidates?.length || 0 });
-    return;
-  }
+  let added = 0;
   for (const candidate of candidates || []) {
     const key = candidateKey(candidate);
     if (seen.has(key)) continue;
@@ -93,7 +90,9 @@ async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] |
     const parsed = new RTCIceCandidate(JSON.parse(candidate));
     logQRLogin('candidate:remote:add', candidateSummary(parsed as RTCIceCandidateLike));
     await pc.addIceCandidate(parsed);
+    added += 1;
   }
+  return added;
 }
 
 function waitForIceGatheringComplete(pc: RTCPeerConnection) {
@@ -156,6 +155,8 @@ export function useQRLogin() {
   const channelRef = useRef<RTCDataChannel | null>(null);
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appliedCandidateKeysRef = useRef(new Set<string>());
+  const pendingRemoteCandidatesRef = useRef<string[]>([]);
+  const answerFetchInFlightRef = useRef(false);
   const completedRef = useRef(false);
   const closedByCleanupRef = useRef(false);
 
@@ -173,6 +174,8 @@ export function useQRLogin() {
     pcRef.current?.close();
     pcRef.current = null;
     appliedCandidateKeysRef.current.clear();
+    pendingRemoteCandidatesRef.current = [];
+    answerFetchInFlightRef.current = false;
   }, []);
 
   const fail = useCallback((message: string) => {
@@ -204,26 +207,34 @@ export function useQRLogin() {
 
   const fetchAnswer = useCallback(async (qrToken: string) => {
     const pc = pcRef.current;
-    if (!pc) return;
+    if (!pc || answerFetchInFlightRef.current) return;
+    answerFetchInFlightRef.current = true;
     setStatus('answering');
     try {
       logQRLogin('answer:fetch:start', { token: tokenPrefix(qrToken) });
       const answer = await authApi.signalQRLogin({ qr_token: qrToken, role: 'browser', sdp: '' });
       logQRLogin('answer:fetch:done', { hasSdp: Boolean(answer.sdp), sdpLength: answer.sdp?.length || 0, candidates: answer.candidates?.length || 0 });
+      if (answer.candidates?.length) {
+        pendingRemoteCandidatesRef.current = [...pendingRemoteCandidatesRef.current, ...answer.candidates];
+        logQRLogin('candidate:remote:queued', { count: pendingRemoteCandidatesRef.current.length });
+      }
       if (answer.sdp && !pc.remoteDescription) {
         logQRLogin('peer:setRemoteDescription:start', { type: 'answer' });
         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answer.sdp }));
         logQRLogin('peer:setRemoteDescription:done', { type: 'answer' });
       }
-      await addRemoteCandidates(pc, answer.candidates, appliedCandidateKeysRef.current);
-      if (!answer.sdp) {
-        setStatus('waiting');
-        return;
+      if (pc.remoteDescription && pendingRemoteCandidatesRef.current.length) {
+        const pending = pendingRemoteCandidatesRef.current;
+        pendingRemoteCandidatesRef.current = [];
+        const added = await addRemoteCandidates(pc, pending, appliedCandidateKeysRef.current);
+        logQRLogin('candidate:remote:flush', { queued: pending.length, added });
       }
       setStatus('waiting');
     } catch (error) {
       logQRLoginError('answer:fetch:error', error);
       fail('Could not connect both devices. Please keep them on the same network and try again.');
+    } finally {
+      answerFetchInFlightRef.current = false;
     }
   }, [fail]);
 
