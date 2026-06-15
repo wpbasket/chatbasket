@@ -5,6 +5,13 @@ import {
   type ForgotPasswordPayload,
   type ForgotPasswordVerifyPayload,
   type LoginPayload,
+  type QRApprovePayload,
+  type QRApproveResponse,
+  type QRCallbackPayload,
+  type QRCallbackResponse,
+  type QRInitiateResponse,
+  type QRSignalPayload,
+  type QRSignalResponse,
   type ResendOTPPayload,
   type SessionResponse,
   type SignupPayload,
@@ -73,6 +80,21 @@ async function verifyForgotPassword(payload: ForgotPasswordVerifyPayload): Promi
   return apiClient.post<AuthResponse>('/auth/forgot-password-verify', payload);
 }
 
+async function initiateQRLogin(): Promise<QRInitiateResponse> {
+  return apiClient.post<QRInitiateResponse>('/auth/qr/initiate');
+}
+
+async function signalQRLogin(payload: QRSignalPayload): Promise<QRSignalResponse> {
+  return apiClient.post<QRSignalResponse>('/auth/qr/signal', payload);
+}
+
+async function callbackQRLogin(payload: QRCallbackPayload): Promise<QRCallbackResponse> {
+  return apiClient.post<QRCallbackResponse>('/auth/qr/callback', payload);
+}
+
+async function approveQRLogin(payload: QRApprovePayload): Promise<QRApproveResponse> {
+  return apiClient.post<QRApproveResponse>('/auth/qr/approve', payload);
+}
 
 export const authApi = {
   signup,
@@ -82,4 +104,8 @@ export const authApi = {
   resendOTP,
   forgotPassword,
   verifyForgotPassword,
+  initiateQRLogin,
+  signalQRLogin,
+  callbackQRLogin,
+  approveQRLogin,
 };

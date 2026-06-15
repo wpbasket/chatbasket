@@ -50,3 +50,41 @@ export interface ForgotPasswordVerifyPayload {
     newPassword: string;
 }
 
+export interface QRInitiateResponse {
+    qr_token: string;
+    expires_in: number;
+}
+
+export interface QRSignalPayload {
+    qr_token: string;
+    role: 'browser' | 'mobile';
+    sdp: string;
+}
+
+export interface QRSignalResponse {
+    sdp?: string;
+}
+
+export interface QRCallbackPayload {
+    qr_token: string;
+}
+
+export interface QRApprovePayload {
+    qr_token: string;
+}
+
+export interface QRApproveResponse {
+    status?: boolean;
+    message?: string;
+}
+
+export interface QRCallbackResponse {
+    AuthUser?: {
+        ID?: string;
+        Name?: string;
+        Email?: string;
+    };
+    SessionID?: string;
+    SessionExpiry?: string;
+}
+

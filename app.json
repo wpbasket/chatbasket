@@ -73,6 +73,14 @@
       "expo-web-browser",
       "expo-notifications",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Chatbasket to scan QR codes for login.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
         "expo-share-intent",
         {
           "iosActivationRules": {

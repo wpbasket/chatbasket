@@ -1,3 +1,4 @@
+import { QRLoginScreen } from '@/components/ui/common/QRLoginScreen';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ApiError } from '@/lib/constantLib';
@@ -10,12 +11,16 @@ import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useValue } from '@legendapp/state/react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Platform, Pressable, TextInput, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { showGenericError, isRateLimitError } from '@/utils/commonUtils/util.error';
 
 export default function Auth() {
   const { method } = useLocalSearchParams();
+
+  if (Platform.OS === 'web') {
+    return <QRLoginScreen />;
+  }
   const email = useValue(loginOrSignup$.email)
   const password = useValue(loginOrSignup$.password)
   const name = useValue(loginOrSignup$.name)

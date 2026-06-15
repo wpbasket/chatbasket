@@ -470,7 +470,9 @@ class OutboxQueue {
         console.log(`${TAG} sendText: sending with recipient key`, {
             messageId: msg.message_id,
             recipientId: msg.recipient_id,
-            recipientKeyPrefix: encrypted.recipient_e2ee_public_key_used?.substring(0, 8) + '...' ?? 'null',
+            recipientKeyPrefix: encrypted.recipient_e2ee_public_key_used
+                ? `${encrypted.recipient_e2ee_public_key_used.substring(0, 8)}...`
+                : 'null',
         });
 
         const response = await ChatTransport.sendMessage({
@@ -681,7 +683,9 @@ class OutboxQueue {
         console.log(`${TAG} sendFile: building FormData with recipient key`, {
             messageId: msg.message_id,
             recipientId: msg.recipient_id,
-            recipientKeyPrefix: recipientKeyUsed?.substring(0, 8) + '...' ?? 'null',
+            recipientKeyPrefix: recipientKeyUsed
+                ? `${recipientKeyUsed.substring(0, 8)}...`
+                : 'null',
             messageType: msg.message_type,
         });
         const formData = new FormData();

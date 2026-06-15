@@ -1,3 +1,4 @@
+import { QRLoginScreen } from "@/components/ui/common/QRLoginScreen";
 import ParallaxScrollView from "@/components/ui/common/ParallaxScrollView";
 import { ThemedText } from "@/components/ui/common/ThemedText";
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol";
@@ -18,6 +19,10 @@ export default function Index() {
   }, []);
 
   if (!isReady) return null;
+
+  if (Platform.OS === 'web') {
+    return <QRLoginScreen />;
+  }
 
   return (
     <>
@@ -61,11 +66,6 @@ export default function Index() {
                 </View>
               </Pressable>
             </View>
-            {Platform.OS === 'web' && (
-              <View style={styles.footer}>
-                <ThemedText color={uniS.theme.colors.lightbackgroundText} type='gantariWithoutColorAndSize'>© ChatBasket 2026. All rights reserved.</ThemedText>
-              </View>
-            )}
           </View>
         </View>
       </ParallaxScrollView>

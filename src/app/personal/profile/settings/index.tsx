@@ -162,6 +162,10 @@ export default function Settings() {
     checkStatus();
   }, []);
 
+  const openQRScanner = () => {
+    router.push('/personal/profile/settings/qr-login');
+  };
+
   const handleSetCentralDevice = async () => {
     let response;
     try {
@@ -233,6 +237,19 @@ export default function Settings() {
             onPress={editPassword}
             onPressIn={handlePressIn}
           />
+
+          {Platform.OS !== 'web' && (
+            <View style={styles.section}>
+              <View style={styles.itemTitleContainer}>
+                <ThemedText style={styles.itemTitle}>QR Login :</ThemedText>
+              </View>
+              <View style={styles.themePickerContainer}>
+                <Pressable onPress={openQRScanner} style={[styles.dropdownBorder, { justifyContent: 'center' }]}>
+                  <ThemedText type='default'>Scan Web Login QR</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          )}
 
           <ThemedText style={styles.sectionHeader}>Preferences</ThemedText>
 

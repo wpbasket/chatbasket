@@ -12,6 +12,7 @@ export default function SettingsScreenLayout() {
         <ThemedView style={styles.outerContainer}>
           <Stack>
             <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="qr-login" options={{ headerShown: false }} />
           </Stack>
         </ThemedView>
       </ThemeProvider>
