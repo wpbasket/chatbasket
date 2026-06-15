@@ -1,6 +1,6 @@
 import { authApi } from '@/lib/constantLib/authApi/api.auth';
 import { useCallback, useRef, useState } from 'react';
-import { RTCPeerConnection, RTCSessionDescription } from 'react-native-webrtc';
+import { RTCIceCandidate, RTCPeerConnection, RTCSessionDescription } from 'react-native-webrtc';
 
 type QRScannerStatus = 'idle' | 'scanned' | 'connecting' | 'approving' | 'approved' | 'error';
 
@@ -69,8 +69,8 @@ async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] |
     const key = candidateKey(candidate);
     if (seen.has(key)) continue;
     seen.add(key);
-    const parsed = JSON.parse(candidate) as RTCIceCandidateLike;
-    logQRScanner('candidate:remote:add', candidateSummary(parsed));
+    const parsed = new RTCIceCandidate(JSON.parse(candidate));
+    logQRScanner('candidate:remote:add', candidateSummary(parsed as RTCIceCandidateLike));
     await pc.addIceCandidate(parsed);
   }
 }

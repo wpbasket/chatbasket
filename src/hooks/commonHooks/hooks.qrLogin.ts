@@ -115,6 +115,29 @@ function waitForIceGatheringComplete(pc: RTCPeerConnection) {
   });
 }
 
+function waitForDataChannelOpen(channel: RTCDataChannel | null, timeoutMs = 3000) {
+  if (!channel) {
+    return Promise.resolve(false);
+  }
+  if (channel.readyState === 'open') {
+    return Promise.resolve(true);
+  }
+
+  return new Promise<boolean>((resolve) => {
+    const existingOnOpen = channel.onopen;
+    const timeout = setTimeout(() => {
+      channel.onopen = existingOnOpen;
+      logQRLogin('datachannel:open:timeout', { readyState: channel.readyState });
+      resolve(channel.readyState === 'open');
+    }, timeoutMs);
+    channel.onopen = (event) => {
+      existingOnOpen?.call(channel, event);
+      clearTimeout(timeout);
+      resolve(true);
+    };
+  });
+}
+
 function buildQRWebSocketUrl(token: string) {
   const base = (Url.BASE_API_URL || '').replace(/\/+$/, '');
   const url = new URL('/api/auth/qr/ws', base);
@@ -186,11 +209,15 @@ export function useQRLogin() {
     cleanup();
   }, [cleanup]);
 
-  const finishLogin = useCallback(async (qrToken: string) => {
+  const finishLogin = useCallback(async (qrToken: string, waitForChannel = true) => {
     if (completedRef.current) return;
     completedRef.current = true;
     setStatus('approved');
     try {
+      if (waitForChannel) {
+        const opened = await waitForDataChannelOpen(channelRef.current);
+        logQRLogin('datachannel:pre-callback-wait:done', { opened, readyState: channelRef.current?.readyState || 'missing' });
+      }
       logQRLogin('callback:start', { token: tokenPrefix(qrToken) });
       const session = normalizeQRSession(await authApi.callbackQRLogin({ qr_token: qrToken }));
       logQRLogin('callback:done', { hasUserId: Boolean(session.userId), hasSessionId: Boolean(session.sessionId) });
@@ -313,7 +340,7 @@ export function useQRLogin() {
         try {
           const event = JSON.parse(String(message.data)) as QRWebSocketEvent;
           if (getEventType(event) === 'APPROVED' || getEventType(event) === 'approve') {
-            void finishLogin(initiated.qr_token);
+            void finishLogin(initiated.qr_token, false);
           }
         } catch {
           console.log('Unknown QR data channel message', message.data);
