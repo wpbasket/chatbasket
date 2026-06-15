@@ -32,13 +32,32 @@ function waitForWebSocketOpen(ws: WebSocket) {
   });
 }
 
+function candidateKey(candidate: string) {
+  try {
+    const parsed = JSON.parse(candidate) as { candidate?: string; sdpMid?: string; sdpMLineIndex?: number };
+    return `${parsed.candidate || ''}|${parsed.sdpMid || ''}|${parsed.sdpMLineIndex ?? ''}`;
+  } catch {
+    return candidate;
+  }
+}
+
+async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] | undefined, seen: Set<string>) {
+  if (!pc.remoteDescription) return;
+  for (const candidate of candidates || []) {
+    const key = candidateKey(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+  }
+}
+
 function waitForIceGatheringComplete(pc: RTCPeerConnection) {
   if (pc.iceGatheringState === 'complete') {
     return Promise.resolve();
   }
 
   return new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 1500);
+    const timeout = setTimeout(resolve, 5000);
     pc.onicegatheringstatechange = () => {
       if (pc.iceGatheringState === 'complete') {
         clearTimeout(timeout);
@@ -87,6 +106,7 @@ export function useQRLogin() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appliedCandidateKeysRef = useRef(new Set<string>());
   const completedRef = useRef(false);
   const closedByCleanupRef = useRef(false);
 
@@ -102,6 +122,7 @@ export function useQRLogin() {
     channelRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
+    appliedCandidateKeysRef.current.clear();
   }, []);
 
   const fail = useCallback((message: string) => {
@@ -133,11 +154,14 @@ export function useQRLogin() {
     setStatus('answering');
     try {
       const answer = await authApi.signalQRLogin({ qr_token: qrToken, role: 'browser', sdp: '' });
+      if (answer.sdp && !pc.remoteDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answer.sdp }));
+      }
+      await addRemoteCandidates(pc, answer.candidates, appliedCandidateKeysRef.current);
       if (!answer.sdp) {
         setStatus('waiting');
         return;
       }
-      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: answer.sdp }));
       setStatus('waiting');
     } catch {
       fail('Could not connect both devices. Please keep them on the same network and try again.');
@@ -179,9 +203,18 @@ export function useQRLogin() {
 
       const pc = createPeerConnection();
       pcRef.current = pc;
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) return;
+        void authApi.signalQRLogin({
+          qr_token: initiated.qr_token,
+          role: 'browser',
+          sdp: '',
+          candidate: JSON.stringify(event.candidate.toJSON()),
+        }).catch(() => undefined);
+      };
       pc.oniceconnectionstatechange = () => {
         if (['failed', 'disconnected', 'closed'].includes(pc.iceConnectionState)) {
-          fail('WebRTC connection failed. Connect both devices to the same network and try again.');
+          console.log('QR WebRTC connection state', pc.iceConnectionState);
         }
       };
 

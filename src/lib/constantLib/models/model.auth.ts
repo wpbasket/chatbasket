@@ -59,10 +59,12 @@ export interface QRSignalPayload {
     qr_token: string;
     role: 'browser' | 'mobile';
     sdp: string;
+    candidate?: string;
 }
 
 export interface QRSignalResponse {
     sdp?: string;
+    candidates?: string[];
 }
 
 export interface QRCallbackPayload {

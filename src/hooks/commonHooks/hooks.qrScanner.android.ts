@@ -10,6 +10,7 @@ type QRDataChannelEvent = {
 
 type PeerConnectionWithEvents = RTCPeerConnection & {
   addEventListener(type: 'icegatheringstatechange' | 'iceconnectionstatechange', listener: () => void): void;
+  addEventListener(type: 'icecandidate', listener: (event: { candidate: { toJSON?: () => unknown } | null }) => void): void;
   addEventListener(type: 'datachannel', listener: (event: { channel: RTCDataChannel }) => void): void;
 };
 
@@ -23,13 +24,32 @@ function withEvents(pc: RTCPeerConnection) {
   return pc as unknown as PeerConnectionWithEvents;
 }
 
+function candidateKey(candidate: string) {
+  try {
+    const parsed = JSON.parse(candidate) as { candidate?: string; sdpMid?: string; sdpMLineIndex?: number };
+    return `${parsed.candidate || ''}|${parsed.sdpMid || ''}|${parsed.sdpMLineIndex ?? ''}`;
+  } catch {
+    return candidate;
+  }
+}
+
+async function addRemoteCandidates(pc: RTCPeerConnection, candidates: string[] | undefined, seen: Set<string>) {
+  if (!pc.remoteDescription) return;
+  for (const candidate of candidates || []) {
+    const key = candidateKey(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await pc.addIceCandidate(JSON.parse(candidate));
+  }
+}
+
 function waitForIceGatheringComplete(pc: RTCPeerConnection) {
   if (pc.iceGatheringState === 'complete') {
     return Promise.resolve();
   }
 
   return new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 1500);
+    const timeout = setTimeout(resolve, 5000);
     withEvents(pc).addEventListener('icegatheringstatechange', () => {
       if (pc.iceGatheringState === 'complete') {
         clearTimeout(timeout);
@@ -72,6 +92,7 @@ export function useQRScanner() {
   const completedRef = useRef(false);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
+  const appliedCandidateKeysRef = useRef(new Set<string>());
 
   const cleanup = useCallback(() => {
     logQRScanner('cleanup');
@@ -79,6 +100,7 @@ export function useQRScanner() {
     channelRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
+    appliedCandidateKeysRef.current.clear();
   }, []);
 
   const reset = useCallback(() => {
@@ -128,6 +150,16 @@ export function useQRScanner() {
       const pc = createPeerConnection();
       const pcEvents = withEvents(pc);
       pcRef.current = pc;
+      pcEvents.addEventListener('icecandidate', (event) => {
+        if (!event.candidate) return;
+        const candidate = typeof event.candidate.toJSON === 'function' ? event.candidate.toJSON() : event.candidate;
+        void authApi.signalQRLogin({
+          qr_token: qrToken,
+          role: 'mobile',
+          sdp: '',
+          candidate: JSON.stringify(candidate),
+        }).catch(() => undefined);
+      });
       pcEvents.addEventListener('datachannel', (event) => {
         logQRScanner('datachannel:received', { readyState: event.channel.readyState });
         channelRef.current = event.channel;
@@ -135,13 +167,14 @@ export function useQRScanner() {
       pcEvents.addEventListener('iceconnectionstatechange', () => {
         logQRScanner('peer:iceconnectionstatechange', { state: pc.iceConnectionState });
         if (['failed', 'disconnected'].includes(pc.iceConnectionState)) {
-          fail('Could not connect both devices. Keep them on the same network and try again.');
+          logQRScanner('peer:optional-datachannel-unavailable', { state: pc.iceConnectionState });
         }
       });
 
       logQRScanner('peer:setRemoteDescription:start');
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp }));
-      logQRScanner('peer:setRemoteDescription:done');
+      await addRemoteCandidates(pc, offer.candidates, appliedCandidateKeysRef.current);
+      logQRScanner('peer:setRemoteDescription:done', { remoteCandidates: offer.candidates?.length || 0 });
       const answer = await pc.createAnswer();
       logQRScanner('peer:createAnswer:done', { sdpLength: answer.sdp?.length || 0 });
       await pc.setLocalDescription(answer);
@@ -150,7 +183,9 @@ export function useQRScanner() {
       const answerSdp = pc.localDescription?.sdp || answer.sdp || '';
       logQRScanner('answer:send:start', { sdpLength: answerSdp.length });
       await authApi.signalQRLogin({ qr_token: qrToken, role: 'mobile', sdp: answerSdp });
-      logQRScanner('answer:send:done');
+      const latestOffer = await authApi.signalQRLogin({ qr_token: qrToken, role: 'mobile', sdp: '' });
+      await addRemoteCandidates(pc, latestOffer.candidates, appliedCandidateKeysRef.current);
+      logQRScanner('answer:send:done', { remoteCandidates: latestOffer.candidates?.length || 0 });
 
       setStatus('approving');
       logQRScanner('approve:start');
