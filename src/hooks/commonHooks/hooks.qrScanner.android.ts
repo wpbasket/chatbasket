@@ -95,6 +95,45 @@ function waitForIceGatheringComplete(pc: RTCPeerConnection) {
   });
 }
 
+function waitForDataChannelOpen(channelRef: { current: RTCDataChannel | null }, timeoutMs = 3000) {
+  if (channelRef.current?.readyState === 'open') {
+    return Promise.resolve(channelRef.current);
+  }
+
+  return new Promise<RTCDataChannel | null>((resolve) => {
+    let observedChannel: RTCDataChannel | null = null;
+    const attachOpenHandler = (channel: RTCDataChannel) => {
+      if (observedChannel === channel) return;
+      observedChannel = channel;
+      const existingOnOpen = channel.onopen;
+      channel.onopen = (event) => {
+        existingOnOpen?.call(channel, event);
+        clearInterval(interval);
+        clearTimeout(timeout);
+        resolve(channel);
+      };
+    };
+
+    const interval = setInterval(() => {
+      const channel = channelRef.current;
+      if (!channel) return;
+      if (channel.readyState === 'open') {
+        clearInterval(interval);
+        clearTimeout(timeout);
+        resolve(channel);
+        return;
+      }
+      attachOpenHandler(channel);
+    }, 100);
+
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      logQRScanner('datachannel:open:timeout', { readyState: channelRef.current?.readyState || 'missing' });
+      resolve(channelRef.current?.readyState === 'open' ? channelRef.current : null);
+    }, timeoutMs);
+  });
+}
+
 function sanitizeToken(value: string) {
   return value.trim();
 }
@@ -239,18 +278,19 @@ export function useQRScanner() {
       await addRemoteCandidates(pc, latestOffer.candidates, appliedCandidateKeysRef.current);
       logQRScanner('answer:send:done', { remoteCandidates: latestOffer.candidates?.length || 0 });
 
-      setStatus('approving');
-      logQRScanner('approve:start');
-      await authApi.approveQRLogin({ qr_token: qrToken });
-      logQRScanner('approve:done');
-
+      const channel = await waitForDataChannelOpen(channelRef);
       const approval: QRDataChannelEvent = { type: 'APPROVED' };
-      if (channelRef.current?.readyState === 'open') {
-        channelRef.current.send(JSON.stringify(approval));
+      if (channel?.readyState === 'open') {
+        channel.send(JSON.stringify(approval));
         logQRScanner('datachannel:approval:sent');
       } else {
         logQRScanner('datachannel:approval:skipped', { readyState: channelRef.current?.readyState || 'missing' });
       }
+
+      setStatus('approving');
+      logQRScanner('approve:start');
+      await authApi.approveQRLogin({ qr_token: qrToken });
+      logQRScanner('approve:done');
 
       completedRef.current = true;
       setStatus('approved');
