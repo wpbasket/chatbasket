@@ -3,21 +3,14 @@ import { ThemeProvider, DarkTheme, DefaultTheme } from "expo-router";
 import { ThemedView } from "@/components/ui/common/ThemedView";
 import { UnistylesRuntime } from "react-native-unistyles";
 import { StyleSheet } from "react-native-unistyles";
-import { useValue } from "@legendapp/state/react";
-import { qrScanner$ } from "@/state/auth/state.auth.qrScanner";
 
-export default function SettingsScreenLayout() {
-  const isInQRScanner = useValue(qrScanner$.isInQRScanner);
-
+export default function QRLoginLayout() {
   return (
     <>
       <ThemeProvider value={UnistylesRuntime.colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <ThemedView style={styles.outerContainer}>
           <Stack>
             <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Protected guard={isInQRScanner}>
-              <Stack.Screen name="qr-login" options={{ headerShown: false }} />
-            </Stack.Protected>
           </Stack>
         </ThemedView>
       </ThemeProvider>

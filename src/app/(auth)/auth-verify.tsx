@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ui/common/ThemedText'
 import { ThemedView } from '@/components/ui/common/ThemedView'
 import { runWithLoading, showAlert } from '@/utils/commonUtils/util.modal'
-import { Platform, Pressable, TextInput, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, TextInput, View } from 'react-native'
 import { StyleSheet } from 'react-native-unistyles'
 
 import { ApiError,SessionResponse } from '@/lib/constantLib'
@@ -12,8 +12,8 @@ import { authState } from '@/state/auth/state.auth'
 import { loginOrSignup$ } from '@/state/auth/state.auth.loginOrSignup'
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown'
 import { useValue } from '@legendapp/state/react'
-import { router } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { router, useLocalSearchParams } from 'expo-router'
+import { useEffect, useRef, useState } from 'react'
 import { PersonalSettingApi } from '@/lib/personalLib/settingApi/personal.api.setting'
 import { registerTokenWithBackend } from '../../notification/registerFcmOrApn'
 import { showConfirmDialog } from '@/utils/commonUtils/util.modal'
@@ -21,6 +21,8 @@ import { PersonalStorageSetDeviceStatus } from '@/lib/storage/personalStorage/pe
 import { showGenericError, isRateLimitError } from '@/utils/commonUtils/util.error'
 
 export default function AuthVerification() {
+    const { qrMode } = useLocalSearchParams<{ qrMode?: string }>()
+    const isQRMode = qrMode === 'true'
     const otp = useValue(loginOrSignup$.otp)
     const isOtpValid = useValue(loginOrSignup$.isOtpValid)
     const email = useValue(loginOrSignup$.email)
@@ -33,6 +35,7 @@ export default function AuthVerification() {
     const resendExpiryAt = useValue(loginOrSignup$.resendExpiryAt)
     const MAX_RESENDS = 3
     const [pendingSession, setPendingSession] = useState<SessionResponse | null>(null)
+    const qrProcessedRef = useRef(false)
 
     useEffect(() => {
         // Reset isSentOtp, email, and password when this component unmounts (route change, back, etc)
@@ -47,11 +50,54 @@ export default function AuthVerification() {
             loginOrSignup$.resendCooldown.set(0)
             loginOrSignup$.resendAttempts.set(0)
             loginOrSignup$.resendExpiryAt.set(null)
+            loginOrSignup$.qr.set({ token: null, expiresAt: null, status: 'idle', error: null, session: null })
         }
     }, [])
 
     // Reuse shared cooldown ticker (expiry set in auth.tsx)
     useResendCooldown(loginOrSignup$)
+
+    // QR mode: auto-process the session response on mount
+    useEffect(() => {
+        if (!isQRMode || qrProcessedRef.current) return
+        const qrSession = loginOrSignup$.qr.session.get()
+        if (!qrSession) return
+        qrProcessedRef.current = true
+        // Process through same finalization as normal login (skip primary device prompt on web)
+        const platform = Platform.select({ ios: 'ios', android: 'android', web: 'web' })
+        const processQRSession = async () => {
+            if (platform !== 'web' && !qrSession.isPrimary) {
+                const existingName = qrSession.primaryDeviceName || 'Another Device'
+                const confirm = await showConfirmDialog(
+                    <>
+                        This device is currently NOT your Primary Device. "
+                        <ThemedText style={{ color: 'red', fontWeight: 'bold' }}>{existingName}</ThemedText>
+                        " is currently set as Primary. Do you want to switch?
+                    </>,
+                    {
+                        confirmText: 'Switch',
+                        cancelText: 'Keep as Secondary',
+                        confirmVariant: 'default'
+                    }
+                )
+                if (confirm) {
+                    await setSession({
+                        sessionId: qrSession.sessionId,
+                        userId: qrSession.userId,
+                        sessionExpiry: qrSession.sessionExpiry
+                    })
+                    await PersonalStorageSetDeviceStatus({
+                        isPrimary: qrSession.isPrimary,
+                        deviceName: qrSession.primaryDeviceName || ''
+                    })
+                    void PersonalSettingApi.setCentralDevice()
+                }
+            }
+            setAppMode('personal')
+            setPendingSession(qrSession)
+        }
+        void processQRSession()
+    }, [isQRMode])
 
     // Finalize session only AFTER app mode has been confirmed to be switched to personal
     useEffect(() => {
@@ -182,6 +228,20 @@ export default function AuthVerification() {
         }
     }
 
+
+    // QR mode: show completion state instead of OTP form
+    if (isQRMode) {
+        return (
+            <ThemedView style={styles.ctn}>
+                <View style={styles.container}>
+                    <View style={[styles.mainctn, { alignItems: 'center', justifyContent: 'center' }]}>
+                        <ActivityIndicator size="large" />
+                        <ThemedText color='gray'>Completing login...</ThemedText>
+                    </View>
+                </View>
+            </ThemedView>
+        )
+    }
 
     return (
         <ThemedView style={styles.ctn}>

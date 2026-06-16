@@ -55,18 +55,6 @@ export interface QRInitiateResponse {
     expires_in: number;
 }
 
-export interface QRSignalPayload {
-    qr_token: string;
-    role: 'browser' | 'mobile';
-    sdp: string;
-    candidate?: string;
-}
-
-export interface QRSignalResponse {
-    sdp?: string;
-    candidates?: string[];
-}
-
 export interface QRCallbackPayload {
     qr_token: string;
 }
@@ -80,13 +68,5 @@ export interface QRApproveResponse {
     message?: string;
 }
 
-export interface QRCallbackResponse {
-    AuthUser?: {
-        ID?: string;
-        Name?: string;
-        Email?: string;
-    };
-    SessionID?: string;
-    SessionExpiry?: string;
-}
+
 

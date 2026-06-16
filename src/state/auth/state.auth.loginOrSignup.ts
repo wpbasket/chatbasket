@@ -1,4 +1,5 @@
 import { observable } from '@legendapp/state';
+import type { SessionResponse } from '@/lib/constantLib/models/model.auth';
 
 export function getPasswordErrors(password: string): string[] {
   const errors: string[] = [];
@@ -25,6 +26,14 @@ export const loginOrSignup$ = observable({
   resendCooldown: 0 as number, // seconds remaining before next resend
   resendAttempts: 0 as number, // number of resends used
   resendExpiryAt: null as number | null, // epoch ms when cooldown ends
+  // QR login state (all QR flow state lives here, no useState in the hook)
+  qr: {
+    token: null as string | null,
+    expiresAt: null as string | null,
+    status: 'idle' as 'idle' | 'loading' | 'waiting' | 'answering' | 'approved' | 'done' | 'error',
+    error: null as string | null,
+    session: null as SessionResponse | null,
+  },
   
   
   isEmailValid: () => {

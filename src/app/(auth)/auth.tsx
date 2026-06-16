@@ -1,4 +1,3 @@
-import { QRLoginScreen } from '@/components/ui/common/QRLoginScreen';
 import { ThemedText } from '@/components/ui/common/ThemedText';
 import { ThemedView } from '@/components/ui/common/ThemedView';
 import { ApiError } from '@/lib/constantLib';
@@ -11,16 +10,93 @@ import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useValue } from '@legendapp/state/react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform, Pressable, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { showGenericError, isRateLimitError } from '@/utils/commonUtils/util.error';
+import { useQRLogin } from '@/hooks/commonHooks/hooks.qrLogin';
+import QRCode from 'react-native-qrcode-svg';
+
+function QRLoginScreen() {
+  const { retry } = useQRLogin();
+  const token = useValue(loginOrSignup$.qr.token);
+  const status = useValue(loginOrSignup$.qr.status);
+  const qrSession = useValue(loginOrSignup$.qr.session);
+
+  const isError = status === 'error';
+  const isSuccess = !!token && (status === 'waiting' || status === 'approved' || status === 'done');
+  const isLoading = !isSuccess && !isError;
+
+  // When QR login gets a session response, route through auth-verify for unified finalization
+  useEffect(() => {
+    if (qrSession) {
+      authState.isSentOtp.set(true);
+      router.replace({ pathname: '/(auth)/auth-verify', params: { qrMode: 'true' } });
+    }
+  }, [qrSession]);
+
+  return (
+    <ThemedView style={[styles.ctn, { paddingBottom: 80 }]}>
+      <View style={[styles.container, { width: 380, height: 500, justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[styles.mainctn, { width: 380, height: 500, gap: 20, alignItems: 'center', justifyContent: 'center' }]}>
+          
+          {/* 1. Big White Circle for QR Code */}
+          <View style={styles.qrCircle}>
+            {isLoading ? (
+              <ActivityIndicator size="large" color="#000000" />
+            ) : isSuccess ? (
+              <QRCode
+                value={`chatbasket://qr-login/${token}`}
+                size={230}
+                color="#000000"
+                backgroundColor="transparent"
+                ecl="L"
+                quietZone={10}
+              />
+            ) : (
+              <View style={{ alignItems: 'center', gap: 12 }}>
+                <ThemedText style={{ textAlign: 'center', color: '#B00020', fontSize: 13, paddingHorizontal: 12 }} type="defaultSemiBold" selectable={false}>
+                  Failed to load QR code.
+                </ThemedText>
+                <Pressable
+                  onPress={() => void retry()}
+                  style={({ pressed }) => [
+                    styles.tryAgainButton,
+                    { opacity: pressed ? 0.1 : 1 }
+                  ]}
+                >
+                  <ThemedText style={styles.tryAgainLabel} type="semibold" selectable={false}>
+                    Try again
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          {/* 2. Text Content (Title & Subtitle) */}
+          <View style={{ alignItems: 'center', gap: 4 }}>
+            <ThemedText style={{ fontSize: 22, fontWeight: 'bold', textAlign: 'center' }} selectable={false}>
+              Log in by QR Code
+            </ThemedText>
+            <ThemedText style={[{ fontSize: 13, textAlign: 'center' }, styles.qrSubtitle]} selectable={false}>
+              Scan with ChatBasket app on your phone
+            </ThemedText>
+          </View>
+
+          {/* 3. Single Instruction */}
+          <ThemedText style={{ fontSize: 14, textAlign: 'center' }} type="defaultSemiBold" selectable={false}>
+            Go to Profile → Settings → Scan QR Code
+          </ThemedText>
+
+        </View>
+      </View>
+    </ThemedView>
+  );
+}
 
 export default function Auth() {
-  const { method } = useLocalSearchParams();
+  const { method, qr } = useLocalSearchParams();
+  const showQR = qr === 'true';
 
-  if (Platform.OS === 'web') {
-    return <QRLoginScreen />;
-  }
   const email = useValue(loginOrSignup$.email)
   const password = useValue(loginOrSignup$.password)
   const name = useValue(loginOrSignup$.name)
@@ -395,12 +471,15 @@ export default function Auth() {
 
 
   if (method == 'login') {
+    if (showQR) {
+      return <QRLoginScreen />;
+    }
     return (
       <ThemedView style={styles.ctn}>
         {/* <StatusBar style="dark" /> */}
         <View style={styles.container}>
           <View style={styles.mainctn}>
-            <ThemedText type="title" >Login</ThemedText>
+            <ThemedText type="title" selectable={false}>Login</ThemedText>
             {/* <ThemedText>{'\n'}</ThemedText> */}
             <TextInput
               placeholder="Email"
@@ -442,8 +521,12 @@ export default function Auth() {
             </Pressable>
 
             <Pressable onPress={handleForgotPassword}>
-              <ThemedText type='link' style={styles.forgotPassword}>Forgot Password?</ThemedText>
+              <ThemedText type='link' style={styles.forgotPassword} selectable={false}>Forgot Password?</ThemedText>
             </Pressable>
+
+
+
+
           </View>
         </View>
       </ThemedView>
@@ -455,7 +538,7 @@ export default function Auth() {
         {/* <StatusBar style="dark" /> */}
         <View style={styles.container}>
           <View style={styles.mainctn}>
-            <ThemedText type="title">Signup</ThemedText>
+            <ThemedText type="title" selectable={false}>Signup</ThemedText>
             <TextInput
               placeholder='Name'
               inputMode='text'
@@ -606,5 +689,36 @@ const styles = StyleSheet.create((theme) => ({
   welcomeText: {
     color: '#2C3E50',
     marginBottom: 10
+  },
+  qrSubtitle: {
+    color: theme.colors.subtitle,
+  },
+  qrCircle: {
+    width: 360,
+    height: 360,
+    borderRadius: 9999,
+    backgroundColor: theme.colors.lightbackgroundText,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    alignSelf: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  tryAgainButton: {
+    backgroundColor: theme.colors.icon,
+    paddingVertical: 6,
+    paddingHorizontal: 40,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tryAgainLabel: {
+    color: theme.colors.lightbackgroundText,
+    fontSize: 14,
+    fontWeight: 'bold',
   }
 }));

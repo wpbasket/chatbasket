@@ -1,13 +1,13 @@
-import { QRLoginScreen } from "@/components/ui/common/QRLoginScreen";
 import ParallaxScrollView from "@/components/ui/common/ParallaxScrollView";
 import { ThemedText } from "@/components/ui/common/ThemedText";
+import { AppButton } from "@/components/ui/common/AppButton";
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol";
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation";
 import { router } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { showControllersModal, hideModal } from "@/utils/commonUtils/util.modal";
 
 export default function Index() {
   const uniS = useUnistyles()
@@ -18,11 +18,52 @@ export default function Index() {
     setIsReady(true);
   }, []);
 
-  if (!isReady) return null;
+  const handleLoginPress = (event: any) => {
+    const position = event?.nativeEvent
+      ? { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY }
+      : undefined;
 
-  if (Platform.OS === 'web') {
-    return <QRLoginScreen />;
-  }
+    void showControllersModal([
+      {
+        id: 'options',
+        content: (
+          <View style={{ gap: 15, paddingVertical: 10, minWidth: 230 }}>
+            <AppButton
+              label="Email & Password"
+              onPress={() => {
+                hideModal();
+                router.push({ pathname: '/auth', params: { method: 'login' } });
+              }}
+              asymmetric={true}
+              textType="semibold"
+              width="100%"
+              style={{ paddingVertical: 7 }}
+              labelStyle={{ fontSize: 15, fontWeight: 'bold', color: uniS.theme.colors.subtitle }}
+            />
+            <AppButton
+              label="QR Code"
+              onPress={() => {
+                hideModal();
+                router.push({ pathname: '/auth', params: { method: 'login', qr: 'true' } });
+              }}
+              asymmetric={true}
+              textType="semibold"
+              width="100%"
+              style={{ paddingVertical: 7 }}
+              labelStyle={{ fontSize: 15, fontWeight: 'bold', color: uniS.theme.colors.subtitle }}
+            />
+          </View>
+        )
+      }
+    ], {
+      position,
+      showConfirmButton: false,
+      showCancelButton: false,
+      closeOnBackgroundTap: true,
+    });
+  };
+
+  if (!isReady) return null;
 
   return (
     <>
@@ -43,7 +84,7 @@ export default function Index() {
               <ThemedText type="title" style={styles.authText} selectable={false}>Login</ThemedText>
               <Pressable
                 onPressIn={handlePressIn}
-                onPress={() => router.push({ pathname: '/auth', params: { method: 'login' } })}
+                onPress={handleLoginPress}
                 style={({ pressed }) => [
                   { opacity: pressed ? 0.1 : 1 },]}
               >

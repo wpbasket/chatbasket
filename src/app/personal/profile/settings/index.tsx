@@ -14,6 +14,7 @@ import { setAppMode } from '@/state/appMode/state.appMode';
 import { authState } from '@/state/auth/state.auth';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { setting$ } from '@/state/settings/state.setting';
+import { qrScanner$ } from '@/state/auth/state.auth.qrScanner';
 import { hideModal, runWithLoading, showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import { useResendCooldown } from '@/utils/commonUtils/util.resendCooldown';
 import { useValue } from '@legendapp/state/react';
@@ -162,8 +163,18 @@ export default function Settings() {
     checkStatus();
   }, []);
 
-  const openQRScanner = () => {
-    router.push('/personal/profile/settings/qr-login');
+  const openQRScanner = async () => {
+    try {
+      const me = await runWithLoading(() => commonAuthApi.getMe(), { message: 'Checking device...' });
+      if (!me?.isPrimary) {
+        showAlert('This is not a Primary Device. Only the Primary Device can scan and approve QR logins.');
+        return;
+      }
+      qrScanner$.isInQRScanner.set(true);
+      router.push('/personal/profile/settings/qr-login');
+    } catch {
+      showAlert('Could not verify device status. Please try again.');
+    }
   };
 
   const handleSetCentralDevice = async () => {
@@ -244,8 +255,15 @@ export default function Settings() {
                 <ThemedText style={styles.itemTitle}>QR Login :</ThemedText>
               </View>
               <View style={styles.themePickerContainer}>
-                <Pressable onPress={openQRScanner} style={[styles.dropdownBorder, { justifyContent: 'center' }]}>
-                  <ThemedText type='default'>Scan Web Login QR</ThemedText>
+                <Pressable
+                  onPress={openQRScanner}
+                  style={({ pressed }) => [
+                    styles.dropdownBorder,
+                    { justifyContent: 'center' },
+                    { opacity: pressed ? 0.1 : 1 }
+                  ]}
+                >
+                  <ThemedText type='default'>Scan Login QR</ThemedText>
                 </Pressable>
               </View>
             </View>
@@ -308,7 +326,14 @@ export default function Settings() {
                 <ThemedText style={styles.itemTitle}>Device Type :</ThemedText>
               </View>
               <View style={styles.themePickerContainer}>
-                <Pressable onPress={handleSetCentralDevice} style={[styles.dropdownBorder, { justifyContent: 'center' }]}>
+                <Pressable
+                  onPress={handleSetCentralDevice}
+                  style={({ pressed }) => [
+                    styles.dropdownBorder,
+                    { justifyContent: 'center' },
+                    { opacity: pressed ? 0.1 : 1 }
+                  ]}
+                >
                   <ThemedText type='default'>{deviceType}</ThemedText>
                 </Pressable>
               </View>
