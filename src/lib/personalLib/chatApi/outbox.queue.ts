@@ -414,6 +414,10 @@ class OutboxQueue {
                     if (stale?.recipientKeys) {
                         await saveUserKeys(msg.recipient_id, stale.recipientKeys, stale.recipientKeysRevision ?? 0);
                     }
+                    const ownUserId = authState.userId.peek();
+                    if (stale?.senderKeys && ownUserId) {
+                        await saveUserKeys(ownUserId, stale.senderKeys, stale.senderKeysRevision ?? 0);
+                    }
                     if (stale?.senderKeysRevision != null) {
                         await persistSenderKeysRevision(stale.senderKeysRevision);
                     }

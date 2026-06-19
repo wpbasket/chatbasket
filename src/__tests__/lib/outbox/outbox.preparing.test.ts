@@ -718,4 +718,50 @@ describe('Outbox preparing / same-chat blocking', () => {
         expect(mockInsertMessage).toHaveBeenCalled();
         expect(mockInsertMessage.mock.calls[0][0].message_id).toBe('real-stale-1');
     });
+    it('refreshes sender keys and retries once on keys_stale with stale_side both/sender', async () => {
+        const textMsg = makeLocalMessage({
+            message_id: 'temp-stale-2',
+            chat_id: 'chat-A',
+            recipient_id: 'user-2',
+            message_type: 'text',
+            content: 'hello',
+            status: 'pending',
+        });
+        const staleErr: any = new Error('keys stale');
+        staleErr.response = {
+            data: {
+                type: 'keys_stale',
+                details: {
+                    stale_side: 'both',
+                    recipient_keys_revision: 9,
+                    recipient_active_keys: ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq='],
+                    sender_keys_revision: 5,
+                    sender_active_keys: ['XYZABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn='],
+                },
+            },
+        };
+        mockSendMessage
+            .mockRejectedValueOnce(staleErr)
+            .mockResolvedValueOnce({
+                message_id: 'real-stale-2',
+                chat_id: 'chat-A',
+                content: 'encrypted-wire',
+                message_type: 'text',
+                created_at: '2026-01-01T00:00:10.000Z',
+                recipient_id: 'user-2',
+                is_from_me: true,
+                delivered_to_recipient: false,
+                synced_to_sender_primary: true,
+                expires_at: null,
+            });
+        mockGetPendingOutboxMessages.mockResolvedValue([textMsg]);
+
+        await outboxQueue.processQueue();
+
+        expect(mockSaveUserKeys).toHaveBeenCalledWith('user-2', ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq='], 9);
+        expect(mockSaveUserKeys).toHaveBeenCalledWith('user-1', ['XYZABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn='], 5);
+        expect(mockSendMessage).toHaveBeenCalledTimes(2);
+        expect(mockInsertMessage).toHaveBeenCalled();
+        expect(mockInsertMessage.mock.calls[0][0].message_id).toBe('real-stale-2');
+    });
 });
