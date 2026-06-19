@@ -8,16 +8,15 @@
 //     non-extractable WebCrypto master key held in IndexedDB (the same vault
 //     the auth session uses).
 //   Never uploaded, no recovery phrase, no backup (strict E2EE — accept data loss).
-// - Key GENERATION is PRIMARY-DEVICE-ONLY (native and web alike): the account's
-//   identity keypair is created on whichever device the backend marks as primary
-//   (`authState.isPrimary`). Secondary/unknown devices never generate — they only
-//   HOLD keys (already persisted ones, or keys delivered by the Phase 2 WebRTC
-//   key sync via `importIdentityKeypair`) and cannot send strict E2EE messages without them. A device promoted to primary
+// - Key GENERATION is DEVICE-LEVEL (native and web alike): each device
+//   generates its own identity keypair and uploads it to the server.
+//   All devices (primary and secondary) participate in E2EE and can send
+//   strict E2EE messages. A device promoted to primary
 //   in-session (settings → setCentralDevice) generates its keypair on promotion.
 // - Public key is uploaded to the backend (`POST /personal/profile/update-e2ee-key`);
 //   an "uploaded" flag is persisted so failed uploads retry on later launches.
-//   The upload is also primary-gated: a device demoted before the upload was
-//   confirmed must never overwrite the current primary's registered key.
+//   All devices (primary and secondary) upload their own public key to the
+//   server, enabling multi-device E2EE support.
 
 import { Platform } from 'react-native';
 import type { AppStorage } from '@/lib/storage/storage.wrapper';
@@ -254,16 +253,11 @@ async function doInitializeE2EEKeys(): Promise<void> {
 
         if (!isValidX25519Keypair(privateKey, publicKey)) {
             await persistUploadConfirmed(false);
-            if (!isPrimaryDevice()) {
-                // Key generation is primary-device-only — generate on promotion
-                // or receive keys via the Phase 2 key sync.
-                e2eeLog(TAG, 'Init: no keypair and device is NOT primary — generation skipped', {
-                    isPrimary: authState.isPrimary.peek(),
-                });
-                watchForPrimaryPromotion();
-                return;
-            }
-            e2eeLog(TAG, 'Init: no keypair on PRIMARY device — generating');
+            // All devices (primary and secondary) generate their own keypair
+            e2eeLog(TAG, 'Init: generating keypair for device', {
+                isPrimary: authState.isPrimary.peek(),
+            });
+            e2eeLog(TAG, 'Init: no keypair on device — generating');
             const keypair = generateIdentityKeypair();
             await keystoreSet(PRIVATE_KEY_STORE_KEY, keypair.privateKey);
             await keystoreSet(PUBLIC_KEY_STORE_KEY, keypair.publicKey);
@@ -324,13 +318,7 @@ export async function uploadPublicKeyIfNeeded(): Promise<void> {
             e2eeLog(TAG, 'Upload: public key already confirmed locally — skipping');
             return;
         }
-        if (!isPrimaryDevice()) {
-            e2eeLog(TAG, 'Upload: device is NOT primary — skipping (never overwrites the primary\'s key)', {
-                isPrimary: authState.isPrimary.peek(),
-            });
-            return;
-        }
-
+        // All devices (primary and secondary) upload their own public key
         e2eeLog(TAG, 'Upload: sending public key to server', { publicKey: keyFp(myPublicKey) });
         const res = await PersonalProfileApi.updateE2EEKey({ e2ee_public_key: myPublicKey });
         if (res?.status) {
