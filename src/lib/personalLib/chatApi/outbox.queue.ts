@@ -413,6 +413,13 @@ class OutboxQueue {
                 try {
                     if (stale?.recipientKeys) {
                         await saveUserKeys(msg.recipient_id, stale.recipientKeys, stale.recipientKeysRevision ?? 0);
+                        const chat = $chatListState.chatsById[msg.chat_id]?.peek();
+                        if (chat && stale.recipientKeysRevision != null) {
+                            $chatListState.upsertChat({
+                                ...chat,
+                                other_user_keys_revision: stale.recipientKeysRevision,
+                            });
+                        }
                     }
                     const ownUserId = authState.userId.peek();
                     if (stale?.senderKeys && ownUserId) {

@@ -202,6 +202,7 @@ jest.mock('@/lib/personalLib/e2ee/e2ee.service', () => ({
 jest.unmock('@/lib/personalLib/chatApi/outbox.queue');
 
 import type { LocalMessageEntry } from '@/lib/storage/personalStorage/chat/chat.storage.schema';
+import { $chatListState } from '@/state/personalState/chat/personal.state.chat';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -711,12 +712,46 @@ describe('Outbox preparing / same-chat blocking', () => {
             });
         mockGetPendingOutboxMessages.mockResolvedValue([textMsg]);
 
-        await outboxQueue.processQueue();
+        const mockUpsertChat = jest.fn();
+
+        let queue: any;
+        jest.isolateModules(() => {
+            jest.doMock('@/state/personalState/chat/personal.state.chat', () => ({
+                $chatMessagesState: {
+                    chats: {},
+                    addMessage: jest.fn(),
+                    replaceMessage: jest.fn(),
+                    updateMessageStatus: jest.fn(),
+                    setError: jest.fn(),
+                },
+                $chatListState: {
+                    chatsById: {
+                        'chat-A': {
+                            peek: () => ({
+                                chat_id: 'chat-A',
+                                other_user_id: 'user-2',
+                                other_user_keys_revision: 1,
+                            })
+                        }
+                    },
+                    upsertChat: mockUpsertChat,
+                },
+            }));
+            const mod = require('@/lib/personalLib/chatApi/outbox.queue');
+            queue = mod.outboxQueue;
+        });
+
+        await queue.processQueue();
 
         expect(mockSaveUserKeys).toHaveBeenCalledWith('user-2', ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq='], 9);
         expect(mockSendMessage).toHaveBeenCalledTimes(2);
         expect(mockInsertMessage).toHaveBeenCalled();
         expect(mockInsertMessage.mock.calls[0][0].message_id).toBe('real-stale-1');
+
+        expect(mockUpsertChat).toHaveBeenCalledWith(expect.objectContaining({
+            chat_id: 'chat-A',
+            other_user_keys_revision: 9,
+        }));
     });
     it('refreshes sender keys and retries once on keys_stale with stale_side both/sender', async () => {
         const textMsg = makeLocalMessage({
