@@ -90,12 +90,18 @@ export const recordFailedInsert: typeof import('./chat.storage.native').recordFa
     (...args: any[]) => (ChatStorageImpl.recordFailedInsert as any)(...args);
 
 // E2EE persistent key registry (user_keys)
-export const getUserE2eePublicKey: typeof import('./chat.storage.native').getUserE2eePublicKey =
-    (...args: any[]) => (ChatStorageImpl.getUserE2eePublicKey as any)(...args);
-export const setUserE2eePublicKey: typeof import('./chat.storage.native').setUserE2eePublicKey =
-    (...args: any[]) => (ChatStorageImpl.setUserE2eePublicKey as any)(...args);
-export const clearAllUserE2eeKeys: typeof import('./chat.storage.native').clearAllUserE2eeKeys =
-    (...args: any[]) => (ChatStorageImpl.clearAllUserE2eeKeys as any)(...args);
+export const setUserKeys: typeof import('./chat.storage.native').setUserKeys =
+    (...args: any[]) => (ChatStorageImpl.setUserKeys as any)(...args);
+export const getUserKeys: typeof import('./chat.storage.native').getUserKeys =
+    (...args: any[]) => (ChatStorageImpl.getUserKeys as any)(...args);
+export const getFirstUserKey: typeof import('./chat.storage.native').getFirstUserKey =
+    (...args: any[]) => (ChatStorageImpl.getFirstUserKey as any)(...args);
+export const getUserKeysRevision: typeof import('./chat.storage.native').getUserKeysRevision =
+    (...args: any[]) => (ChatStorageImpl.getUserKeysRevision as any)(...args);
+export const deleteUserKeys: typeof import('./chat.storage.native').deleteUserKeys =
+    (...args: any[]) => (ChatStorageImpl.deleteUserKeys as any)(...args);
+export const clearAllUserKeys: typeof import('./chat.storage.native').clearAllUserKeys =
+    (...args: any[]) => (ChatStorageImpl.clearAllUserKeys as any)(...args);
 export const getStorageStats: typeof import('./chat.storage.native').getStorageStats =
     (...args: any[]) => (ChatStorageImpl.getStorageStats as any)(...args);
 

@@ -1,4 +1,4 @@
-import { PersonalCreateProfilePayload, PersonalGetE2EEKeyResponse, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateE2EEKeyPayload, PersonalUpdateUserProfilePayload, RegisterTokenPayload } from "@/lib/personalLib";
+import { PersonalCreateProfilePayload, PersonalGetE2EEKeyResponse, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateE2EEKeyPayload, PersonalUpdateE2EEKeyResponse, PersonalUpdateUserProfilePayload, RegisterTokenPayload } from "@/lib/personalLib";
 import { apiClient, fileUploadClient, BooleanResponse } from "@/lib/constantLib";
 
 
@@ -51,8 +51,8 @@ async function removeAvatar(): Promise<BooleanResponse> {
  * @param payload e2ee_public_key: string; (standard Base64 X25519 public key, exactly 44 chars)
  * @returns status: boolean; message: string;
  */
-async function updateE2EEKey(payload: PersonalUpdateE2EEKeyPayload): Promise<BooleanResponse> {
-    return apiClient.post<BooleanResponse>('/personal/profile/update-e2ee-key', payload);
+async function updateE2EEKey(payload: PersonalUpdateE2EEKeyPayload): Promise<PersonalUpdateE2EEKeyResponse> {
+    return apiClient.post<PersonalUpdateE2EEKeyResponse>('/personal/profile/update-e2ee-key', payload);
 }
 
 

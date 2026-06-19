@@ -6,7 +6,7 @@
 // - Outgoing: local queue keeps plaintext; encrypt ONLY at send time using the
 //   recipient's backend-refreshed public key. Missing local/recipient/self-key
 //   confirmation blocks send — no plaintext fallback.
-// - Incoming: decrypt using `sender_e2ee_public_key` carried on the message
+// - Incoming: decrypt V3 by matching this device public key in `key_envelopes`
 //   payload BEFORE persistence. Decryption failure → generic failed placeholder;
 //   ciphertext must never be shown or persisted as readable content.
 // - Own messages echoed back by the server (`is_from_me`) are ciphertext this
@@ -25,21 +25,22 @@ import { Platform } from 'react-native';
 import mime from 'react-native-mime-types';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import type { ChatEntry, MessageEntry } from '../models/personal.model.chat';
+import { authState } from '@/state/auth/state.auth';
 import { PersonalProfileApi } from '../profileApi/personal.api.profile';
 import {
     E2EE_FAILED_TO_LOAD_TEXT,
     decryptMediaBytes,
-    decryptText,
+    decode32ByteKeyB64,
+    decryptPayloadEnvelope,
+    encode32ByteKeyB64,
     encryptMediaBytes,
-    encryptText,
+    encryptPayloadEnvelope,
     generateMediaKey,
-    isEncryptedContent,
+    isV3Envelope,
     isValidPublicKeyB64,
-    unwrapMediaEnvelope,
-    wrapMediaEnvelope,
     type E2EEMediaMetadata,
 } from './e2ee.crypto';
-import { getMyPrivateKey, requireStrictE2EEReadyForSend, whenKeyInitSettled } from './e2ee.keys';
+import { getMyPrivateKey, getMyPublicKey, requireStrictE2EEReadyForSend, whenKeyInitSettled } from './e2ee.keys';
 import { e2eeLog, keyFp } from './e2ee.log';
 
 const TAG = '[E2EE]';
@@ -51,18 +52,12 @@ const isWeb = Platform?.OS === 'web';
 /** Suffix appended to encrypted upload file names. */
 export const ENCRYPTED_FILE_SUFFIX = '.enc';
 
-
-/** Strict fail-closed rollout boundary. Plaintext from E2EE-capable senders at/after this point is invalid. */
-export const E2EE_STRICT_ROLLOUT_AT = '2026-06-12T00:00:00.000Z';
-const E2EE_STRICT_ROLLOUT_TS = Date.parse(E2EE_STRICT_ROLLOUT_AT);
-
 export type E2EEInboundFailureReason =
     | 'local_key_unavailable'
     | 'sender_key_unavailable'
     | 'media_download_transient'
     | 'media_gone'
-    | 'auth_failed'
-    | 'plaintext_after_strict_cutoff';
+    | 'auth_failed';
 
 export interface E2EEInboundFailure {
     message_id?: string;
@@ -91,14 +86,19 @@ export type E2EERecipientKeyRefreshPass = Map<string, Promise<string | null>>;
 
 export interface E2EEStrictOptions {
     recipientKeyRefreshPass?: E2EERecipientKeyRefreshPass;
+    recipientKeysRevision?: number;
 }
 
 export type ResolveRecipientPublicKeyStrictResult =
     | { ok: true; publicKey: string }
     | { ok: false; reason: E2EEStrictSendFailureReason };
 
+export type ResolveAuthorizedPublicKeysForSendResult =
+    | { ok: true; publicKeys: string[]; recipientKey: string }
+    | { ok: false; reason: E2EEStrictSendFailureReason };
+
 export type EncryptOutgoingTextStrictResult =
-    | { ok: true; wire: string; recipient_e2ee_public_key_used: string }
+    | { ok: true; wire: string }
     | { ok: false; reason: E2EEStrictSendFailureReason };
 
 export type PrepareOutgoingMediaStrictInput =
@@ -106,7 +106,7 @@ export type PrepareOutgoingMediaStrictInput =
     | { kind: 'blob'; recipientId: string; blob: Blob; originalFileName: string; originalMimeType?: string | null; originalSize?: number | null; messageType?: string | null };
 
 export type PrepareOutgoingMediaStrictResult =
-    | { ok: true; media: EncryptedMediaUpload | EncryptedMediaBlobUpload; recipient_e2ee_public_key_used: string }
+    | { ok: true; media: EncryptedMediaUpload | EncryptedMediaBlobUpload }
     | { ok: false; reason: E2EEStrictSendFailureReason };
 
 export function createE2EERecipientKeyRefreshPass(): E2EERecipientKeyRefreshPass {
@@ -121,16 +121,6 @@ export function isRecoverableE2EEInboundFailure(reason: E2EEInboundFailureReason
 
 export function shouldAckE2EEInboundFailure(reason: E2EEInboundFailureReason): boolean {
     return !isRecoverableE2EEInboundFailure(reason);
-}
-
-function isAtOrAfterStrictRollout(iso: string | null | undefined): boolean {
-    const ts = Date.parse(iso || '');
-    if (!Number.isFinite(ts)) return true; // fail closed when timestamp is absent/malformed
-    return ts >= E2EE_STRICT_ROLLOUT_TS;
-}
-
-function isStrictPlaintextViolation(createdAt: string | null | undefined, senderKey: string | null | undefined): boolean {
-    return isValidPublicKeyB64(senderKey) && isAtOrAfterStrictRollout(createdAt);
 }
 
 function buildInboundFailure(msg: MessageEntry, reason: E2EEInboundFailureReason): E2EEInboundFailure {
@@ -204,65 +194,102 @@ function applyMediaMetadata(msg: MessageEntry, meta: E2EEMediaMetadata): void {
     msg.file_size = meta.size ?? msg.file_size ?? null;
 }
 
-function getStoredMediaCounterpartKey(msg: MessageEntry, unwrapKeyB64?: string | null): string | null | undefined {
-    if (unwrapKeyB64 !== undefined) return unwrapKeyB64;
-    return msg.is_from_me
-        ? (msg as any).recipient_e2ee_public_key_used
-        : msg.sender_e2ee_public_key;
-}
-
 export function hydrateEncryptedMediaMetadata(
     msg: MessageEntry,
-    unwrapKeyB64?: string | null,
 ): E2EEMediaMetadata {
-    const myPrivateKey = getMyPrivateKey();
-    if (!myPrivateKey) {
-        throw new Error(`${TAG} cannot decrypt media metadata — no local private key`);
+    if (!msg.content || !isV3Envelope(msg.content)) {
+        throw new Error(`${TAG} cannot decrypt media metadata — missing v3 envelope`);
     }
-    const counterpartKey = getStoredMediaCounterpartKey(msg, unwrapKeyB64);
-    if (!isValidPublicKeyB64(counterpartKey)) {
-        throw new Error(`${TAG} cannot decrypt media metadata — missing unwrap public key`);
+    const payload = decryptV3PayloadForThisDevice(msg.content);
+    if (payload.type !== 'file') {
+        throw new Error(`${TAG} cannot decrypt media metadata — invalid v3 file payload`);
     }
-    if (!msg.content) {
-        throw new Error(`${TAG} cannot decrypt media metadata — missing envelope`);
-    }
-    const envelope = unwrapMediaEnvelope(msg.content, counterpartKey, myPrivateKey);
-    applyMediaMetadata(msg, envelope.meta);
-    return envelope.meta;
+    const meta = filePayloadToMediaMetadata(payload);
+    applyMediaMetadata(msg, meta);
+    return meta;
 }
 
 // ————————————————————————————————————————————————————————————————————————————
 // Persistent key registry (never "cache") — user_keys
 // ————————————————————————————————————————————————————————————————————————————
 
-/**
- * Stores a user's public key in the persistent registry.
- * `null` is stored too — it records "user has no E2EE" after a server check.
- * Invalid (non-44-char/non-Base64) values are ignored.
- */
-export async function saveUserPublicKey(userId: string, publicKey: string | null | undefined): Promise<void> {
-    if (!isKnownPlatform || !userId || publicKey === undefined) return;
-    if (publicKey !== null && !isValidPublicKeyB64(publicKey)) return;
+function uniqueValidKeys(keys: Array<string | null | undefined>): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const key of keys) {
+        if (!isValidPublicKeyB64(key) || seen.has(key)) continue;
+        seen.add(key);
+        out.push(key);
+    }
+    return out;
+}
+
+function normalizeRevision(revision: number | null | undefined): number {
+    return Number.isFinite(revision) ? Math.max(0, Math.trunc(revision as number)) : 0;
+}
+
+export async function saveUserKeys(userId: string, publicKeys: Array<string | null | undefined>, keysRevision: number): Promise<void> {
+    if (!isKnownPlatform || !userId) return;
+    const revision = normalizeRevision(keysRevision);
+    const keys = uniqueValidKeys(publicKeys).map(device_key => ({ device_key, keys_revision: revision }));
     try {
-        const existing = await ChatStorage.getUserE2eePublicKey(userId);
-        if (existing === publicKey) return; // no change — skip the write
-        await ChatStorage.setUserE2eePublicKey(userId, publicKey);
-        e2eeLog(TAG, 'Registry: key updated', {
-            userId,
-            key: publicKey === null ? 'null (user has no E2EE)' : keyFp(publicKey),
-            previous: existing === undefined ? '(none)' : existing === null ? 'null' : keyFp(existing),
-        });
+        await ChatStorage.setUserKeys(userId, keys);
+        e2eeLog(TAG, 'Registry: keys replaced', { userId, count: keys.length, keys_revision: revision });
     } catch (err) {
-        console.warn(`${TAG} Failed to save public key for ${userId}`, err);
+        console.warn(`${TAG} Failed to save keys for ${userId}`, err);
     }
 }
 
-/**
- * Resolves the recipient's latest public key for send-time encryption:
- * persistent registry first, then the `get-e2ee-key` endpoint (result is
- * persisted). Returns null when the recipient has no E2EE set up.
- */
+/** Local-only additive helper for decrypted message robustness. */
+export async function saveUserPublicKey(userId: string, publicKey: string | null | undefined, keysRevision?: number): Promise<void> {
+    if (!isKnownPlatform || !userId || !isValidPublicKeyB64(publicKey)) return;
+    try {
+        const existing = await ChatStorage.getUserKeys(userId);
+        if (existing.some(k => k.device_key === publicKey)) return;
+        const revision = normalizeRevision(keysRevision ?? existing[0]?.keys_revision ?? 0);
+        await ChatStorage.setUserKeys(userId, [
+            ...existing.map(k => ({ device_key: k.device_key, keys_revision: k.keys_revision })),
+            { device_key: publicKey, keys_revision: revision },
+        ]);
+        e2eeLog(TAG, 'Registry: key appended', { userId, key: keyFp(publicKey), keys_revision: revision });
+    } catch (err) {
+        console.warn(`${TAG} Failed to append public key for ${userId}`, err);
+    }
+}
+
+export async function resolveUserPublicKeys(userId: string): Promise<string[]> {
+    if (!isKnownPlatform || !userId) return [];
+    try {
+        return uniqueValidKeys((await ChatStorage.getUserKeys(userId)).map(k => k.device_key));
+    } catch (err) {
+        console.warn(`${TAG} Registry lookup failed for ${userId}`, err);
+        return [];
+    }
+}
+
+
 const recipientKeyFetchInFlight = new Map<string, Promise<string | null>>();
+
+
+function filePayloadToMediaMetadata(payload: { file_name: string; mime_type: string; size: number | null }): E2EEMediaMetadata {
+    return {
+        fileName: payload.file_name,
+        mimeType: payload.mime_type,
+        size: payload.size,
+    };
+}
+
+function decryptV3PayloadForThisDevice(content: string) {
+    const myPublicKey = getMyPublicKey();
+    const myPrivateKey = getMyPrivateKey();
+    if (!myPublicKey || !myPrivateKey) {
+        throw new Error(`${TAG} cannot decrypt v3 payload — no local identity keypair`);
+    }
+    e2eeLog(TAG, 'Ingress: attempting v3 decrypt', { myKey: keyFp(myPublicKey) });
+    const payload = decryptPayloadEnvelope(content, myPublicKey, myPrivateKey);
+    e2eeLog(TAG, 'Ingress: v3 decrypt OK', { payloadType: payload.type, myKey: keyFp(myPublicKey) });
+    return payload;
+}
 
 async function fetchRecipientPublicKeyFromBackend(
     recipientId: string,
@@ -274,17 +301,9 @@ async function fetchRecipientPublicKeyFromBackend(
     const promise = (async () => {
         e2eeLog(TAG, 'Resolve recipient key: backend refresh get-e2ee-key', { recipientId });
         const res = await PersonalProfileApi.getE2EEKey(recipientId);
-        const raw = res?.e2ee_public_key ?? null;
-        if (raw === null) {
-            await saveUserPublicKey(recipientId, null);
-            return null;
-        }
-        if (!isValidPublicKeyB64(raw)) {
-            console.warn(`${TAG} get-e2ee-key returned invalid public key for ${recipientId}`);
-            return null;
-        }
-        await saveUserPublicKey(recipientId, raw);
-        return raw;
+        const keys = uniqueValidKeys(res?.e2ee_public_keys || []);
+        await saveUserKeys(recipientId, keys, res?.keys_revision ?? 0);
+        return keys[0] ?? null;
     })();
 
     if (pass) {
@@ -300,6 +319,70 @@ async function fetchRecipientPublicKeyFromBackend(
     return promise;
 }
 
+export async function ensureRecipientKeysForRevision(
+    recipientId: string,
+    requiredRevision: number,
+    pass?: E2EERecipientKeyRefreshPass,
+): Promise<{ ok: true; keysRevision: number } | { ok: false; reason: E2EEStrictSendFailureReason }> {
+    const revision = normalizeRevision(requiredRevision);
+    try {
+        // When we have a known revision, check if local cache matches before fetching.
+        if (revision > 0) {
+            const storedRevision = await ChatStorage.getUserKeysRevision(recipientId);
+            if (storedRevision === revision && (await ChatStorage.getUserKeys(recipientId)).length > 0) {
+                e2eeLog(TAG, 'Ensure recipient keys: cache HIT', { recipientId, revision });
+                return { ok: true, keysRevision: revision };
+            }
+        }
+
+        // Revision unknown (0) or cache stale — always fetch fresh from backend.
+        e2eeLog(TAG, 'Ensure recipient keys: fetching from backend', { recipientId, knownRevision: revision });
+        await fetchRecipientPublicKeyFromBackend(recipientId, pass);
+        const freshRevision = await ChatStorage.getUserKeysRevision(recipientId);
+        const freshKeys = await ChatStorage.getUserKeys(recipientId);
+        if (freshKeys.length === 0) {
+            e2eeLog(TAG, 'Ensure recipient keys: backend returned NO keys', { recipientId, freshRevision });
+            return { ok: false, reason: 'recipient_key_unavailable' };
+        }
+        e2eeLog(TAG, 'Ensure recipient keys: fetched OK', { recipientId, keyCount: freshKeys.length, revision: freshRevision });
+        return { ok: true, keysRevision: freshRevision };
+    } catch (err) {
+        console.warn(`${TAG} Recipient key revision refresh failed for ${recipientId}`, err);
+        return { ok: false, reason: 'recipient_key_fetch_failed' };
+    }
+}
+
+export async function resolveAuthorizedPublicKeysForSend(
+    recipientId: string,
+    recipientKeysRevision: number,
+    myPublicKey: string,
+    pass?: E2EERecipientKeyRefreshPass,
+): Promise<ResolveAuthorizedPublicKeysForSendResult> {
+    if (!isKnownPlatform) return { ok: false, reason: 'unsupported_platform' };
+    if (!recipientId) return { ok: false, reason: 'invalid_recipient' };
+    if (!isValidPublicKeyB64(myPublicKey)) return { ok: false, reason: 'local_key_unavailable' };
+
+    const revision = normalizeRevision(recipientKeysRevision);
+    if (revision > 0) {
+        const ensured = await ensureRecipientKeysForRevision(recipientId, revision, pass);
+        if (!ensured.ok) return ensured;
+    } else {
+        const storedRevision = await ChatStorage.getUserKeysRevision(recipientId);
+        const storedKeys = await ChatStorage.getUserKeys(recipientId);
+        if (storedRevision <= 0 || storedKeys.length === 0) {
+            await fetchRecipientPublicKeyFromBackend(recipientId, pass);
+        }
+    }
+
+    const recipientKeys = uniqueValidKeys((await ChatStorage.getUserKeys(recipientId)).map(k => k.device_key));
+    if (recipientKeys.length === 0) return { ok: false, reason: 'recipient_key_unavailable' };
+
+    const ownUserId = authState.userId.peek();
+    const ownKeys = ownUserId ? await resolveUserPublicKeys(ownUserId) : [];
+    const publicKeys = uniqueValidKeys([myPublicKey, ...ownKeys, ...recipientKeys]);
+    return { ok: true, publicKeys, recipientKey: recipientKeys[0] };
+}
+
 /**
  * Resolves the recipient's public key for non-strict read/unwrap paths:
  * persistent registry first, then `get-e2ee-key` only on cache miss.
@@ -309,14 +392,10 @@ export async function resolveRecipientPublicKey(recipientId: string): Promise<st
     if (!isKnownPlatform || !recipientId) return null;
 
     try {
-        const stored = await ChatStorage.getUserE2eePublicKey(recipientId);
+        const stored = await ChatStorage.getFirstUserKey(recipientId);
         if (isValidPublicKeyB64(stored)) {
             e2eeLog(TAG, 'Resolve recipient key: registry HIT', { recipientId, key: keyFp(stored) });
             return stored;
-        }
-        if (stored === null) {
-            e2eeLog(TAG, 'Resolve recipient key: registry NULL', { recipientId });
-            return null;
         }
     } catch (err) {
         console.warn(`${TAG} Registry lookup failed for ${recipientId}`, err);
@@ -346,19 +425,13 @@ export async function resolveRecipientPublicKeyStrict(
         // 1. Registry-first: use cached key when available (avoids network round-trip).
         //    The persistent registry is kept fresh by natural refresh paths:
         //    chat list sync, incoming WS messages, pending message sync, and app hydration.
-        const stored = await ChatStorage.getUserE2eePublicKey(recipientId);
+        const stored = await ChatStorage.getFirstUserKey(recipientId);
         if (isValidPublicKeyB64(stored)) {
             e2eeLog(TAG, 'Strict resolve key: registry HIT', {
                 recipientId,
                 key: keyFp(stored),
             });
             return { ok: true, publicKey: stored };
-        }
-        if (stored === null) {
-            // Registry explicitly records "user has no E2EE"
-            e2eeLog(TAG, 'Strict resolve key: registry says no E2EE', { recipientId });
-            console.warn(`${TAG} 🚫 Recipient ${recipientId} has NO E2EE key — send blocked`);
-            return { ok: false, reason: 'recipient_key_unavailable' };
         }
 
         // 2. Registry miss (undefined) — fall back to backend refresh
@@ -387,7 +460,7 @@ async function requireStrictSendContext(
     recipientId: string,
     options?: E2EEStrictOptions,
 ): Promise<
-    | { ok: true; privateKey: string; recipientKey: string }
+    | { ok: true; privateKey: string; publicKey: string; recipientKey: string; publicKeys: string[] }
     | { ok: false; reason: E2EEStrictSendFailureReason }
 > {
     if (!isKnownPlatform) return { ok: false, reason: 'unsupported_platform' };
@@ -404,10 +477,21 @@ async function requireStrictSendContext(
         })();
     if (!ready.ok) return { ok: false, reason: ready.reason };
 
-    const recipient = await resolveRecipientPublicKeyStrict(recipientId, options);
-    if (!recipient.ok) return { ok: false, reason: recipient.reason };
+    const authorized = await resolveAuthorizedPublicKeysForSend(
+        recipientId,
+        options?.recipientKeysRevision ?? 0,
+        ready.publicKey,
+        options?.recipientKeyRefreshPass,
+    );
+    if (!authorized.ok) return { ok: false, reason: authorized.reason };
 
-    return { ok: true, privateKey: ready.privateKey, recipientKey: recipient.publicKey };
+    return {
+        ok: true,
+        privateKey: ready.privateKey,
+        publicKey: ready.publicKey,
+        recipientKey: authorized.recipientKey,
+        publicKeys: authorized.publicKeys,
+    };
 }
 
 /** Encrypts outgoing text strictly. Failure blocks send; no plaintext fallback. */
@@ -420,14 +504,15 @@ export async function encryptOutgoingTextStrict(
     if (!ctx.ok) return ctx;
 
     try {
-        const wire = encryptText(plaintext ?? '', ctx.recipientKey, ctx.privateKey);
-        e2eeLog(TAG, 'Send text: ENCRYPTED strict', {
+        const wire = encryptPayloadEnvelope({ type: 'text', text: plaintext ?? '' }, ctx.publicKeys);
+        e2eeLog(TAG, 'Send text: ENCRYPTED strict V3 envelope', {
             recipientId,
+            keyCount: ctx.publicKeys.length,
             recipientKey: keyFp(ctx.recipientKey),
             plaintextChars: (plaintext ?? '').length,
             wireChars: wire.length,
         });
-        return { ok: true, wire, recipient_e2ee_public_key_used: ctx.recipientKey };
+        return { ok: true, wire };
     } catch (err) {
         console.warn(`${TAG} strict encryptOutgoingText failed`, err);
         return { ok: false, reason: 'encryption_failed' };
@@ -482,17 +567,12 @@ export interface ProcessIncomingOptions {
      * Trusted local-storage replay only: permits already-decrypted plaintext rows
      * that carry persisted sender key metadata. Never set for WS/API payloads.
      */
-    allowPersistedPlaintext?: boolean;
+    allowLocalPlaintext?: boolean;
 }
 
 /**
  * Processes server-delivered messages IN PLACE before persistence:
- * 1. Saves `sender_e2ee_public_key` into the persistent registry (when the
- *    sender id can be resolved).
- * 2. Decrypts incoming encrypted text content; failure → "" (never ciphertext).
- * 3. Own encrypted `is_from_me` echoes: restores the locally persisted
- *    plaintext copy when one exists (refresh self-heal); otherwise blanks to
- *    "" (multi-device self-copy is not decryptable in Phase 1 by design).
+ * Decrypts V3 message envelopes before persistence; failure → failed placeholder.
  *
  * Mutates and returns the same array for caller convenience.
  */
@@ -501,217 +581,45 @@ export async function processIncomingMessages(
     options?: ProcessIncomingOptions,
 ): Promise<MessageEntry[]> {
     if (!isKnownPlatform || entries.length === 0) return entries;
-
-    // Cold start / page refresh: key loading may still be in flight — wait for
-    // it to settle so content isn't failed by a race (bounded, never throws).
     await whenKeyInitSettled();
 
-    const myPrivateKey = getMyPrivateKey();
-    const stats = { decrypted: 0, plaintext: 0, persistedPlaintext: 0, ownEchoRestored: 0, ownEchoBlanked: 0, failedBlanked: 0, mediaNormalized: 0 };
-
-    // Pre-pass (refresh self-heal): the server echoes our own messages back as
-    // ciphertext this device cannot decrypt. When a locally persisted plaintext
-    // copy exists for the same message_id (outbox promotion wrote it), restore
-    // it instead of showing a failed placeholder.
-    const ownEchoIds = entries
-        .filter(m => m.is_from_me && m.message_type === 'text' && isEncryptedContent(m.content))
-        .map(m => m.message_id);
-    const localOwnById = await loadLocalMessagesById(ownEchoIds);
-
-    // Registry sync is deduped: latest message key wins, one write per sender.
-    const senderIdByMessageId = new Map<string, string>();
-    const senderKeyByMessageId = new Map<string, string | null>();
-    const senderKeys = new Map<string, string | null>();
-    for (const msg of entries) {
-        if (msg.is_from_me) continue;
-        const senderId = options?.resolveSenderId?.(msg) ?? undefined;
-        if (senderId) senderIdByMessageId.set(msg.message_id, senderId);
-        if (msg.sender_e2ee_public_key !== undefined) {
-            const key = isValidPublicKeyB64(msg.sender_e2ee_public_key) ? msg.sender_e2ee_public_key : null;
-            senderKeyByMessageId.set(msg.message_id, key);
-            if (senderId) senderKeys.set(senderId, key);
-        }
-    }
-    for (const [senderId, key] of senderKeys) {
-        await saveUserPublicKey(senderId, key);
-    }
-
-    const registryKeysBySenderId = new Map<string, string | null | undefined>();
-    for (const senderId of new Set(senderIdByMessageId.values())) {
-        try {
-            registryKeysBySenderId.set(senderId, await ChatStorage.getUserE2eePublicKey(senderId));
-        } catch (err) {
-            console.warn(`${TAG} Registry lookup failed for inbound sender ${senderId}`, err);
-            registryKeysBySenderId.set(senderId, undefined);
-        }
-    }
-
-    const getKnownSenderKey = (msg: MessageEntry): string | null => {
-        const payloadKey = senderKeyByMessageId.get(msg.message_id);
-        if (isValidPublicKeyB64(payloadKey)) return payloadKey;
-        const senderId = senderIdByMessageId.get(msg.message_id);
-        if (!senderId) return null;
-        const stored = registryKeysBySenderId.get(senderId);
-        return isValidPublicKeyB64(stored) ? stored : null;
-    };
+    const stats = { decrypted: 0, plaintext: 0, failedBlanked: 0, mediaNormalized: 0 };
 
     for (const msg of entries) {
-        // Encrypted media metadata lives inside the v2 content envelope. The
-        // server/Appwrite fields are intentionally opaque (`*.enc`, octet-stream).
-        // Keep `content` encrypted for download-time key unwrap; hydrate only the
-        // UI/storage metadata from the authenticated envelope.
-        if (
-            msg.message_type !== 'text' &&
-            isEncryptedContent(msg.content)
-        ) {
-            const senderKey = getKnownSenderKey(msg);
-            if (!msg.is_from_me && isValidPublicKeyB64(senderKey)) {
-                msg.sender_e2ee_public_key = senderKey;
-            }
-            const unwrapKey = msg.is_from_me ? await resolveMediaUnwrapKey(msg) : senderKey;
-            if (!myPrivateKey) {
-                markMessageAsFailed(msg, 'local_key_unavailable', options);
-                stats.failedBlanked++;
-                e2eeLog(TAG, 'Ingress: cannot decrypt media metadata — no local private key', { messageId: msg.message_id });
-                continue;
-            }
-            if (!isValidPublicKeyB64(unwrapKey)) {
-                markMessageAsFailed(msg, 'sender_key_unavailable', options);
-                stats.failedBlanked++;
-                e2eeLog(TAG, 'Ingress: cannot decrypt media metadata — missing/invalid unwrap key', {
-                    messageId: msg.message_id,
-                    unwrapKey: keyFp(unwrapKey),
-                });
-                continue;
-            }
+        if (isV3Envelope(msg.content)) {
+            e2eeLog(TAG, 'Ingress: message is V3 envelope', { messageId: msg.message_id, type: msg.message_type, isFromMe: msg.is_from_me });
             try {
-                const meta = hydrateEncryptedMediaMetadata(msg, unwrapKey);
-                stats.mediaNormalized++;
-                e2eeLog(TAG, 'Ingress: encrypted media metadata hydrated', {
-                    messageId: msg.message_id,
-                    fileName: meta.fileName,
-                    mimeType: meta.mimeType,
-                    size: meta.size,
-                });
+                const payload = decryptV3PayloadForThisDevice(msg.content);
+                if (msg.message_type === 'text') {
+                    if (payload.type !== 'text') throw new Error('expected text payload');
+                    msg.content = payload.text;
+                    stats.decrypted++;
+                    e2eeLog(TAG, 'Ingress: text decrypted', { messageId: msg.message_id, plainChars: (payload.text ?? '').length });
+                } else {
+                    if (payload.type !== 'file') throw new Error('expected file payload');
+                    applyMediaMetadata(msg, filePayloadToMediaMetadata(payload));
+                    // Media metadata already extracted above
+                    stats.mediaNormalized++;
+                    e2eeLog(TAG, 'Ingress: media metadata decrypted', { messageId: msg.message_id, fileName: msg.file_name, mimeType: msg.file_mime_type });
+                }
             } catch (err) {
-                console.warn(`${TAG} Failed to decrypt media metadata ${msg.message_id} — failed placeholder`, err);
-                markMessageAsFailed(msg, 'auth_failed', options);
+                const reason = getMyPrivateKey() ? 'auth_failed' : 'local_key_unavailable';
+                console.warn(`${TAG} Failed to decrypt v3 message ${msg.message_id} — failed placeholder`, err);
+                e2eeLog(TAG, 'Ingress: v3 decrypt FAILED', { messageId: msg.message_id, reason, error: err instanceof Error ? err.message : String(err) });
+                markMessageAsFailed(msg, reason, options);
                 stats.failedBlanked++;
             }
             continue;
         }
 
-        // Text decryption (only structurally-encrypted content). Legacy plaintext
-        // before cutoff remains readable; plaintext at/after cutoff from an
-        // E2EE-capable sender becomes the generic failed-message placeholder.
-        if (msg.message_type !== 'text' || !isEncryptedContent(msg.content)) {
-            if (msg.message_type === 'text') {
-                const senderKey = getKnownSenderKey(msg);
-                const isPersistedDecryptedPlaintext =
-                    options?.allowPersistedPlaintext === true &&
-                    !msg.is_from_me &&
-                    isValidPublicKeyB64(msg.sender_e2ee_public_key);
-
-                if (
-                    !msg.is_from_me &&
-                    isStrictPlaintextViolation(msg.created_at, senderKey) &&
-                    !isPersistedDecryptedPlaintext
-                ) {
-                    markMessageAsFailed(msg, 'plaintext_after_strict_cutoff', options);
-                    stats.failedBlanked++;
-                    e2eeLog(TAG, 'Ingress: plaintext after strict cutoff failed closed', {
-                        messageId: msg.message_id,
-                        senderKey: keyFp(senderKey),
-                    });
-                } else {
-                    stats.plaintext++;
-                    if (isPersistedDecryptedPlaintext && isAtOrAfterStrictRollout(msg.created_at)) {
-                        stats.persistedPlaintext++;
-                        e2eeLog(TAG, 'Ingress: persisted decrypted plaintext replay allowed', {
-                            messageId: msg.message_id,
-                            senderKey: keyFp(msg.sender_e2ee_public_key),
-                        });
-                    }
-                }
-            }
+        if (msg.message_type === 'text' && options?.allowLocalPlaintext === true) {
+            stats.plaintext++;
+            e2eeLog(TAG, 'Ingress: local plaintext replay (allowed)', { messageId: msg.message_id });
             continue;
         }
 
-        if (msg.is_from_me) {
-            // Own ciphertext echoed by the server — undecryptable on this device.
-            // Restore the locally persisted plaintext copy (outbox promotion)
-            // when it exists; other devices show the generic failed placeholder.
-            const localContent = localOwnById.get(msg.message_id)?.content;
-            const localChars = localContent ? localContent.length : 0;
-            if (localContent && !isEncryptedContent(localContent)) {
-                msg.content = localContent;
-                stats.ownEchoRestored++;
-                e2eeLog(TAG, 'Ingress: own echo restored from local copy', {
-                    messageId: msg.message_id,
-                    plaintextChars: localChars,
-                });
-            } else {
-                let decrypted = null;
-                const recipientKey = (msg as any).recipient_e2ee_public_key_used ||
-                                     (msg.recipient_id ? await resolveRecipientPublicKey(msg.recipient_id) : null) ||
-                                     (async () => {
-                                         const counterpartId = await resolveChatCounterpartUserId(msg.chat_id);
-                                         return counterpartId ? await resolveRecipientPublicKey(counterpartId) : null;
-                                     })();
-                const resolvedKey = recipientKey instanceof Promise ? await recipientKey : recipientKey;
-
-                if (isValidPublicKeyB64(resolvedKey) && myPrivateKey) {
-                    try {
-                        decrypted = decryptText(msg.content, resolvedKey, myPrivateKey);
-                    } catch (err) {
-                        console.warn('[E2EE] Fallback decryption of own text message failed', err);
-                    }
-                }
-
-                if (decrypted !== null) {
-                    msg.content = decrypted;
-                    stats.ownEchoRestored++;
-                    e2eeLog(TAG, 'Ingress: own echo decrypted from server ciphertext', {
-                        messageId: msg.message_id,
-                        plaintextChars: decrypted.length,
-                    });
-                } else {
-                    msg.content = E2EE_FAILED_TO_LOAD_TEXT;
-                    stats.ownEchoBlanked++;
-                    e2eeLog(TAG, 'Ingress: own encrypted echo failed placeholder (is_from_me)', { messageId: msg.message_id });
-                }
-            }
-            continue;
-        }
-
-        const senderKey = getKnownSenderKey(msg);
-        if (!myPrivateKey) {
-            markMessageAsFailed(msg, 'local_key_unavailable', options);
-            stats.failedBlanked++;
-            e2eeLog(TAG, 'Ingress: cannot decrypt — no local private key', { messageId: msg.message_id });
-            continue;
-        }
-        if (!isValidPublicKeyB64(senderKey)) {
-            markMessageAsFailed(msg, 'sender_key_unavailable', options);
-            stats.failedBlanked++;
-            e2eeLog(TAG, 'Ingress: cannot decrypt — missing/invalid sender key', {
-                messageId: msg.message_id,
-                senderKey: keyFp(senderKey),
-            });
-            continue;
-        }
-
-        try {
-            msg.content = decryptText(msg.content, senderKey, myPrivateKey);
-            msg.sender_e2ee_public_key = senderKey;
-            stats.decrypted++;
-            e2eeLog(TAG, 'Ingress: DECRYPTED', {
-                messageId: msg.message_id,
-                senderKey: keyFp(senderKey),
-                plaintextChars: msg.content.length,
-            });
-        } catch (err) {
-            console.warn(`${TAG} Failed to decrypt message ${msg.message_id} — failed placeholder`, err);
+        if (msg.content) {
+            e2eeLog(TAG, 'Ingress: non-V3 server content fail-closed', { messageId: msg.message_id, type: msg.message_type });
             markMessageAsFailed(msg, 'auth_failed', options);
             stats.failedBlanked++;
         }
@@ -739,8 +647,7 @@ export async function processIncomingMessagesWithE2EEReport(
 
 /**
  * Processes the server chat list IN PLACE before persistence:
- * 1. Saves each chat's `other_user_e2ee_public_key` into the registry
- *    (metadata sync — the active key validation path).
+ * 1. Uses locally persisted `user_keys` for the chat counterpart.
  * 2. Decrypts encrypted incoming text previews; any failure → "" per spec.
  *    Own encrypted text previews are restored from the locally persisted
  *    plaintext message row when available (refresh self-heal).
@@ -754,168 +661,40 @@ export async function processIncomingMessagesWithE2EEReport(
  */
 export async function processIncomingChats(chats: ChatEntry[]): Promise<ChatEntry[]> {
     if (!isKnownPlatform || chats.length === 0) return chats;
-
-    // Cold start / page refresh: key loading may still be in flight — wait for
-    // it to settle so previews aren't failed by a race (bounded, never throws).
     await whenKeyInitSettled();
 
-    const myPrivateKey = getMyPrivateKey();
-    const stats = { decrypted: 0, restored: 0, blanked: 0 };
-
-    // Registry sync from chat metadata, deduped latest-key-wins.
-    const chatKeys = new Map<string, string | null>();
-    for (const chat of chats) {
-        if (chat.other_user_id && chat.other_user_e2ee_public_key !== undefined) {
-            const key = isValidPublicKeyB64(chat.other_user_e2ee_public_key) ? chat.other_user_e2ee_public_key : null;
-            chatKeys.set(chat.other_user_id, key);
-        }
-    }
-    for (const [userId, key] of chatKeys) {
-        await saveUserPublicKey(userId, key);
-    }
-
-    const registryKeysByUserId = new Map<string, string | null | undefined>();
-    for (const userId of new Set(chats.map(c => c.other_user_id).filter(Boolean))) {
-        try {
-            registryKeysByUserId.set(userId, await ChatStorage.getUserE2eePublicKey(userId));
-        } catch (err) {
-            console.warn(`${TAG} Registry lookup failed for chat ${userId}`, err);
-            registryKeysByUserId.set(userId, undefined);
-        }
-    }
-    const getKnownChatKey = (chat: ChatEntry): string | null => {
-        if (isValidPublicKeyB64(chat.other_user_e2ee_public_key)) return chat.other_user_e2ee_public_key;
-        const stored = registryKeysByUserId.get(chat.other_user_id);
-        return isValidPublicKeyB64(stored) ? stored : null;
-    };
-
-    // Pre-pass (refresh self-heal): restorable previews come from the locally
-    // persisted plaintext message rows — own text echoes (same rule as the
-    // ingress processor's own-echo handling) AND media previews of either side
-    // (their server-side preview content is the wrapped media key).
-    const restorePreviewIds = chats
-        .filter(c =>
-            !!c.last_message_id &&
-            isEncryptedContent(c.last_message_content) &&
-            (c.last_message_is_from_me || c.last_message_type !== 'text'),
-        )
-        .map(c => c.last_message_id as string);
-    const localPreviewById = await loadLocalMessagesById(restorePreviewIds);
+    const stats = { decrypted: 0, blanked: 0 };
 
     for (const chat of chats) {
-        // Plaintext after strict cutoff from an E2EE-capable sender is not shown.
-        if (!isEncryptedContent(chat.last_message_content)) {
-            const senderKey = getKnownChatKey(chat);
-            if (
-                chat.last_message_type === 'text' &&
-                !chat.last_message_is_from_me &&
-                isStrictPlaintextViolation(chat.last_message_created_at, senderKey)
-            ) {
+        if (isV3Envelope(chat.last_message_content)) {
+            e2eeLog(TAG, 'Chat preview: V3 envelope detected', { chatId: chat.chat_id, type: chat.last_message_type });
+            try {
+                const payload = decryptV3PayloadForThisDevice(chat.last_message_content as string);
+                chat.last_message_content = payload.type === 'text' ? payload.text : payload.file_name;
+                stats.decrypted++;
+                e2eeLog(TAG, 'Chat preview: decrypted', { chatId: chat.chat_id, previewType: payload.type });
+            } catch (err) {
                 markChatPreviewAsFailed(chat);
                 stats.blanked++;
-                e2eeLog(TAG, 'Chat list: plaintext preview after strict cutoff failed closed', {
-                    chatId: chat.chat_id,
-                    senderKey: keyFp(senderKey),
-                });
+                e2eeLog(TAG, 'Chat preview: decrypt FAILED', { chatId: chat.chat_id, error: err instanceof Error ? err.message : String(err) });
+                console.warn(`${TAG} Failed to decrypt v3 preview for chat ${chat.chat_id}`, err);
             }
             continue;
         }
 
-        if (chat.last_message_type !== 'text') {
-            // MEDIA preview: the server preview content is the encrypted v2
-            // media envelope. Prefer local plaintext row; otherwise decrypt only
-            // the authenticated metadata (file name) and never show ciphertext.
-            const localFileName = chat.last_message_id
-                ? localPreviewById.get(chat.last_message_id)?.file_name
-                : undefined;
-            if (localFileName && !isEncryptedContent(localFileName)) {
-                chat.last_message_content = localFileName;
-                stats.restored++;
-            } else {
-                const chatKey = getKnownChatKey(chat);
-                if (!myPrivateKey || !isValidPublicKeyB64(chatKey)) {
-                    markChatPreviewAsFailed(chat);
-                    stats.blanked++;
-                    e2eeLog(TAG, 'Chat list: media preview failed placeholder (no metadata key/local copy)', {
-                        chatId: chat.chat_id,
-                    });
-                    continue;
-                }
-                try {
-                    const meta = unwrapMediaEnvelope(
-                        chat.last_message_content as string,
-                        chatKey,
-                        myPrivateKey,
-                    ).meta;
-                    chat.last_message_content = meta.fileName;
-                    stats.restored++;
-                } catch (err) {
-                    markChatPreviewAsFailed(chat);
-                    stats.blanked++;
-                    console.warn(`${TAG} Failed to decrypt media preview metadata for chat ${chat.chat_id}`, err);
-                }
-            }
-            continue;
-        }
-
-        if (chat.last_message_is_from_me) {
-            // Own encrypted preview from the server is undecryptable here —
-            // restore the locally persisted plaintext copy when available.
-            const localContent = chat.last_message_id
-                ? localPreviewById.get(chat.last_message_id)?.content
-                : undefined;
-            if (localContent && !isEncryptedContent(localContent)) {
-                chat.last_message_content = localContent;
-                stats.restored++;
-            } else {
-                const recipientKey = getKnownChatKey(chat);
-                let decrypted = null;
-                if (isValidPublicKeyB64(recipientKey) && myPrivateKey) {
-                    try {
-                        decrypted = decryptText(chat.last_message_content as string, recipientKey, myPrivateKey);
-                    } catch (err) {
-                        console.warn('[E2EE] Fallback decryption of own preview failed', err);
-                    }
-                }
-
-                if (decrypted !== null) {
-                    chat.last_message_content = decrypted;
-                    stats.decrypted++;
-                } else {
-                    markChatPreviewAsFailed(chat);
-                    stats.blanked++;
-                }
-            }
-            continue;
-        }
-
-        const senderKey = getKnownChatKey(chat);
-        if (!myPrivateKey || !isValidPublicKeyB64(senderKey)) {
-            markChatPreviewAsFailed(chat);
-            stats.blanked++;
-            e2eeLog(TAG, 'Chat list: preview failed placeholder (cannot decrypt)', {
-                chatId: chat.chat_id,
-                reason: !myPrivateKey ? 'no local private key' : 'missing/invalid sender key',
-            });
-            continue;
-        }
-
-        try {
-            chat.last_message_content = decryptText(chat.last_message_content, senderKey, myPrivateKey);
-            stats.decrypted++;
-        } catch (err) {
-            console.warn(`${TAG} Failed to decrypt preview for chat ${chat.chat_id} — failed placeholder`, err);
+        if (chat.last_message_content) {
+            e2eeLog(TAG, 'Chat preview: non-V3 content fail-closed', { chatId: chat.chat_id });
             markChatPreviewAsFailed(chat);
             stats.blanked++;
         }
     }
 
-    e2eeLog(TAG, 'Chat list: batch processed', { total: chats.length, previewsDecrypted: stats.decrypted, previewsRestored: stats.restored, previewsBlanked: stats.blanked });
+    e2eeLog(TAG, 'Chat list: processed', { total: chats.length, ...stats });
     return chats;
 }
 
 // ————————————————————————————————————————————————————————————————————————————
-// Media — envelope encryption (secretbox bulk + crypto_box key wrap)
+// Media — V3 envelope metadata + secretbox bulk bytes
 // ————————————————————————————————————————————————————————————————————————————
 
 export interface EncryptedMediaUpload {
@@ -923,10 +702,8 @@ export interface EncryptedMediaUpload {
     encryptedUri: string;
     /** Opaque encrypted upload file name; original name lives inside encrypted `content`. */
     uploadFileName: string;
-    /** `base64(nonce || crypto_box(JSON{key,meta}))` — caption → message content. */
+    /** V3 envelope JSON — caption → message content. */
     wrappedKey: string;
-    /** Recipient public key used to wrap this media key; persist for old own-media unwrap after key rotation. */
-    recipient_e2ee_public_key_used: string;
     /** Deletes the encrypted temp copy. ALWAYS call after the upload settles. */
     cleanup: () => void;
 }
@@ -964,11 +741,18 @@ export async function prepareOutgoingMediaStrict(
             const mediaKey = generateMediaKey();
             const metadata = buildMediaMetadata(input, fileBytes.length);
             const encryptedBytes = encryptMediaBytes(fileBytes, mediaKey);
-            const wrappedKey = wrapMediaEnvelope(mediaKey, metadata, ctx.recipientKey, ctx.privateKey);
+            const wrappedKey = encryptPayloadEnvelope({
+                type: 'file',
+                file_key: encode32ByteKeyB64(mediaKey),
+                file_name: metadata.fileName,
+                mime_type: metadata.mimeType,
+                size: metadata.size,
+            }, ctx.publicKeys);
             const uploadFileName = makeEncryptedUploadFileName();
             e2eeLog(TAG, 'Media upload: file ENCRYPTED strict (fresh secretbox key, encrypted metadata envelope)', {
                 recipientId: input.recipientId,
                 recipientKey: keyFp(ctx.recipientKey),
+                keyCount: ctx.publicKeys.length,
                 fileName: metadata.fileName,
                 mimeType: metadata.mimeType,
                 plainBytes: fileBytes.length,
@@ -985,12 +769,10 @@ export async function prepareOutgoingMediaStrict(
 
             return {
                 ok: true,
-                recipient_e2ee_public_key_used: ctx.recipientKey,
                 media: {
                     encryptedUri: tempFile.uri,
                     uploadFileName,
                     wrappedKey,
-                    recipient_e2ee_public_key_used: ctx.recipientKey,
                     cleanup: () => {
                         try {
                             if (tempFile.exists) tempFile.delete();
@@ -1004,11 +786,18 @@ export async function prepareOutgoingMediaStrict(
         const mediaKey = generateMediaKey();
         const metadata = buildMediaMetadata(input, fileBytes.length);
         const encryptedBytes = encryptMediaBytes(fileBytes, mediaKey);
-        const wrappedKey = wrapMediaEnvelope(mediaKey, metadata, ctx.recipientKey, ctx.privateKey);
+        const wrappedKey = encryptPayloadEnvelope({
+            type: 'file',
+            file_key: encode32ByteKeyB64(mediaKey),
+            file_name: metadata.fileName,
+            mime_type: metadata.mimeType,
+            size: metadata.size,
+        }, ctx.publicKeys);
         const uploadFileName = makeEncryptedUploadFileName();
         e2eeLog(TAG, 'Media upload (web): blob ENCRYPTED strict (fresh secretbox key, encrypted metadata envelope)', {
             recipientId: input.recipientId,
             recipientKey: keyFp(ctx.recipientKey),
+            keyCount: ctx.publicKeys.length,
             fileName: metadata.fileName,
             mimeType: metadata.mimeType,
             plainBytes: fileBytes.length,
@@ -1017,12 +806,10 @@ export async function prepareOutgoingMediaStrict(
 
         return {
             ok: true,
-            recipient_e2ee_public_key_used: ctx.recipientKey,
             media: {
                 encryptedBlob: new Blob([encryptedBytes] as any, { type: 'application/octet-stream' }),
                 uploadFileName,
                 wrappedKey,
-                recipient_e2ee_public_key_used: ctx.recipientKey,
                 cleanup: () => { /* no temp file on web */ },
             },
         };
@@ -1049,10 +836,8 @@ export interface EncryptedMediaBlobUpload {
     encryptedBlob: Blob;
     /** Opaque encrypted upload file name; original name lives inside encrypted `content`. */
     uploadFileName: string;
-    /** `base64(nonce || crypto_box(JSON{key,meta}))` — caption → message content. */
+    /** V3 envelope JSON — caption → message content. */
     wrappedKey: string;
-    /** Recipient public key used to wrap this media key; persist for old own-media unwrap after key rotation. */
-    recipient_e2ee_public_key_used: string;
     /** No-op on web (no temp file) — kept so callers can treat both variants alike. */
     cleanup: () => void;
 }
@@ -1077,19 +862,9 @@ export async function encryptOutgoingMediaBlob(
     return result.media as EncryptedMediaBlobUpload;
 }
 
-/**
- * True when a media message carries E2EE-encrypted bytes (wrapped key in
- * `content`). Includes own (`is_from_me`) messages: crypto_box is
- * bidirectional, so the device that sent the file can unwrap its own media
- * key with the RECIPIENT's public key + its own private key (see
- * `resolveMediaUnwrapKey`).
- */
+/** True when a media message carries a V3 E2EE envelope in `content`. */
 export function isEncryptedMediaMessage(msg: MessageEntry): boolean {
-    return (
-        isKnownPlatform &&
-        msg.message_type !== 'text' &&
-        isEncryptedContent(msg.content)
-    );
+    return isKnownPlatform && msg.message_type !== 'text' && (isV3Envelope(msg.content) || !!(msg as any)._fileKey);
 }
 
 /**
@@ -1110,87 +885,38 @@ async function resolveChatCounterpartUserId(chatId: string | undefined): Promise
 }
 
 /**
- * Resolves the crypto_box public key needed to unwrap a media message's
- * wrapped key:
- * - incoming message → the sender's key carried on the payload; when the
- *   payload key is absent (local message rows do NOT persist
- *   `sender_e2ee_public_key`, e.g. history reloads after a page refresh) →
- *   the sender's registry key (chat row → other_user_id → registry →
- *   `get-e2ee-key` fallback);
- * - own message (`is_from_me`) → the RECIPIENT's key (registry →
- *   `get-e2ee-key` fallback): the wrapped key was sealed with
- *   (recipientPub, myPriv), and crypto_box derives the same shared secret
- *   from that exact pair on the sender's side.
- * Returns null when no usable key is available.
- */
-export async function resolveMediaUnwrapKey(msg: MessageEntry): Promise<string | null> {
-    if (msg.is_from_me) {
-        const storedRecipientKey = (msg as any).recipient_e2ee_public_key_used;
-        if (isValidPublicKeyB64(storedRecipientKey)) {
-            return storedRecipientKey;
-        }
-        if (!msg.recipient_id) return null;
-        return resolveRecipientPublicKey(msg.recipient_id);
-    }
-    if (isValidPublicKeyB64(msg.sender_e2ee_public_key)) {
-        return msg.sender_e2ee_public_key as string;
-    }
-    // Payload key missing — resolve via the persistent registry (kept current
-    // by the chat list / live ingress). Without this, media re-fed from local
-    // rows (downloadMediaBatch after a refresh) could never be decrypted.
-    const senderId = await resolveChatCounterpartUserId(msg.chat_id);
-    if (!senderId) return null;
-    const key = await resolveRecipientPublicKey(senderId);
-    if (key) {
-        e2eeLog(TAG, 'Media unwrap key: payload key missing — resolved via registry', {
-            messageId: msg.message_id,
-            senderId,
-            key: keyFp(key),
-        });
-    }
-    return key;
-}
-
-/**
  * Decrypts downloaded media bytes in memory: unwraps the symmetric key from
  * `msg.content` with the counterpart's public key (the sender's key for
  * incoming messages, the RECIPIENT's key for own messages — pass it via
- * `unwrapKeyB64`, usually from `resolveMediaUnwrapKey`), then opens the
- * secretbox. Throws on any failure — callers MUST treat that as a download
+ * V3 envelope in `msg.content`, then opens the secretbox. Throws on any failure — callers MUST treat that as a download
  * failure (no ACK on primary; the relay retains the file for retry).
  */
 export function decryptIncomingMediaBytes(
     msg: MessageEntry,
     encryptedBytes: Uint8Array,
-    unwrapKeyB64?: string | null,
 ): Uint8Array {
-    const storedKey = msg.is_from_me
-        ? (msg as any).recipient_e2ee_public_key_used
-        : msg.sender_e2ee_public_key;
-    const counterpartKey = unwrapKeyB64 !== undefined ? unwrapKeyB64 : storedKey;
-    e2eeLog(TAG, 'Media download: decrypting in memory', {
+    e2eeLog(TAG, 'Media download: decrypting v3 in memory', {
         messageId: msg.message_id,
         encryptedBytes: encryptedBytes.length,
         ownMessage: !!msg.is_from_me,
-        unwrapKey: keyFp(counterpartKey),
     });
-    const myPrivateKey = getMyPrivateKey();
-    if (!myPrivateKey) {
-        throw new Error(`${TAG} cannot decrypt media — no local private key`);
+
+    if (!msg.content || !isV3Envelope(msg.content)) {
+        throw new Error(`${TAG} cannot decrypt media — missing v3 envelope`);
     }
-    if (!isValidPublicKeyB64(counterpartKey)) {
-        throw new Error(`${TAG} cannot decrypt media — missing unwrap public key`);
+    const payload = decryptV3PayloadForThisDevice(msg.content);
+    if (payload.type !== 'file') {
+        throw new Error(`${TAG} cannot decrypt media — invalid v3 file payload`);
     }
-    if (!msg.content) {
-        throw new Error(`${TAG} cannot decrypt media — missing wrapped key`);
-    }
-    const envelope = unwrapMediaEnvelope(msg.content, counterpartKey as string, myPrivateKey);
-    applyMediaMetadata(msg, envelope.meta);
-    const plainBytes = decryptMediaBytes(encryptedBytes, envelope.key);
-    e2eeLog(TAG, 'Media download: DECRYPTED', {
+    const fileKeyB64 = payload.file_key;
+    const meta = filePayloadToMediaMetadata(payload);
+    applyMediaMetadata(msg, meta);
+
+    const plainBytes = decryptMediaBytes(encryptedBytes, decode32ByteKeyB64(fileKeyB64));
+    e2eeLog(TAG, 'Media download: DECRYPTED v3', {
         messageId: msg.message_id,
-        fileName: envelope.meta.fileName,
-        mimeType: envelope.meta.mimeType,
+        fileName: msg.file_name,
+        mimeType: msg.file_mime_type,
         plainBytes: plainBytes.length,
     });
     return plainBytes;

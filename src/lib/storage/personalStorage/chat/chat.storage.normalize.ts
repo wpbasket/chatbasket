@@ -40,6 +40,12 @@ function asBoolean(value: unknown): boolean {
     return false;
 }
 
+function asRevision(value: unknown): number {
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num)) return 0;
+    return Math.max(0, Math.trunc(num));
+}
+
 function asUnreadCount(value: unknown): number {
     const num = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(num)) return 0;
@@ -108,6 +114,7 @@ export function normalizeChatEntry(input: Partial<ChatEntry> | null | undefined)
         last_message_id: lastMessageId,
         last_message_is_unsent: lastMessageIsUnsent,
         unread_count: asUnreadCount(input.unread_count),
+        other_user_keys_revision: asRevision((input as any).other_user_keys_revision),
         is_contactable: input.is_contactable !== false, // default true; only false when explicitly set
         local_message_count: input.local_message_count, // local-only, pass through as-is
     };

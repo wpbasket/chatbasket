@@ -806,7 +806,7 @@ const ChatContentContainer = React.memo(({
                     readAt: chatReceiptState?.other_user_last_read_at,
                 }));
 
-                await $chatMessagesState.setMessages(chatId, asEntries, { allowPersistedPlaintext: true });
+                await $chatMessagesState.setMessages(chatId, asEntries, { allowLocalPlaintext: true });
 
                 batch(() => {
                     if (asEntries.length < 50) {
@@ -996,6 +996,8 @@ const ChatContentContainer = React.memo(({
         const currentChat = $chatMessagesState.chats[chat_id];
         const recipId = currentChat.recipientId.peek();
         if (!recipId || !chat_id) return;
+
+
 
         const fileSize = (asset as any).size || (asset as any).fileSize || 0;
         const fileName = (asset as any).name || (asset as any).fileName || 'file';

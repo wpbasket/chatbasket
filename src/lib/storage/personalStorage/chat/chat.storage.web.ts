@@ -84,7 +84,7 @@ async function decrypt(packed: ArrayBuffer): Promise<string> {
 // ─── IndexedDB Data Store ───────────────────────────────────────────────────
 
 const DATA_DB_NAME = 'ChatStorage';
-const DATA_DB_VERSION = 4;  // v4: add user_keys store for the E2EE key registry
+const DATA_DB_VERSION = 5;  // v5: multi-key user_keys store
 const MESSAGES_STORE = 'messages';
 const CHATS_STORE = 'chats';
 const MEDIA_STORE = 'media';  // File blobs (per §8.6.3 / §8.5.7)
@@ -146,10 +146,12 @@ function openDataDb(): Promise<IDBDatabase> {
                 }
             }
 
-            // v4 upgrade: E2EE persistent key registry — keyed by user_id
-            if (!db.objectStoreNames.contains(USER_KEYS_STORE)) {
-                db.createObjectStore(USER_KEYS_STORE, { keyPath: 'user_id' });
+            // v5 upgrade: E2EE persistent key registry — one record per (user, device).
+            if (db.objectStoreNames.contains(USER_KEYS_STORE)) {
+                db.deleteObjectStore(USER_KEYS_STORE);
             }
+            const userKeyStore = db.createObjectStore(USER_KEYS_STORE, { keyPath: ['user_id', 'device_key'] });
+            userKeyStore.createIndex('idx_user_id', 'user_id', { unique: false });
         };
         request.onsuccess = () => { dataDb = request.result; resolve(dataDb); };
         request.onerror = () => reject(request.error);
@@ -216,8 +218,6 @@ function messageToLocal(message: MessageEntry & { tempId?: string; localUri?: st
         view_url: message.view_url ?? null,
         download_url: message.download_url ?? null,
         file_token_expiry: message.file_token_expiry || null,
-        sender_e2ee_public_key: message.sender_e2ee_public_key ?? null,
-        recipient_e2ee_public_key_used: (message as any).recipient_e2ee_public_key_used ?? null,
         local_uri: (message as any).local_uri ?? message.localUri ?? null,
         temp_id: (message as any).temp_id ?? message.tempId ?? null,
         acked_by_server: !!message.acked_by_server,
@@ -299,33 +299,51 @@ function idbClear(store: IDBObjectStore): Promise<void> {
 
 // ─── E2EE persistent key registry (user_keys) ──────────────────────────────────────
 
-interface UserKeyRecord {
+export interface UserKeyRecord {
     user_id: string;
-    e2ee_public_key: string | null;
+    device_key: string;
+    keys_revision: number;
     updated_at: string;
 }
 
-export type StoredE2EEPublicKey = string | null | undefined;
-
-export async function getUserE2eePublicKey(userId: string): Promise<StoredE2EEPublicKey> {
-    const db = await openDataDb();
-    const tx = db.transaction(USER_KEYS_STORE, 'readonly');
-    const record = await idbGet<UserKeyRecord>(tx.objectStore(USER_KEYS_STORE), userId);
-    return record === undefined ? undefined : record.e2ee_public_key;
-}
-
-export async function setUserE2eePublicKey(userId: string, publicKey: string | null): Promise<void> {
+export async function setUserKeys(userId: string, keys: Array<{ device_key: string; keys_revision: number }>): Promise<void> {
     const db = await openDataDb();
     const tx = db.transaction(USER_KEYS_STORE, 'readwrite');
-    const record: UserKeyRecord = {
-        user_id: userId,
-        e2ee_public_key: publicKey,
-        updated_at: new Date().toISOString(),
-    };
-    await idbPut(tx.objectStore(USER_KEYS_STORE), record);
+    const store = tx.objectStore(USER_KEYS_STORE);
+    const idx = store.index('idx_user_id');
+    const existing = await idbGetAll<UserKeyRecord>(idx, userId);
+    for (const rec of existing) store.delete([rec.user_id, rec.device_key] as IDBValidKey);
+    const ts = new Date().toISOString();
+    for (const k of keys) await idbPut(store, { user_id: userId, device_key: k.device_key, keys_revision: k.keys_revision, updated_at: ts });
 }
 
-export async function clearAllUserE2eeKeys(): Promise<void> {
+export async function getUserKeys(userId: string): Promise<UserKeyRecord[]> {
+    const db = await openDataDb();
+    const tx = db.transaction(USER_KEYS_STORE, 'readonly');
+    const idx = tx.objectStore(USER_KEYS_STORE).index('idx_user_id');
+    return await idbGetAll<UserKeyRecord>(idx, userId);
+}
+
+export async function getFirstUserKey(userId: string): Promise<string | null> {
+    const keys = await getUserKeys(userId);
+    return keys.length > 0 ? keys[0].device_key : null;
+}
+
+export async function getUserKeysRevision(userId: string): Promise<number> {
+    const keys = await getUserKeys(userId);
+    return keys.length > 0 ? keys[0].keys_revision : 0;
+}
+
+export async function deleteUserKeys(userId: string): Promise<void> {
+    const db = await openDataDb();
+    const tx = db.transaction(USER_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(USER_KEYS_STORE);
+    const idx = store.index('idx_user_id');
+    const existing = await idbGetAll<UserKeyRecord>(idx, userId);
+    for (const rec of existing) store.delete([rec.user_id, rec.device_key] as IDBValidKey);
+}
+
+export async function clearAllUserKeys(): Promise<void> {
     const db = await openDataDb();
     const tx = db.transaction(USER_KEYS_STORE, 'readwrite');
     await idbClear(tx.objectStore(USER_KEYS_STORE));
@@ -375,6 +393,7 @@ function chatToLocal(chat: ChatEntry): LocalChatEntry {
         last_message_sender_id: chat.last_message_sender_id ?? null,
         last_message_id: chat.last_message_id ?? null,
         last_message_is_unsent: !!chat.last_message_is_unsent,
+        other_user_keys_revision: chat.other_user_keys_revision ?? 0,
         is_contactable: chat.is_contactable !== false,
     };
 }
@@ -628,7 +647,7 @@ export async function messageExists(messageId: string): Promise<boolean> {
     const db = await openDataDb();
     const tx = db.transaction(MESSAGES_STORE, 'readonly');
     const record = await idbGet<any>(tx.objectStore(MESSAGES_STORE), messageId);
-    return !!record;
+    return !!record && !record.deleted_for_me;
 }
 
 export async function getMessagesByIds(messageIds: string[]): Promise<LocalMessageEntry[]> {
@@ -789,14 +808,20 @@ export async function storeMediaBlob(
 export async function getMediaBlob(
     messageId: string
 ): Promise<{ blob: Blob; mimeType: string; fileName: string } | null> {
+    console.log('[IDB] getMediaBlob: retrieving', messageId);
     const db = await openDataDb();
     const tx = db.transaction(MEDIA_STORE, 'readonly');
     const record = await idbGet<any>(tx.objectStore(MEDIA_STORE), messageId);
-    if (!record) return null;
+    if (!record) {
+        console.log('[IDB] getMediaBlob: NOT FOUND', messageId);
+        return null;
+    }
+    console.log('[IDB] getMediaBlob: found record, blob size:', record.blob.byteLength);
 
     // Decrypt metadata
     const metaJson = await decrypt(record.meta);
     const meta = JSON.parse(metaJson) as { mimeType: string; fileName: string; size: number };
+    console.log('[IDB] getMediaBlob: metadata', meta);
 
     // Decrypt blob
     const key = await getOrCreateKey();
@@ -807,8 +832,10 @@ export async function getMediaBlob(
         { name: 'AES-GCM', iv }, key, ciphertext
     );
 
+    const blob = new Blob([decrypted], { type: meta.mimeType });
+    console.log('[IDB] getMediaBlob: returning blob', { mimeType: meta.mimeType, fileName: meta.fileName, blobSize: blob.size, blobType: blob.type });
     return {
-        blob: new Blob([decrypted], { type: meta.mimeType }),
+        blob,
         mimeType: meta.mimeType,
         fileName: meta.fileName,
     };
@@ -826,6 +853,7 @@ export async function deleteMediaBlob(messageId: string): Promise<void> {
         req.onerror = () => reject(req.error);
     });
 }
+
 
 /**
  * Hard-delete all soft-deleted rows (deleted_for_me = true).

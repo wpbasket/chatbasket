@@ -10,6 +10,58 @@
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
+jest.mock('react-native', () => ({
+    Platform: { OS: 'android' },
+}));
+
+jest.mock('react-native-mmkv', () => ({
+    MMKV: jest.fn().mockImplementation(() => ({ getString: jest.fn(), set: jest.fn() })),
+}), { virtual: true });
+
+jest.mock('react-native-unistyles', () => ({
+    StyleSheet: { create: (s: any) => s },
+    UnistylesRuntime: { colorScheme: 'light' },
+    useUnistyles: () => ({ theme: { colors: {} }, rt: {} }),
+}), { virtual: true });
+
+jest.mock('@/lib/constantLib', () => ({
+    ApiError: class ApiError extends Error {
+        constructor(msg: string) { super(msg); }
+    },
+}));
+
+jest.mock('@/utils/personalUtils/util.chatMedia', () => ({
+    resolveMediaUrls: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('@/utils/personalUtils/util.chatPreview', () => ({
+    getPreviewText: jest.fn().mockReturnValue('Hello'),
+}));
+
+jest.mock('@/lib/personalLib/fileSystem/file.download', () => ({
+    downloadIncomingFile: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('@/lib/storage/personalStorage/chat/chat.storage.normalize', () => ({
+    normalizeChatEntry: jest.fn((input: any) => input),
+    normalizeChatEntries: jest.fn((input: any[]) => input),
+}));
+
+jest.mock('@/state/personalState/user/personal.state.user', () => ({
+    $personalStateUser: {
+        user: { peek: () => ({ user_id: 'user-1' }) },
+    },
+}));
+
+jest.mock('@/lib/storage/personalStorage/profile/profile.storage', () => ({
+    getProfileAvatarBlob: jest.fn(),
+}));
+
+jest.mock('@/lib/personalLib/chatApi/ws.client', () => ({
+    wsClient: { subscribe: jest.fn(), connect: jest.fn(), disconnect: jest.fn() },
+}));
+
+
 jest.mock('@/lib/storage/personalStorage/chat/chat.storage', () => ({
     insertChats: jest.fn().mockResolvedValue(undefined),
     getChats: jest.fn().mockResolvedValue([]),
@@ -48,6 +100,7 @@ function makeChatEntry(overrides: Partial<ChatEntry> & { chat_id: string; other_
         updated_at: '2026-01-01T00:00:00Z',
         other_user_last_read_at: '2026-01-01T00:00:00Z',
         other_user_last_delivered_at: '2026-01-01T00:00:00Z',
+        other_user_keys_revision: 1,
         last_message_content: 'Hello',
         last_message_created_at: '2026-01-01T00:00:00Z',
         last_message_type: 'text',

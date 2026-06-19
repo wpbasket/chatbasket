@@ -62,6 +62,7 @@ const mockUpdateMessageStatus = jest.fn().mockResolvedValue(undefined);
 const mockSwapTempIdToRealId = jest.fn().mockResolvedValue(undefined);
 const mockInsertMessage = jest.fn().mockResolvedValue(undefined);
 const mockGetMediaBlob = jest.fn().mockResolvedValue(null);
+const mockSaveUserKeys = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@/lib/storage/personalStorage/chat/chat.storage', () => ({
     __esModule: true,
@@ -77,6 +78,9 @@ jest.mock('@/lib/storage/personalStorage/chat/chat.storage', () => ({
     getDeletedMessageIds: jest.fn().mockResolvedValue([]),
     getMessageCountsByChatId: jest.fn().mockResolvedValue({}),
     messageExists: jest.fn().mockResolvedValue(false),
+    getChatById: jest.fn().mockResolvedValue({ chat_id: 'chat-A', other_user_id: 'user-2', other_user_keys_revision: 1 }),
+    getUserKeysRevision: jest.fn().mockResolvedValue(1),
+    getUserKeys: jest.fn().mockResolvedValue([{ user_id: 'user-2', device_key: 'AAAA', keys_revision: 1, updated_at: 'now' }]),
 }));
 
 const mockSendMessage = jest.fn().mockResolvedValue({
@@ -90,8 +94,9 @@ const mockSendMessage = jest.fn().mockResolvedValue({
     delivered_to_recipient: false,
     synced_to_sender_primary: true,
     expires_at: null,
-});
 
+
+});
 jest.mock('@/lib/personalLib/chatApi/chat.transport', () => ({
     __esModule: true,
     ChatTransport: {
@@ -169,6 +174,7 @@ jest.mock('@/state/auth/state.auth', () => ({
         userId: { peek: () => 'user-1', get: () => 'user-1' },
         isPrimary: { peek: () => true, get: () => true },
         sessionId: { peek: () => 'session-1', get: () => 'session-1' },
+        keys_revision: { peek: () => 1, get: () => 1, set: jest.fn() },
     },
 }));
 
@@ -178,7 +184,6 @@ jest.mock('@/lib/personalLib/e2ee/e2ee.service', () => ({
     encryptOutgoingTextStrict: jest.fn().mockResolvedValue({
         ok: true,
         wire: 'encrypted-wire',
-        recipient_e2ee_public_key_used: 'AAAA',
     }),
     prepareOutgoingMediaStrict: jest.fn().mockResolvedValue({
         ok: true,
@@ -188,9 +193,9 @@ jest.mock('@/lib/personalLib/e2ee/e2ee.service', () => ({
             uploadFileName: 'photo.enc',
             cleanup: jest.fn(),
         },
-        recipient_e2ee_public_key_used: 'AAAA',
     }),
-    saveUserPublicKey: jest.fn().mockResolvedValue(undefined),
+    ensureRecipientKeysForRevision: jest.fn().mockResolvedValue({ ok: true, keysRevision: 1 }),
+    saveUserKeys: (...args: any[]) => mockSaveUserKeys(...args),
 }));
 
 // Must unmock the outbox queue so we can test the real class
@@ -221,8 +226,6 @@ function makeLocalMessage(overrides: Partial<LocalMessageEntry> = {}): LocalMess
         view_url: null,
         download_url: null,
         file_token_expiry: null,
-        sender_e2ee_public_key: null,
-        recipient_e2ee_public_key_used: null,
         local_uri: null,
         temp_id: null,
         inserted_at: new Date().toISOString(),
@@ -671,5 +674,48 @@ describe('Outbox preparing / same-chat blocking', () => {
         expect(insertedMsg.local_seq).toBe(42);  // ← preserved from optimistic message
         expect(insertedMsg.message_id).toBe('real-text-1');  // ← server ID
         expect(insertedMsg.status).toBe('sent');
+    });
+    it('refreshes recipient keys and retries once on keys_stale', async () => {
+        const textMsg = makeLocalMessage({
+            message_id: 'temp-stale-1',
+            chat_id: 'chat-A',
+            recipient_id: 'user-2',
+            message_type: 'text',
+            content: 'hello',
+            status: 'pending',
+        });
+        const staleErr: any = new Error('keys stale');
+        staleErr.response = {
+            data: {
+                type: 'keys_stale',
+                details: {
+                    stale_side: 'recipient',
+                    recipient_keys_revision: 9,
+                    recipient_active_keys: ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq='],
+                },
+            },
+        };
+        mockSendMessage
+            .mockRejectedValueOnce(staleErr)
+            .mockResolvedValueOnce({
+                message_id: 'real-stale-1',
+                chat_id: 'chat-A',
+                content: 'encrypted-wire',
+                message_type: 'text',
+                created_at: '2026-01-01T00:00:10.000Z',
+                recipient_id: 'user-2',
+                is_from_me: true,
+                delivered_to_recipient: false,
+                synced_to_sender_primary: true,
+                expires_at: null,
+            });
+        mockGetPendingOutboxMessages.mockResolvedValue([textMsg]);
+
+        await outboxQueue.processQueue();
+
+        expect(mockSaveUserKeys).toHaveBeenCalledWith('user-2', ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq='], 9);
+        expect(mockSendMessage).toHaveBeenCalledTimes(2);
+        expect(mockInsertMessage).toHaveBeenCalled();
+        expect(mockInsertMessage.mock.calls[0][0].message_id).toBe('real-stale-1');
     });
 });

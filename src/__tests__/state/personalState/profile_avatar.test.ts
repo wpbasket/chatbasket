@@ -165,7 +165,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, 'same-id');
 
-        expect(mockFetch).toHaveBeenCalledWith(profile.avatar_url);
+        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg\?cb=\d+$/));
         expect(mockStoreProfileAvatarBlob).toHaveBeenCalled();
         expect(mockAvatarUriSet).toHaveBeenCalledWith(expect.stringMatching(/^idb:\/\/ME_PROFILE_AVATAR\?t=\d+$/));
     });
@@ -179,7 +179,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, 'old-id');
 
-        expect(mockFetch).toHaveBeenCalledWith(profile.avatar_url);
+        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg\?cb=\d+$/));
         expect(mockStoreProfileAvatarBlob).toHaveBeenCalled();
         expect(mockAvatarUriSet).toHaveBeenCalledWith(expect.stringMatching(/^idb:\/\/ME_PROFILE_AVATAR\?t=\d+$/));
     });
@@ -207,7 +207,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, null);
 
-        expect(mockFetch).toHaveBeenCalledWith(profile.avatar_url);
+        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg\?cb=\d+$/));
         expect(mockAvatarUriSet).toHaveBeenCalledWith(expect.stringMatching(/^idb:\/\/ME_PROFILE_AVATAR\?t=\d+$/));
     });
 
@@ -224,33 +224,36 @@ describe('syncProfileAvatar', () => {
 
     // ── Download failures ───────────────────────────────────────────────
 
-    it('keeps existing avatar when download throws network error', async () => {
+    it('falls back to server URL when download throws network error', async () => {
         const profile = makeProfile({ avatar_file_id: 'new-id' });
         mockFetch.mockRejectedValue(new Error('Network error'));
 
         await syncProfileAvatar(profile as any, 'old-id');
 
-        expect(mockAvatarUriSet).not.toHaveBeenCalled();
+        // downloadAvatar swallows the error -> syncProfileAvatar falls back to the server URL
+        expect(mockAvatarUriSet).toHaveBeenCalledWith(profile.avatar_url);
         expect(mockDeleteProfileAvatarBlob).not.toHaveBeenCalled();
     });
 
-    it('keeps existing avatar when server returns HTTP error', async () => {
+    it('falls back to server URL when server returns HTTP error', async () => {
         const profile = makeProfile({ avatar_file_id: 'new-id' });
         mockFetch.mockResolvedValue(makeFetchResponse(false, 500));
 
         await syncProfileAvatar(profile as any, 'old-id');
 
-        expect(mockAvatarUriSet).not.toHaveBeenCalled();
+        // fetchAvatarBlob throws on !ok -> downloadAvatar returns null -> server URL fallback
+        expect(mockAvatarUriSet).toHaveBeenCalledWith(profile.avatar_url);
         expect(mockDeleteProfileAvatarBlob).not.toHaveBeenCalled();
     });
 
-    it('keeps existing avatar when storeProfileAvatarBlob fails', async () => {
+    it('falls back to server URL when storeProfileAvatarBlob fails', async () => {
         const profile = makeProfile({ avatar_file_id: 'new-id' });
         mockFetch.mockResolvedValue(makeFetchResponse(true));
         mockStoreProfileAvatarBlob.mockRejectedValue(new Error('IndexedDB full'));
 
         await syncProfileAvatar(profile as any, 'old-id');
 
-        expect(mockAvatarUriSet).not.toHaveBeenCalled();
+        // saveAvatarToIDB throws -> downloadAvatar returns null -> server URL fallback
+        expect(mockAvatarUriSet).toHaveBeenCalledWith(profile.avatar_url);
     });
 });

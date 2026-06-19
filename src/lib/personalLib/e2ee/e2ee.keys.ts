@@ -22,7 +22,6 @@
 import { Platform } from 'react-native';
 import type { AppStorage } from '@/lib/storage/storage.wrapper';
 import { authState } from '@/state/auth/state.auth';
-import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { PersonalProfileApi } from '../profileApi/personal.api.profile';
 import { generateIdentityKeypair, isValidPublicKeyB64, isValidX25519Keypair, sodiumReady } from './e2ee.crypto';
 import { e2eeLog, keyFp } from './e2ee.log';
@@ -168,30 +167,22 @@ function clearSelfKeyVerification(): void {
 export async function verifyMyPublicKeyRegistered(): Promise<boolean> {
     if (!isKnownPlatform || !myPublicKey) return false;
     if (selfKeyVerifiedForPublicKey === myPublicKey) return true;
+    if (myPublicKeyUploadConfirmed) {
+        selfKeyVerifiedForPublicKey = myPublicKey;
+        return true;
+    }
     if (selfKeyVerificationPromise) return selfKeyVerificationPromise;
 
-    const userId = authState.userId.peek() || $personalStateUser.user.peek()?.id || null;
-    if (!userId) return false;
-
     selfKeyVerificationPromise = (async () => {
-        try {
-            const res = await PersonalProfileApi.getE2EEKey(userId);
-            const matches = res?.e2ee_public_key === myPublicKey;
-            if (matches) {
-                await persistUploadConfirmed(true);
-                selfKeyVerifiedForPublicKey = myPublicKey;
-                return true;
-            }
-            await persistUploadConfirmed(false);
-            void uploadPublicKeyIfNeeded();
-            return false;
-        } catch (err) {
-            console.warn(`${TAG} Backend self-key verification failed`, err);
-            return false;
-        } finally {
-            selfKeyVerificationPromise = null;
+        await uploadPublicKeyIfNeeded();
+        if (myPublicKeyUploadConfirmed) {
+            selfKeyVerifiedForPublicKey = myPublicKey;
+            return true;
         }
-    })();
+        return false;
+    })().finally(() => {
+        selfKeyVerificationPromise = null;
+    });
 
     return selfKeyVerificationPromise;
 }
@@ -344,15 +335,39 @@ export async function uploadPublicKeyIfNeeded(): Promise<void> {
         const res = await PersonalProfileApi.updateE2EEKey({ e2ee_public_key: myPublicKey });
         if (res?.status) {
             await persistUploadConfirmed(true);
-            clearSelfKeyVerification();
-            e2eeLog(TAG, 'Upload: public key CONFIRMED on server', { publicKey: keyFp(myPublicKey) });
+            if (typeof res.keys_revision === 'number') {
+                const { setStoredKeysRevision } = await import('@/lib/storage/commonStorage/storage.auth');
+                await setStoredKeysRevision(res.keys_revision);
+            }
+            selfKeyVerifiedForPublicKey = myPublicKey;
+            e2eeLog(TAG, 'Upload: public key CONFIRMED on server', { publicKey: keyFp(myPublicKey), keys_revision: res.keys_revision ?? null });
+            uploadRetryAttempt = 0;
+            if (uploadRetryTimer) { clearTimeout(uploadRetryTimer); uploadRetryTimer = null; }
         } else {
             e2eeLog(TAG, 'Upload: server did not confirm — will retry', { status: res?.status ?? null });
         }
     } catch (err) {
         // Includes the "profile does not exist yet" case — retried after profile creation
-        console.warn(`${TAG} Public key upload failed (will retry)`, err);
+        console.warn(`${TAG} Public key upload failed (scheduling retry)`, err);
+        // Schedule background retry with exponential backoff (capped at 60s)
+        scheduleUploadRetry();
     }
+}
+
+let uploadRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let uploadRetryAttempt = 0;
+
+function scheduleUploadRetry(): void {
+    if (uploadRetryTimer) return; // already scheduled
+    const delays = [5000, 10000, 20000, 40000, 60000]; // exponential backoff
+    const delay = delays[Math.min(uploadRetryAttempt, delays.length - 1)];
+    uploadRetryAttempt++;
+    e2eeLog(TAG, `Upload: retrying in ${delay / 1000}s (attempt ${uploadRetryAttempt})`);
+    uploadRetryTimer = setTimeout(async () => {
+        uploadRetryTimer = null;
+        if (myPublicKeyUploadConfirmed) return; // already confirmed by another path
+        await uploadPublicKeyIfNeeded();
+    }, delay);
 }
 
 /**

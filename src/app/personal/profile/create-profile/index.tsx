@@ -2,6 +2,7 @@ import Header from '@/components/header/Header';
 import { ThemedText } from "@/components/ui/common/ThemedText"
 import { ThemedView } from "@/components/ui/common/ThemedView"
 import { IconSymbol } from "@/components/ui/fonts/IconSymbol"
+import { uploadPublicKeyIfNeeded } from "@/lib/personalLib/e2ee/e2ee.keys"
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
 import { ApiError } from "@/lib/constantLib"
 import { PersonalProfileApi } from "@/lib/personalLib/profileApi/personal.api.profile"
@@ -69,6 +70,11 @@ export default function PersonalCreateProfile() {
         // Update the global user state
         $personalStateUser.user.set(response);
         $personalStateCreateProfile.userNotFound.set(false);
+
+        // Retry E2EE key upload after profile creation
+        // (Key upload fails during signup because profile doesn\'t exist yet)
+        void uploadPublicKeyIfNeeded();
+
         // Navigate back to profile screen
         router.back();
       }

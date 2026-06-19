@@ -1,15 +1,36 @@
 import { observable } from '@legendapp/state';
-import { initializeSecureStorage, restoreAuthState } from './commonStorage/storage.auth';
+import { initializeSecureStorage, restoreAuthState, isOwnKeysInitialized, setOwnKeysInitialized } from './commonStorage/storage.auth';
 import { initializeContactsStorage, PersonalStorageLoadContactRequests, PersonalStorageLoadContacts } from './personalStorage/personal.storage.contacts';
 import { PersonalStorageGetDeviceStatus } from './personalStorage/personal.storage.device';
 import { PersonalStorageGetUser, clearProfileStorage } from './personalStorage/profile/personal.storage.user';
-import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia } from './personalStorage/chat/chat.storage';
+import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia, setUserKeys } from './personalStorage/chat/chat.storage';
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
 import { authState } from '@/state/auth/state.auth';
 import { deleteLocalE2EEKeys, initializeE2EEKeys, uploadPublicKeyIfNeeded } from '@/lib/personalLib/e2ee/e2ee.keys';
+import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
+import { isValidPublicKeyB64 } from '@/lib/personalLib/e2ee/e2ee.crypto';
 
 let hydrationPromise: Promise<void> | null = null;
+
+
+async function seedOwnSiblingKeysOnce(): Promise<void> {
+    const userId = authState.userId.peek();
+    if (!userId || await isOwnKeysInitialized()) return;
+    try {
+        const res = await PersonalProfileApi.getE2EEKey(userId);
+        const revision = Number.isFinite(res.keys_revision) ? Math.max(0, Math.trunc(res.keys_revision)) : 0;
+        const keys = (res.e2ee_public_keys || [])
+            .filter(isValidPublicKeyB64)
+            .map(device_key => ({ device_key, keys_revision: revision }));
+        await setUserKeys(userId, keys);
+        await setOwnKeysInitialized(true);
+        console.log('[StorageInit] Own sibling E2EE keys seeded', { count: keys.length, keys_revision: revision });
+    } catch (err) {
+        console.warn('[StorageInit] Own sibling E2EE key seed failed', err);
+    }
+}
+
 
 export const personalStorageHydration$ = observable({
     ready: false,
@@ -64,6 +85,7 @@ export const hydratePersonalModules = async (): Promise<void> => {
             // above) and upload the public key.
             // Never throws; fire-and-forget so hydration is not blocked by network.
             void initializeE2EEKeys();
+            void seedOwnSiblingKeysOnce();
 
             // Phase 4e: Start connection watcher + sync WebSocket state + drain outbox queue
             connectionWatcher.start();

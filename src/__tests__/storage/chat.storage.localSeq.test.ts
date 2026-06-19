@@ -27,8 +27,6 @@ describe('Outbox ordering with local_seq', () => {
     view_url: null,
     download_url: null,
     file_token_expiry: null,
-    sender_e2ee_public_key: null,
-    recipient_e2ee_public_key_used: null,
     local_uri: null,
     temp_id: null,
     acked_by_server: false,

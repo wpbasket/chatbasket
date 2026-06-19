@@ -84,7 +84,8 @@ export default function AuthVerification() {
                     await setSession({
                         sessionId: qrSession.sessionId,
                         userId: qrSession.userId,
-                        sessionExpiry: qrSession.sessionExpiry
+                        sessionExpiry: qrSession.sessionExpiry,
+                        keys_revision: qrSession.keys_revision
                     })
                     await PersonalStorageSetDeviceStatus({
                         isPrimary: qrSession.isPrimary,
@@ -106,7 +107,8 @@ export default function AuthVerification() {
                 await setSession({
                     sessionId: pendingSession.sessionId,
                     userId: pendingSession.userId,
-                    sessionExpiry: pendingSession.sessionExpiry
+                    sessionExpiry: pendingSession.sessionExpiry,
+                    keys_revision: pendingSession.keys_revision
                 });
                 void PersonalStorageSetDeviceStatus({
                     isPrimary: pendingSession.isPrimary,
@@ -181,7 +183,8 @@ export default function AuthVerification() {
                 await setSession({
                     sessionId: response.sessionId,
                     userId: response.userId,
-                    sessionExpiry: response.sessionExpiry
+                    sessionExpiry: response.sessionExpiry,
+                    keys_revision: response.keys_revision
                 });
                 await PersonalStorageSetDeviceStatus({
                     isPrimary: response.isPrimary,

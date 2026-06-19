@@ -535,7 +535,7 @@ export { useValue };
 interface ChatMessagesState {
     setLoading: (chatId: string, value: boolean) => void;
     setError: (chatId: string, value: string | null) => void;
-    setMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean; allowPersistedPlaintext?: boolean }) => Promise<void>;
+    setMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean; allowLocalPlaintext?: boolean }) => Promise<void>;
     prependMessages: (chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean }) => Promise<void>;
     addMessage: (chatId: string, entry: MessageEntry, options?: { skipAck?: boolean; skipSenderSync?: boolean }) => Promise<void>;
     updateMessageStatus: (chatId: string, messageId: string, updates: Partial<MessageEntry>) => void;
@@ -618,7 +618,7 @@ const chatActions = {
         ensureChatInternal(chatId).error.set(value);
     },
 
-    async setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean; allowPersistedPlaintext?: boolean }) {
+    async setMessages(chatId: string, entries: MessageEntry[], options?: { skipSenderSync?: boolean; allowLocalPlaintext?: boolean }) {
         const chat = ensureChatInternal(chatId);
         const receiptState = $chatListState.chatsById[chatId]?.peek();
         const receiptHydratedEntries = entries.map(entry => applyOutgoingReceiptStatus(entry, {
@@ -630,7 +630,7 @@ const chatActions = {
         // Local storage replays may contain already-decrypted plaintext + persisted key metadata.
         const e2eeReport = await processIncomingMessagesWithE2EEReport(receiptHydratedEntries, {
             resolveSenderId: (m) => $chatListState.chatsById[m.chat_id]?.peek()?.other_user_id,
-            allowPersistedPlaintext: options?.allowPersistedPlaintext === true,
+            allowLocalPlaintext: options?.allowLocalPlaintext === true,
         });
         const e2eeNoAckIds = new Set(
             e2eeReport.failures

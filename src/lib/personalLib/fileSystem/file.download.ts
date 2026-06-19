@@ -12,7 +12,7 @@
 import { Platform } from 'react-native';
 import mime from 'react-native-mime-types';
 import type { MessageEntry } from '@/lib/personalLib';
-import { decryptIncomingMediaBytes, hydrateEncryptedMediaMetadata, isEncryptedMediaMessage, resolveMediaUnwrapKey } from '@/lib/personalLib/e2ee/e2ee.service';
+import { decryptIncomingMediaBytes, hydrateEncryptedMediaMetadata, isEncryptedMediaMessage } from '@/lib/personalLib/e2ee/e2ee.service';
 import { storeMediaBlob, getMediaBlob } from '@/lib/storage/personalStorage/chat/chat.storage';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -42,6 +42,7 @@ export const FALLBACK_MIME_TYPE = 'application/octet-stream';
 
 /** Tracks active downloads to prevent multiple concurrent requests for the same file */
 const activeDownloads = new Map<string, Promise<string | null>>();
+
 
 // Large Appwrite media streams can throttle badly when multiple 1MB+ downloads
 // run in parallel (web and native). Serialize only large downloads; small
@@ -142,19 +143,23 @@ function inferExtension(msg: MessageEntry): string {
  * @param msg - The incoming `MessageEntry` from the WebSocket event.
  * @returns The local URI string, or `null` if no download needed.
  */
+
 export async function downloadIncomingFile(
     msg: MessageEntry,
     onProgress?: (p: number) => void
 ): Promise<string | null> {
+    // Clone the message to prevent external modifications during download+decrypt+save
+    const msgSnapshot: MessageEntry = JSON.parse(JSON.stringify(msg));
+    
     // Skip non-media messages
-    if (!MEDIA_TYPES.has(msg.message_type)) return null;
-    if (msg.message_type === 'unsent') return null;
-    if (!msg.download_url) return null;
+    if (!MEDIA_TYPES.has(msgSnapshot.message_type)) return null;
+    if (msgSnapshot.message_type === 'unsent') return null;
+    if (!msgSnapshot.download_url) return null;
 
     // Phase 4b: Deduplicate concurrent downloads for the same message ID.
     // This prevents "other part trying to redownload" race conditions where
     // a second request fails with 401 because the first one already ACKed.
-    const messageId = msg.message_id;
+    const messageId = msgSnapshot.message_id;
     const existing = activeDownloads.get(messageId);
     if (existing) {
         return existing;
@@ -162,12 +167,21 @@ export async function downloadIncomingFile(
 
     const downloadPromise = (async () => {
         try {
-            return await runQueuedLargeDownload(messageId, msg.file_size, async () => {
+            const result = await runQueuedLargeDownload(messageId, msgSnapshot.file_size, async () => {
                 if (Platform.OS === 'web') {
-                    return await downloadForWeb(msg, onProgress);
+                    return await downloadForWeb(msgSnapshot, onProgress);
                 }
-                return await downloadForNative(msg, onProgress);
+                return await downloadForNative(msgSnapshot, onProgress);
             });
+            
+            // Copy metadata back to original message after successful download
+            if (result) {
+                if (msgSnapshot.file_name) msg.file_name = msgSnapshot.file_name;
+                if (msgSnapshot.file_mime_type) msg.file_mime_type = msgSnapshot.file_mime_type;
+                if (msgSnapshot.file_size != null) msg.file_size = msgSnapshot.file_size;
+            }
+            
+            return result;
         } finally {
             // Always cleanup so future manual retries can re-attempt if it failed
             activeDownloads.delete(messageId);
@@ -196,10 +210,8 @@ async function downloadForNative(
     }
 
     const encrypted = isEncryptedMediaMessage(msg);
-    let unwrapKeyForEncrypted: string | null | undefined;
     if (encrypted) {
-        unwrapKeyForEncrypted = await resolveMediaUnwrapKey(msg);
-        hydrateEncryptedMediaMetadata(msg, unwrapKeyForEncrypted);
+        hydrateEncryptedMediaMetadata(msg);
     }
 
     // Build destination: chatFiles/<messageId><ext>
@@ -280,7 +292,7 @@ async function downloadForNative(
                     // and is treated as a download failure (no ACK on primary).
                     const decryptStartedAt = Date.now();
                     if (encrypted) {
-                        uint8Array = decryptIncomingMediaBytes(msg, uint8Array, unwrapKeyForEncrypted);
+                        uint8Array = decryptIncomingMediaBytes(msg, uint8Array);
                         console.log(TAG, 'Native download: decrypt complete', {
                             messageId: msg.message_id,
                             decryptMs: Date.now() - decryptStartedAt,
@@ -339,10 +351,8 @@ async function downloadForWeb(
     }
 
     const encrypted = isEncryptedMediaMessage(msg);
-    let unwrapKeyForEncrypted: string | null | undefined;
     if (encrypted) {
-        unwrapKeyForEncrypted = await resolveMediaUnwrapKey(msg);
-        hydrateEncryptedMediaMetadata(msg, unwrapKeyForEncrypted);
+        hydrateEncryptedMediaMetadata(msg);
     }
 
     console.log(TAG, 'Web download: start', {
@@ -445,7 +455,7 @@ async function downloadForWeb(
                 encryptedBytes.set(chunk, offset);
                 offset += chunk.length;
             }
-            blob = new Blob([decryptIncomingMediaBytes(msg, encryptedBytes, unwrapKeyForEncrypted)] as any);
+            blob = new Blob([decryptIncomingMediaBytes(msg, encryptedBytes)] as any);
             console.log(TAG, 'Web download: decrypt complete', {
                 messageId: msg.message_id,
                 decryptMs: Date.now() - decryptStartedAt,

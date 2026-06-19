@@ -6,12 +6,10 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { MaterialCommunityIcon } from '@/components/ui/fonts/materialCommunityIcons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ExpoAudio from 'expo-audio';
-import { UnistylesRuntime } from 'react-native-unistyles';
 import { getMediaBlob, updateMessageStatus } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { useObservable, useValue, useObserve } from '@legendapp/state/react';
 import { $uiState, generateMediaId } from '@/state/ui/state.ui';
-import { resolveMediaUrls, getMessageUri } from '@/utils/personalUtils/util.chatMedia';
-import type { MessageEntry } from '@/lib/personalLib';
+import { resolveMediaUrls } from '@/utils/personalUtils/util.chatMedia';
 
 // ─── Pure helpers — outside component, never recreated on render ──────────────
 
@@ -122,15 +120,20 @@ function useLocalMediaUri(
         // Web: idb:// marker → blob URL via getMediaBlob()
         if (localUri.startsWith('idb://')) {
             const msgId = localUri.replace('idb://', '');
+            console.log('[MediaUri] resolving IDB blob for', msgId);
             let revoked = false;
             let blobUrl: string | null = null;
-            getMediaBlob(msgId).then((result: { blob: Blob; mime: string } | null) => {
+            getMediaBlob(msgId).then((result: { blob: Blob; mimeType: string } | null) => {
                 if (result && !revoked) {
                     blobUrl = URL.createObjectURL(result.blob);
+                    console.log('[MediaUri] created blob URL', { msgId, blobUrl, mimeType: result.mimeType, blobType: result.blob.type, blobSize: result.blob.size });
                     resolvedUri$.set(blobUrl);
+                } else {
+                    console.log('[MediaUri] no result or revoked', { msgId, result: !!result, revoked });
                 }
-            }).catch(() => {
+            }).catch((err: any) => {
                 // IDB read failed (corrupt store, etc.) — fall back to server URLs
+                console.error('[MediaUri] failed to get blob', { msgId, error: err });
                 resolvedUri$.set(null);
             });
             return () => {
@@ -396,8 +399,12 @@ const MessageBubble = memo(
                     <View style={styles.mediaBubbleWrapper} pointerEvents={(isMediaLoaded && !isSelectMode) ? 'box-none' : 'auto'}>
                         {isVideo ? (
                             // Video: show tap-to-load thumbnail until first tap, then mount player
-                            <View style={styles.mediaFrame} pointerEvents={isSelectMode ? 'none' : 'auto'}>
-                                {isMediaLoaded ? (
+                            // Block interaction until download completes (activeMediaUrl is null while downloading)
+                            <View 
+                                style={styles.mediaFrame} 
+                                pointerEvents={(isSelectMode || !activeMediaUrl) ? 'none' : 'auto'}
+                            >
+                                {isMediaLoaded && activeMediaUrl ? (
                                     <VideoInlinePlayer 
                                         url={activeMediaUrl} 
                                         isReady={isReady}
@@ -407,10 +414,10 @@ const MessageBubble = memo(
                                     />
                                 ) : (
                                     <View style={styles.videoPlaceholder}>
-                                        <View style={[styles.videoPlayButton, (!isReady || isError) && { opacity: 0.5 }]}>
+                                        <View style={[styles.videoPlayButton, (!isReady || isError || !activeMediaUrl) && { opacity: 0.5 }]}>
                                             {isError ? (
                                                 <IconSymbol name="alert" size={24} color="#ef4444" />
-                                            ) : !isReady ? (
+                                            ) : (!isReady || !activeMediaUrl) ? (
                                                 <ActivityIndicator size="small" color="#FFFFFF" />
                                             ) : (
                                                 <IconSymbol name="play.fill" size={28} color="#FFFFFF" />
@@ -421,11 +428,19 @@ const MessageBubble = memo(
                             </View>
                         ) : (
                             // Audio: show static shell until first tap, then mount real player
-                            <View style={{ marginTop: 4 }} pointerEvents={isSelectMode ? 'none' : 'auto'}>
-                                {isMediaLoaded ? (
+                            // Block interaction until download completes (activeMediaUrl is null while downloading)
+                            <View 
+                                style={{ marginTop: 4 }} 
+                                pointerEvents={(isSelectMode || !activeMediaUrl) ? 'none' : 'auto'}
+                            >
+                                {isMediaLoaded && activeMediaUrl ? (
                                     <AudioInlinePlayer url={activeMediaUrl} isMe={isMe} onLongPress={onLongPress} isReady={isReady} />
                                 ) : (
-                                    <AudioPlaceholder isMe={isMe} isReady={isReady} isError={isError} />
+                                    <AudioPlaceholder 
+                                        isMe={isMe} 
+                                        isReady={isReady && !!activeMediaUrl} 
+                                        isError={isError || (!activeMediaUrl && !isReady)}
+                                    />
                                 )}
                             </View>
                         )}
@@ -873,6 +888,7 @@ const AudioInlinePlayer = memo(({
     onLongPress?: (event: any) => void;
     isReady: boolean;
 }) => {
+    console.log('[AudioPlayer] initializing with URL', url);
     const player = ExpoAudio.useAudioPlayer(url, { updateInterval: 100 });
     const status = ExpoAudio.useAudioPlayerStatus(player);
     const hasAutoPlayed = React.useRef(false);
@@ -904,11 +920,18 @@ const AudioInlinePlayer = memo(({
     // Sync display states with dampening
     React.useEffect(() => {
         if (!isMountedRef.current) return;
+        console.log('[AudioPlayer] status change', { 
+            isLoaded: status.isLoaded, 
+            playing: status.playing, 
+            duration: status.duration,
+            error: status.error,
+            url
+        });
         if (!isBlockingSync.current) {
             isPlaying$.set(status.playing);
             if (status.isLoaded) isLoadedRef.current = true;
         }
-    }, [status.playing, status.isLoaded]);
+    }, [status.playing, status.isLoaded, status.duration, status.error, url]);
 
     // ── Playback Loop (60FPS Smoothness) ────────────────────────────────
     const runLoop = useCallback((timestamp: number) => {

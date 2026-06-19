@@ -274,6 +274,7 @@ async function handleNewMessage(payload: any): Promise<void> {
             last_message_sender_id: msg.is_from_me ? (currentUserId || null) : otherUserId,
             last_message_is_unsent: msg.message_type === 'unsent',
             unread_count: !msg.is_from_me ? 1 : 0,
+            other_user_keys_revision: 0,
             local_message_count: 1,
             created_at: msg.created_at,
             updated_at: msg.created_at,

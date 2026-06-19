@@ -15,15 +15,16 @@
 //   constants below instead.
 //
 // Wire formats:
-// - Text message content:  base64(nonce_24 || crypto_box ciphertext)
-// - Media content v2:      base64(nonce_24 || crypto_box(JSON{key,meta}))
-// - Media file blob:       nonce_24 || crypto_secretbox ciphertext (raw bytes)
+// - Message content V3:  JSON cb.envelope (secretbox payload + per-device sealed keys)
+// - Media file blob:      nonce_24 || crypto_secretbox ciphertext (raw bytes)
 
 import {
     base64_variants,
     crypto_box_easy,
     crypto_box_keypair,
     crypto_box_open_easy,
+    crypto_box_seal,
+    crypto_box_seal_open,
     crypto_secretbox_easy,
     crypto_secretbox_keygen,
     crypto_secretbox_open_easy,
@@ -145,50 +146,172 @@ export function isValidX25519Keypair(privateKeyB64: string | null | undefined, p
 }
 
 // ————————————————————————————————————————————————————————————————————————————
-// Text messages — crypto_box_easy
+// V3 payload envelopes
 // ————————————————————————————————————————————————————————————————————————————
 
-/**
- * Encrypts a text message for `recipientPublicKeyB64`.
- * Returns `base64(nonce || ciphertext)` ready for the message `content` field.
- */
-export function encryptText(
-    plaintext: string,
-    recipientPublicKeyB64: string,
-    myPrivateKeyB64: string,
-): string {
-    const nonce = randombytes_buf(BOX_NONCEBYTES);
-    const ciphertext = crypto_box_easy(
-        plaintext,
-        nonce,
-        from_base64(recipientPublicKeyB64, B64),
-        from_base64(myPrivateKeyB64, B64),
-    );
-    return to_base64(concatBytes(nonce, ciphertext), B64);
+const V3_ENVELOPE_VERSION = 3;
+const V3_ENVELOPE_KIND = 'cb.envelope';
+
+export type E2EEV3Payload =
+    | { type: 'text'; text: string }
+    | {
+        type: 'file';
+        file_key: string;
+        file_name: string;
+        mime_type: string;
+        size: number | null;
+        caption?: string | null;
+    };
+
+export interface E2EEV3KeyEnvelope {
+    public_key: string;
+    encrypted_key: string;
 }
 
-/**
- * Decrypts `base64(nonce || ciphertext)` text content from `senderPublicKeyB64`.
- * Throws when authentication fails (wrong/rotated keys, corrupted payload).
- */
-export function decryptText(
-    encodedContent: string,
-    senderPublicKeyB64: string,
-    myPrivateKeyB64: string,
-): string {
-    const payload = from_base64(encodedContent, B64);
-    if (payload.length < MIN_ENCRYPTED_BYTES) {
-        throw new Error('[E2EE] payload too short to be encrypted content');
+export interface E2EEV3Envelope {
+    v: 3;
+    kind: 'cb.envelope';
+    ciphertext: string;
+    key_envelopes: E2EEV3KeyEnvelope[];
+}
+
+export function generateMessageKey(): Uint8Array {
+    return crypto_secretbox_keygen();
+}
+
+export function encode32ByteKeyB64(key: Uint8Array): string {
+    if (key.length !== 32) {
+        throw new Error('[E2EE] invalid 32-byte key');
     }
-    const nonce = payload.slice(0, BOX_NONCEBYTES);
-    const ciphertext = payload.slice(BOX_NONCEBYTES);
-    const plaintextBytes = crypto_box_open_easy(
-        ciphertext,
-        nonce,
-        from_base64(senderPublicKeyB64, B64),
+    return to_base64(key, B64);
+}
+
+export function decode32ByteKeyB64(key: string): Uint8Array {
+    const decoded = from_base64(key, B64);
+    if (decoded.length !== 32) {
+        throw new Error('[E2EE] invalid 32-byte key');
+    }
+    return decoded;
+}
+
+function normalizeV3PublicKeys(publicKeys: string[]): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const publicKey of publicKeys) {
+        if (!isValidPublicKeyB64(publicKey) || seen.has(publicKey)) continue;
+        seen.add(publicKey);
+        out.push(publicKey);
+    }
+    return out;
+}
+
+export function isV3Envelope(content: string | null | undefined): boolean {
+    if (!content || content[0] !== '{') return false;
+    try {
+        const parsed = JSON.parse(content);
+        return parsed?.v === V3_ENVELOPE_VERSION && parsed?.kind === V3_ENVELOPE_KIND;
+    } catch {
+        return false;
+    }
+}
+
+export function parseV3Envelope(content: string): E2EEV3Envelope {
+    const parsed = JSON.parse(content);
+    if (
+        parsed?.v !== V3_ENVELOPE_VERSION ||
+        parsed?.kind !== V3_ENVELOPE_KIND ||
+        typeof parsed?.ciphertext !== 'string' ||
+        !Array.isArray(parsed?.key_envelopes)
+    ) {
+        throw new Error('[E2EE] invalid v3 envelope');
+    }
+    const keyEnvelopes = parsed.key_envelopes.map((entry: unknown) => {
+        const envelope = entry as Partial<E2EEV3KeyEnvelope>;
+        if (!isValidPublicKeyB64(envelope.public_key) || typeof envelope.encrypted_key !== 'string') {
+            throw new Error('[E2EE] invalid v3 key envelope');
+        }
+        return { public_key: envelope.public_key, encrypted_key: envelope.encrypted_key };
+    });
+    if (keyEnvelopes.length === 0) {
+        throw new Error('[E2EE] v3 envelope has no keys');
+    }
+    return {
+        v: V3_ENVELOPE_VERSION,
+        kind: V3_ENVELOPE_KIND,
+        ciphertext: parsed.ciphertext,
+        key_envelopes: keyEnvelopes,
+    };
+}
+
+function parseV3Payload(plaintext: Uint8Array): E2EEV3Payload {
+    const parsed = JSON.parse(to_string(plaintext));
+    if (parsed?.type === 'text' && typeof parsed?.text === 'string') {
+        return { type: 'text', text: parsed.text };
+    }
+    if (
+        parsed?.type === 'file' &&
+        isValid32ByteB64(parsed?.file_key) &&
+        typeof parsed?.file_name === 'string' &&
+        typeof parsed?.mime_type === 'string' &&
+        (parsed?.size == null || (Number.isFinite(Number(parsed.size)) && Number(parsed.size) >= 0))
+    ) {
+        return {
+            type: 'file',
+            file_key: parsed.file_key,
+            file_name: parsed.file_name,
+            mime_type: parsed.mime_type,
+            size: parsed.size == null ? null : Math.trunc(Number(parsed.size)),
+            caption: typeof parsed.caption === 'string' ? parsed.caption : parsed.caption == null ? null : String(parsed.caption),
+        };
+    }
+    throw new Error('[E2EE] invalid v3 payload');
+}
+
+export function encryptPayloadEnvelope(payload: E2EEV3Payload, publicKeys: string[]): string {
+    const recipients = normalizeV3PublicKeys(publicKeys);
+    if (recipients.length === 0) {
+        throw new Error('[E2EE] v3 envelope requires at least one public key');
+    }
+    const messageKey = generateMessageKey();
+    const nonce = randombytes_buf(SECRETBOX_NONCEBYTES);
+    const ciphertext = crypto_secretbox_easy(JSON.stringify(payload), nonce, messageKey);
+    const keyEnvelopes = recipients.map((publicKey) => ({
+        public_key: publicKey,
+        encrypted_key: to_base64(crypto_box_seal(messageKey, from_base64(publicKey, B64)), B64),
+    }));
+    return JSON.stringify({
+        v: V3_ENVELOPE_VERSION,
+        kind: V3_ENVELOPE_KIND,
+        ciphertext: to_base64(concatBytes(nonce, ciphertext), B64),
+        key_envelopes: keyEnvelopes,
+    } satisfies E2EEV3Envelope);
+}
+
+export function decryptPayloadEnvelope(
+    content: string,
+    myPublicKeyB64: string,
+    myPrivateKeyB64: string,
+): E2EEV3Payload {
+    if (!isValidPublicKeyB64(myPublicKeyB64) || !isValid32ByteB64(myPrivateKeyB64)) {
+        throw new Error('[E2EE] invalid v3 identity key');
+    }
+    const envelope = parseV3Envelope(content);
+    const keyEnvelope = envelope.key_envelopes.find((entry) => entry.public_key === myPublicKeyB64);
+    if (!keyEnvelope) {
+        throw new Error('[E2EE] v3 envelope missing device key');
+    }
+    const messageKey = crypto_box_seal_open(
+        from_base64(keyEnvelope.encrypted_key, B64),
+        from_base64(myPublicKeyB64, B64),
         from_base64(myPrivateKeyB64, B64),
     );
-    return to_string(plaintextBytes);
+    const payload = from_base64(envelope.ciphertext, B64);
+    if (payload.length < SECRETBOX_NONCEBYTES + BOX_MACBYTES) {
+        throw new Error('[E2EE] v3 payload too short');
+    }
+    const nonce = payload.slice(0, SECRETBOX_NONCEBYTES);
+    const ciphertext = payload.slice(SECRETBOX_NONCEBYTES);
+    return parseV3Payload(crypto_secretbox_open_easy(ciphertext, nonce, messageKey));
 }
 
 /**
@@ -198,16 +321,7 @@ export function decryptText(
  * fail decryption (rendered as "" per spec) — accepted edge case.
  */
 export function isEncryptedContent(content: string | null | undefined): content is string {
-    if (!content) return false;
-    // base64(40 bytes) = 56 chars; anything shorter cannot hold nonce + MAC
-    if (content.length < 56 || content.length % 4 !== 0) return false;
-    if (!STANDARD_B64_RE.test(content)) return false;
-    // Pure JS on purpose — NO sodium call. Detection must keep working even
-    // before the web WASM is ready (cold start); otherwise incoming ciphertext
-    // would be classified as plaintext and rendered raw. Standard Base64
-    // decodes 3 bytes per 4 chars, minus trailing padding.
-    const padding = content.endsWith('==') ? 2 : content.endsWith('=') ? 1 : 0;
-    return (content.length / 4) * 3 - padding >= MIN_ENCRYPTED_BYTES;
+    return isV3Envelope(content);
 }
 
 /** Neutral marker rendered instead of any cipher-looking text that reaches the UI. */
@@ -236,7 +350,7 @@ export function toDisplaySafeText(
 }
 
 // ————————————————————————————————————————————————————————————————————————————
-// Media files — envelope encryption (crypto_secretbox bulk + crypto_box key wrap)
+// Media files — secretbox bytes
 // ————————————————————————————————————————————————————————————————————————————
 
 /** Generates a fresh 256-bit symmetric key for a single media file. */
@@ -261,99 +375,9 @@ export function decryptMediaBytes(encryptedBytes: Uint8Array, mediaKey: Uint8Arr
     return crypto_secretbox_open_easy(ciphertext, nonce, mediaKey);
 }
 
-const MEDIA_CONTENT_ENVELOPE_VERSION = 2;
-const MEDIA_CONTENT_ENVELOPE_KIND = 'cb.media';
-
 export interface E2EEMediaMetadata {
     fileName: string;
     mimeType: string;
     size: number | null;
 }
 
-export interface E2EEMediaEnvelope {
-    key: Uint8Array;
-    meta: E2EEMediaMetadata;
-}
-
-function normalizeMediaMetadata(meta: E2EEMediaMetadata): E2EEMediaMetadata {
-    const fileName = typeof meta.fileName === 'string' && meta.fileName.trim()
-        ? meta.fileName.trim()
-        : 'file';
-    const mimeType = typeof meta.mimeType === 'string' && meta.mimeType.trim()
-        ? meta.mimeType.trim()
-        : 'application/octet-stream';
-    const rawSize = Number(meta.size);
-    const size = Number.isFinite(rawSize) && rawSize >= 0 ? Math.trunc(rawSize) : null;
-    return { fileName, mimeType, size };
-}
-
-/**
- * Wraps the media key AND original media metadata for the recipient.
- * Server/Appwrite only see opaque encrypted JSON in message `content`.
- */
-export function wrapMediaEnvelope(
-    mediaKey: Uint8Array,
-    metadata: E2EEMediaMetadata,
-    recipientPublicKeyB64: string,
-    myPrivateKeyB64: string,
-): string {
-    const meta = normalizeMediaMetadata(metadata);
-    const plaintext = JSON.stringify({
-        v: MEDIA_CONTENT_ENVELOPE_VERSION,
-        kind: MEDIA_CONTENT_ENVELOPE_KIND,
-        key: to_base64(mediaKey, B64),
-        meta,
-    });
-    const nonce = randombytes_buf(BOX_NONCEBYTES);
-    const sealed = crypto_box_easy(
-        plaintext,
-        nonce,
-        from_base64(recipientPublicKeyB64, B64),
-        from_base64(myPrivateKeyB64, B64),
-    );
-    return to_base64(concatBytes(nonce, sealed), B64);
-}
-
-/**
- * Opens a v2 media content envelope: media key + original file metadata.
- * Throws when auth/shape validation fails.
- */
-export function unwrapMediaEnvelope(
-    encodedEnvelope: string,
-    senderPublicKeyB64: string,
-    myPrivateKeyB64: string,
-): E2EEMediaEnvelope {
-    const payload = from_base64(encodedEnvelope, B64);
-    if (payload.length < MIN_ENCRYPTED_BYTES) {
-        throw new Error('[E2EE] media envelope payload too short');
-    }
-    const nonce = payload.slice(0, BOX_NONCEBYTES);
-    const sealed = payload.slice(BOX_NONCEBYTES);
-    const plaintext = crypto_box_open_easy(
-        sealed,
-        nonce,
-        from_base64(senderPublicKeyB64, B64),
-        from_base64(myPrivateKeyB64, B64),
-    );
-    const parsed = JSON.parse(to_string(plaintext));
-    if (
-        parsed?.v !== MEDIA_CONTENT_ENVELOPE_VERSION ||
-        parsed?.kind !== MEDIA_CONTENT_ENVELOPE_KIND ||
-        typeof parsed?.key !== 'string' ||
-        !parsed?.meta
-    ) {
-        throw new Error('[E2EE] invalid media envelope');
-    }
-    const key = from_base64(parsed.key, B64);
-    if (key.length !== 32) {
-        throw new Error('[E2EE] invalid media envelope key');
-    }
-    return {
-        key,
-        meta: normalizeMediaMetadata({
-            fileName: String(parsed.meta.fileName ?? ''),
-            mimeType: String(parsed.meta.mimeType ?? ''),
-            size: parsed.meta.size ?? null,
-        }),
-    };
-}

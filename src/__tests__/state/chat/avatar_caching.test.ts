@@ -83,6 +83,7 @@ function makeChatEntry(overrides: Partial<ChatEntry>): ChatEntry {
         last_message_sender_id: 'u1',
         last_message_id: 'm1',
         unread_count: 0,
+        other_user_keys_revision: 1,
         local_message_count: 1,
         is_contactable: true,
         ...overrides,

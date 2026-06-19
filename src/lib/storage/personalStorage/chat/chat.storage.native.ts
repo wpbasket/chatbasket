@@ -64,7 +64,8 @@ export async function initChatStorage(): Promise<void> {
             last_message_id TEXT,
             last_message_is_unsent INTEGER NOT NULL DEFAULT 0,
             unread_count INTEGER NOT NULL DEFAULT 0,
-            is_contactable INTEGER NOT NULL DEFAULT 1
+            is_contactable INTEGER NOT NULL DEFAULT 1,
+            other_user_keys_revision INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE INDEX IF NOT EXISTS idx_chats_activity
@@ -98,8 +99,6 @@ export async function initChatStorage(): Promise<void> {
             error_message TEXT,
             error_is_blocking INTEGER,
             file_token_expiry TEXT,
-            sender_e2ee_public_key TEXT,
-            recipient_e2ee_public_key_used TEXT,
             inserted_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT,
             local_seq INTEGER NOT NULL DEFAULT 0
@@ -112,14 +111,54 @@ export async function initChatStorage(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_messages_status_outbox ON messages(status) WHERE is_from_me = 1;
 
         CREATE TABLE IF NOT EXISTS user_keys (
-            user_id TEXT PRIMARY KEY,
-            e2ee_public_key TEXT,
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            user_id TEXT NOT NULL,
+            device_key TEXT NOT NULL,
+            keys_revision INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (user_id, device_key)
         );
+        CREATE INDEX IF NOT EXISTS idx_user_keys_user ON user_keys(user_id);
     `);
 
+    await migrateChatSchema();
+    await migrateUserKeysSchema();
 
     console.log('[ChatStorage:Native] Database initialized');
+}
+
+
+async function migrateChatSchema(): Promise<void> {
+    const d = getDb();
+    const cols = await d.getAllAsync<{ name: string }>(`PRAGMA table_info(chats)`);
+    if (!cols.some(c => c.name === 'other_user_keys_revision')) {
+        await d.execAsync(`ALTER TABLE chats ADD COLUMN other_user_keys_revision INTEGER NOT NULL DEFAULT 0`);
+    }
+}
+
+async function migrateUserKeysSchema(): Promise<void> {
+    const d = getDb();
+    const cols = await d.getAllAsync<{ name: string }>(`PRAGMA table_info(user_keys)`);
+    if (!cols.some(c => c.name === 'e2ee_public_key')) return;
+
+    console.log('[ChatStorage:Native] Migrating legacy user_keys schema -> multi-key');
+    await d.execAsync(`ALTER TABLE user_keys RENAME TO user_keys_legacy`);
+    await d.execAsync(`
+        CREATE TABLE IF NOT EXISTS user_keys (
+            user_id TEXT NOT NULL,
+            device_key TEXT NOT NULL,
+            keys_revision INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (user_id, device_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_keys_user ON user_keys(user_id);
+    `);
+    await d.runAsync(`
+        INSERT OR IGNORE INTO user_keys (user_id, device_key, keys_revision, updated_at)
+        SELECT user_id, e2ee_public_key, 0, updated_at
+        FROM user_keys_legacy
+        WHERE e2ee_public_key IS NOT NULL AND e2ee_public_key != ''
+    `);
+    await d.execAsync(`DROP TABLE user_keys_legacy`);
 }
 
 let _nextLocalSeq = 1;
@@ -154,8 +193,8 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             synced_to_sender_primary, created_at, expires_at, file_id, file_name,
             file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
             acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
-            file_token_expiry, sender_e2ee_public_key, recipient_e2ee_public_key_used, inserted_at, updated_at, local_seq
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            file_token_expiry, inserted_at, updated_at, local_seq
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             message.message_id,
             message.chat_id,
@@ -184,8 +223,6 @@ export async function insertMessage(message: MessageEntry & { tempId?: string; l
             null, // error_message — default null
             null, // error_is_blocking — default null
             message.file_token_expiry || null,
-            message.sender_e2ee_public_key ?? null,
-            (message as any).recipient_e2ee_public_key_used ?? null,
             new Date().toISOString(),
             new Date().toISOString(),
             seq
@@ -227,6 +264,7 @@ function chatBindings(chat: ChatEntry): any[] {
         chat.last_message_is_unsent ? 1 : 0,
         chat.unread_count,
         chat.is_contactable !== false ? 1 : 0,
+        (chat as any).other_user_keys_revision ?? 0,
     ];
 }
 
@@ -238,8 +276,8 @@ async function upsertChatRow(d: SQLite.SQLiteDatabase, chat: ChatEntry): Promise
             created_at, updated_at, other_user_last_read_at, other_user_last_delivered_at,
             last_message_content, last_message_created_at, last_message_type,
             last_message_is_from_me, last_message_status, last_message_sender_id,
-            last_message_id, last_message_is_unsent, unread_count, is_contactable
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            last_message_id, last_message_is_unsent, unread_count, is_contactable, other_user_keys_revision
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         chatBindings(chat)
     );
 }
@@ -388,8 +426,8 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 synced_to_sender_primary, created_at, expires_at, file_id, file_name,
                 file_size, file_mime_type, view_url, download_url, local_uri, temp_id,
                 acked_by_server, deleted_for_me, retry_count, last_retry_at, error_message, error_is_blocking,
-                file_token_expiry, sender_e2ee_public_key, recipient_e2ee_public_key_used, inserted_at, updated_at, local_seq
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                file_token_expiry, inserted_at, updated_at, local_seq
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 promoted.message_id,
                 promoted.chat_id,
@@ -418,8 +456,6 @@ export async function swapTempIdToRealId(tempId: string, realId: string, updates
                 promoted.error_message ?? null,
                 promoted.error_is_blocking == null ? null : (promoted.error_is_blocking ? 1 : 0),
                 promoted.file_token_expiry || null,
-                promoted.sender_e2ee_public_key ?? null,
-                promoted.recipient_e2ee_public_key_used ?? null,
                 promoted.inserted_at,
                 promoted.updated_at,
                 promoted.local_seq,
@@ -490,26 +526,49 @@ export async function getMessagesByIds(messageIds: string[]): Promise<LocalMessa
 // E2EE persistent key registry (user_keys)
 // ————————————————————————————————————————————————————————————————————————————
 
-export type StoredE2EEPublicKey = string | null | undefined;
-
-export async function getUserE2eePublicKey(userId: string): Promise<StoredE2EEPublicKey> {
-    const d = getDb();
-    const row = await d.getFirstAsync<{ e2ee_public_key: string | null }>(
-        `SELECT e2ee_public_key FROM user_keys WHERE user_id = ?`, [userId]
-    );
-    return row === null || row === undefined ? undefined : row.e2ee_public_key;
+export interface UserKeyRecord {
+    user_id: string;
+    device_key: string;
+    keys_revision: number;
+    updated_at: string;
 }
 
-export async function setUserE2eePublicKey(userId: string, publicKey: string | null): Promise<void> {
+export async function setUserKeys(userId: string, keys: Array<{ device_key: string; keys_revision: number }>): Promise<void> {
     const d = getDb();
-    await d.runAsync(
-        `INSERT OR REPLACE INTO user_keys (user_id, e2ee_public_key, updated_at)
-         VALUES (?, ?, datetime('now'))`,
-        [userId, publicKey]
-    );
+    await withTxMutex(async () => {
+        await d.runAsync(`DELETE FROM user_keys WHERE user_id = ?`, [userId]);
+        if (keys.length === 0) return;
+        const ts = new Date().toISOString();
+        const placeholders = keys.map(() => '(?, ?, ?, ?)').join(', ');
+        const params: (string | number)[] = [];
+        for (const k of keys) params.push(userId, k.device_key, k.keys_revision, ts);
+        await d.runAsync(`INSERT OR REPLACE INTO user_keys (user_id, device_key, keys_revision, updated_at) VALUES ${placeholders}`, params);
+    });
 }
 
-export async function clearAllUserE2eeKeys(): Promise<void> {
+export async function getUserKeys(userId: string): Promise<UserKeyRecord[]> {
+    const d = getDb();
+    const rows = await d.getAllAsync<UserKeyRecord>(`SELECT user_id, device_key, keys_revision, updated_at FROM user_keys WHERE user_id = ? ORDER BY updated_at ASC`, [userId]);
+    return rows ?? [];
+}
+
+export async function getFirstUserKey(userId: string): Promise<string | null> {
+    const keys = await getUserKeys(userId);
+    return keys.length > 0 ? keys[0].device_key : null;
+}
+
+export async function getUserKeysRevision(userId: string): Promise<number> {
+    const d = getDb();
+    const row = await d.getFirstAsync<{ keys_revision: number }>(`SELECT keys_revision FROM user_keys WHERE user_id = ? LIMIT 1`, [userId]);
+    return row === null || row === undefined ? 0 : row.keys_revision;
+}
+
+export async function deleteUserKeys(userId: string): Promise<void> {
+    const d = getDb();
+    await d.runAsync(`DELETE FROM user_keys WHERE user_id = ?`, [userId]);
+}
+
+export async function clearAllUserKeys(): Promise<void> {
     const d = getDb();
     await d.runAsync(`DELETE FROM user_keys`);
 }
@@ -517,7 +576,7 @@ export async function clearAllUserE2eeKeys(): Promise<void> {
 export async function messageExists(messageId: string): Promise<boolean> {
     const d = getDb();
     const result = await d.getFirstAsync<{ count: number }>(
-        `SELECT COUNT(*) as count FROM messages WHERE message_id = ?`, [messageId]
+        `SELECT COUNT(*) as count FROM messages WHERE message_id = ? AND deleted_for_me = 0`, [messageId]
     );
     return (result?.count || 0) > 0;
 }
@@ -769,8 +828,6 @@ function sqliteRowToLocal(row: Record<string, any>): LocalMessageEntry {
         error_message: row.error_message || null,
         error_is_blocking: row.error_is_blocking != null ? row.error_is_blocking === 1 : null,
         file_token_expiry: row.file_token_expiry || null,
-        sender_e2ee_public_key: row.sender_e2ee_public_key || null,
-        recipient_e2ee_public_key_used: row.recipient_e2ee_public_key_used || null,
         local_seq: Number(row.local_seq),
     } as LocalMessageEntry;
 }
@@ -790,6 +847,7 @@ function sqliteChatRowToLocal(row: Record<string, any>): LocalChatEntry {
         last_message_id: row.last_message_id || null,
         last_message_is_unsent: row.last_message_is_unsent === 1,
         unread_count: Number(row.unread_count) || 0,
+        other_user_keys_revision: Number(row.other_user_keys_revision) || 0,
         is_contactable: row.is_contactable !== 0,
     } as LocalChatEntry;
 }

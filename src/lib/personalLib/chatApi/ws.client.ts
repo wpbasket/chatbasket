@@ -23,6 +23,7 @@ export interface WSEvent {
         code: number;
         type: string;
         message: string;
+        details?: any;  // Structured error details (e.g., keys_stale fresh keys)
     };
 }
 
@@ -297,7 +298,7 @@ class WSClientManager {
                                 data.error.message || `Server error ${data.error.code}`,
                                 data.error.code,
                                 data.error.type || 'unknown_error',
-                                null
+                                data.error.details || null
                             ));
                         } else {
                             pending.resolve(data.payload);

@@ -31,7 +31,7 @@ export interface ChatEntry {
     last_message_id: string | null;          // Added Phase 14
     last_message_is_unsent?: boolean;        // Added Phase 5.3
     unread_count: number;
-    other_user_e2ee_public_key?: string | null; // E2EE: other user's X25519 public key (Go *string)
+    other_user_keys_revision: number; // E2EE: other user's active-key revision
 
     avatar_file_id: string | null;           // Added for caching
     cached_avatar_file_id: string | null;    // Local-only: what version we have on disk
@@ -65,8 +65,7 @@ export interface MessageEntry {
     progress?: number;
     file_id?: string | null;
     file_token_expiry?: string | null;
-    sender_e2ee_public_key?: string | null; // E2EE: sender's X25519 public key (Go *string, omitempty)
-
+    sender_keys_revision?: number; // E2EE: sender's active-key revision from backend
     // Phase D — local-only fields (optional: not present in server responses)
     acked_by_server?: boolean;       // True after server ACK
     deleted_for_me?: boolean;        // True after "delete for me"
@@ -142,6 +141,7 @@ export interface StatusOkayResponse {
  */
 export interface UploadFileResponse {
     message_id: string;
+    sender_keys_revision: number;
     file_id: string;
     message_type: string;
     file_mime_type?: string | null;
@@ -205,7 +205,8 @@ export interface SendMessagePayload {
     recipient_id: string;
     content: string;
     message_type: string;    // text|image|video|audio|file
-    recipient_e2ee_public_key_used: string;
+    recipient_keys_revision: number;
+    sender_keys_revision: number;
 }
 
 export interface AckDeliveryPayload {

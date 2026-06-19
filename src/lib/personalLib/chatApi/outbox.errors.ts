@@ -1,45 +1,37 @@
-/**
- * Error detection helpers for the outbox queue.
- * Extracted to a separate module so they can be unit-tested
- * without pulling in native dependencies (expo-crypto, expo-file-system, etc.)
- */
+/** Error detection helpers for outbox E2EE revision conflicts. */
 
-const TAG = '[OutboxErrors]';
+import type { StaleSide } from '@/lib/personalLib/models/personal.model.profile';
 
-/** Detects a 409 "recipient_key_changed" error from the backend. */
-export function isRecipientKeyChangedError(err: unknown): boolean {
+type ParsedKeysStaleError = {
+    staleSide: StaleSide;
+    senderKeysRevision?: number;
+    recipientKeysRevision?: number;
+    senderKeys?: string[];
+    recipientKeys?: string[];
+};
+
+function payload(err: unknown): any {
     const e = err as any;
-    const isKeyChanged = e?.type === 'recipient_key_changed' ||
-        e?.response?.data?.type === 'recipient_key_changed' ||
-        e?.status === 409;
-    if (isKeyChanged) {
-        console.log(`${TAG} Detected recipient_key_changed error`, {
-            type: e?.type ?? e?.response?.data?.type,
-            status: e?.status ?? e?.code ?? e?.response?.status,
-            message: e?.response?.data?.message ?? e?.message,
-        });
-    }
-    return isKeyChanged;
+    return e?.response?.data ?? e?.data ?? e?.details ?? e;
 }
 
-/** Extracts the fresh recipient public key from a "recipient_key_changed" error response.
- *  The backend puts the fresh key directly in the message field. */
-export function extractFreshKeyFromError(err: unknown): string | null {
+export function isKeysStaleError(err: unknown): boolean {
     const e = err as any;
-    const msg = e?.response?.data?.message ?? e?.message ?? null;
-    // The message IS the key (44-char base64) when type is recipient_key_changed
-    const key = msg && msg.length === 44 ? msg : null;
-    if (key) {
-        console.log(`${TAG} Extracted fresh key from error response`, {
-            keyPrefix: key.substring(0, 8) + '...',
-            keyLength: key.length,
-            source: e?.response?.data?.message ? 'REST (response.data.message)' : 'WS (err.message)',
-        });
-    } else {
-        console.warn(`${TAG} Failed to extract fresh key from error`, {
-            messageLength: msg?.length ?? 0,
-            messagePreview: msg?.substring(0, 20) ?? 'null',
-        });
-    }
-    return key;
+    const p = payload(err);
+    return p?.type === 'keys_stale' || e?.type === 'keys_stale';
+}
+
+export function extractKeysStaleError(err: unknown): ParsedKeysStaleError | null {
+    if (!isKeysStaleError(err)) return null;
+    const p = payload(err);
+    const details = p?.details ?? p;
+    const staleSide = details?.stale_side;
+    if (staleSide !== 'sender' && staleSide !== 'recipient' && staleSide !== 'both') return null;
+    return {
+        staleSide,
+        senderKeysRevision: typeof details.sender_keys_revision === 'number' ? details.sender_keys_revision : undefined,
+        recipientKeysRevision: typeof details.recipient_keys_revision === 'number' ? details.recipient_keys_revision : undefined,
+        senderKeys: Array.isArray(details.sender_active_keys) ? details.sender_active_keys : undefined,
+        recipientKeys: Array.isArray(details.recipient_active_keys) ? details.recipient_active_keys : undefined,
+    };
 }

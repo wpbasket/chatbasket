@@ -7,6 +7,7 @@ export interface PersonalProfileResponse {
     avatar_url: string | null; // *string
     avatar_file_id: string | null; // *string
     profile_type: string; // string, oneof=public private personal
+    keys_revision: number; // user's current E2EE active-key revision
     createdAt: string; // string (JSON serialized time.Time)
     updatedAt: string; // string (JSON serialized time.Time)
 }
@@ -30,7 +31,31 @@ export interface PersonalUpdateE2EEKeyPayload {
     e2ee_public_key: string; // string, required, standard Base64 X25519 public key (exactly 44 chars)
 }
 
+export interface PersonalUpdateE2EEKeyResponse {
+    status: boolean;
+    message: string;
+    keys_revision: number;
+}
+
 export interface PersonalGetE2EEKeyResponse {
-    e2ee_public_key: string | null; // *string — null when the user has not set up E2EE
+    e2ee_public_keys: string[];
+    keys_revision: number;
+}
+
+export type StaleSide = 'sender' | 'recipient' | 'both';
+
+export interface StaleKeysErrorDetails {
+    stale_side: StaleSide;
+    sender_keys_revision?: number;
+    recipient_keys_revision?: number;
+    sender_active_keys?: string[];
+    recipient_active_keys?: string[];
+}
+
+export interface StaleKeysError {
+    code: 409;
+    type: 'keys_stale';
+    message: string;
+    details: StaleKeysErrorDetails;
 }
 
