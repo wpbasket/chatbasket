@@ -56,8 +56,9 @@ export const setSession = async (session: { sessionId: string; userId: string; s
   const storage = getStorage();
 
   if (Platform.OS === 'web') {
-    // Web: store session expiry plus E2EE revision metadata
+    // Web: store session expiry plus E2EE revision metadata and userId
     await storage.setMany({
+      userId,
       sessionExpiry,
       keys_revision: keys_revision ?? 0,
       own_keys_initialized: false,
@@ -98,11 +99,11 @@ export const getSession = async () => {
   const storage = getStorage();
 
   if (Platform.OS === 'web') {
-    // Web: Only retrieve session expiry and user from storage
-    const data = await storage.getMany(['sessionExpiry', 'user', 'keys_revision', 'own_keys_initialized']);
+    // Web: Only retrieve session expiry, user, and userId from storage
+    const data = await storage.getMany(['sessionExpiry', 'user', 'keys_revision', 'own_keys_initialized', 'userId']);
     return {
       sessionId: '',
-      userId: '',
+      userId: data.userId || '',
       sessionExpiry: data.sessionExpiry || null,
       user: data.user || null,
       keys_revision: data.keys_revision ?? 0,
@@ -258,7 +259,7 @@ export const restoreAuthState = async (): Promise<void> => {
       // Session is valid, restore auth state
       if (Platform.OS === 'web') {
         authState.sessionId.set('');
-        authState.userId.set('');
+        authState.userId.set(session.userId || '');
         authState.sessionExpiry.set(session.sessionExpiry);
         authState.user.set(session.user);
         authState.keys_revision.set(session.keys_revision ?? 0);
