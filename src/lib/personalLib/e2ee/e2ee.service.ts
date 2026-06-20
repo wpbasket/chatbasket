@@ -260,6 +260,24 @@ export async function saveUserPublicKey(userId: string, publicKey: string | null
 export async function resolveUserPublicKeys(userId: string): Promise<string[]> {
     if (!isKnownPlatform || !userId) return [];
     try {
+        const currentRevision = authState.keys_revision?.peek?.() ?? 0;
+        const cachedRevision = await ChatStorage.getUserKeysRevision(userId);
+        const cachedKeys = await ChatStorage.getUserKeys(userId);
+        if (cachedKeys.length === 0 || (currentRevision > 0 && cachedRevision < currentRevision)) {
+            e2eeLog(TAG, 'Self sibling keys stale or empty, fetching...', { cachedRevision, currentRevision, cachedCount: cachedKeys.length });
+            if (typeof PersonalProfileApi?.getE2EEKey === 'function') {
+                const res = await PersonalProfileApi.getE2EEKey(userId);
+                const freshRevision = Number.isFinite(res?.keys_revision) ? Math.max(0, Math.trunc(res.keys_revision)) : 0;
+                const keys = (res?.e2ee_public_keys || [])
+                    .filter(isValidPublicKeyB64)
+                    .map(device_key => ({ device_key, keys_revision: freshRevision }));
+                await ChatStorage.setUserKeys(userId, keys);
+            }
+        }
+    } catch (err) {
+        console.warn(`${TAG} Self sibling keys sync failed:`, err);
+    }
+    try {
         return uniqueValidKeys((await ChatStorage.getUserKeys(userId)).map(k => k.device_key));
     } catch (err) {
         console.warn(`${TAG} Registry lookup failed for ${userId}`, err);

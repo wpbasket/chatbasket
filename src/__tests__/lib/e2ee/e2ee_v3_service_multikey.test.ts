@@ -73,7 +73,7 @@ import {
     generateIdentityKeypair,
     sodiumReady,
 } from '@/lib/personalLib/e2ee/e2ee.crypto';
-import { encryptOutgoingTextStrict, prepareOutgoingMediaStrict, processIncomingChats, processIncomingMessages } from '@/lib/personalLib/e2ee/e2ee.service';
+import { encryptOutgoingTextStrict, prepareOutgoingMediaStrict, processIncomingChats, processIncomingMessages, resolveUserPublicKeys } from '@/lib/personalLib/e2ee/e2ee.service';
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib/models/personal.model.chat';
 
 describe('E2EE V3 service multi-device envelopes', () => {
@@ -203,6 +203,37 @@ describe('E2EE V3 service multi-device envelopes', () => {
         expect(plaintext.content).toBe('already decrypted local row');
         expect(encrypted.content).toBe('decrypted from local v3');
         expect(invalid.content).toBe(E2EE_FAILED_TO_LOAD_TEXT);
+    });
+
+    it('resolveUserPublicKeys syncs and fetches fresh keys when local cached revision is stale', async () => {
+        // Setup: Cached keys have revision 10, but authState says revision 12
+        mockRegistry.set(ALICE_ID, { keys: [aliceCurrent.publicKey], revision: 10 });
+        
+        // Mock profile API returning fresh keys for revision 12
+        mockGetE2EEKey.mockResolvedValue({
+            keys_revision: 12,
+            e2ee_public_keys: [aliceCurrent.publicKey, aliceSibling.publicKey],
+        });
+
+        // Set authState revision to 12
+        const { authState } = require('@/state/auth/state.auth');
+        const oldPeek = authState.keys_revision.peek;
+        authState.keys_revision.peek = () => 12;
+
+        try {
+            const keys = await resolveUserPublicKeys(ALICE_ID);
+            expect(mockGetE2EEKey).toHaveBeenCalledWith(ALICE_ID);
+            expect(keys).toEqual([aliceCurrent.publicKey, aliceSibling.publicKey]);
+            
+            // Verify registry updated in storage mock
+            expect(mockRegistry.get(ALICE_ID)).toEqual({
+                keys: [aliceCurrent.publicKey, aliceSibling.publicKey],
+                revision: 12,
+            });
+        } finally {
+            // Restore mock
+            authState.keys_revision.peek = oldPeek;
+        }
     });
 });
 
