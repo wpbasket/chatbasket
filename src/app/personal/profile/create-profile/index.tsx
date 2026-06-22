@@ -6,6 +6,7 @@ import { uploadPublicKeyIfNeeded } from "@/lib/personalLib/e2ee/e2ee.keys"
 import { pressableAnimation } from "@/hooks/commonHooks/hooks.pressableAnimation"
 import { ApiError } from "@/lib/constantLib"
 import { PersonalProfileApi } from "@/lib/personalLib/profileApi/personal.api.profile"
+import { PersonalStorageSetUser } from "@/lib/storage/personalStorage/profile/personal.storage.user"
 import { authState } from "@/state/auth/state.auth"
 import { $personalStateCreateProfile } from "@/state/personalState/profile/personal.state.profile.createProfile"
 import { $personalStateUser } from "@/state/personalState/user/personal.state.user"
@@ -70,6 +71,12 @@ export default function PersonalCreateProfile() {
         // Update the global user state
         $personalStateUser.user.set(response);
         $personalStateCreateProfile.userNotFound.set(false);
+        // Persist the profile so the Home "New Chat" check sees it after app restart
+        try {
+          await PersonalStorageSetUser(response);
+        } catch (err) {
+          console.error('[CreateProfile] Failed to persist profile', err);
+        }
 
         // Retry E2EE key upload after profile creation
         // (Key upload fails during signup because profile doesn\'t exist yet)

@@ -13,6 +13,7 @@ import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
+import { PersonalStorageGetUser } from '@/lib/storage/personalStorage/profile/personal.storage.user';
 import { useValue, Memo } from '@legendapp/state/react';
 import { useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
@@ -102,8 +103,18 @@ const PersonalHome = React.memo(() => {
     });
   }, []);
 
-  const handleNewChat = useCallback(() => {
-    if (!$personalStateUser.user.peek()) {
+  const handleNewChat = useCallback(async () => {
+    let user = $personalStateUser.user.peek();
+    // If state is still empty, reload from secure storage before deciding
+    if (!user) {
+      try {
+        await PersonalStorageGetUser();
+        user = $personalStateUser.user.peek();
+      } catch (err) {
+        console.error('[Home] Failed to reload user from storage', err);
+      }
+    }
+    if (!user) {
       router.replace('/personal/profile');
     } else {
       router.push('/personal/contacts');
