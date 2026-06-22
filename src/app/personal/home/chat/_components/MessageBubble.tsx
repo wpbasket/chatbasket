@@ -263,10 +263,10 @@ const MessageBubble = memo(
         const renderMediaMeta = (fallbackLabel: string) => (
             <View style={{ paddingLeft: 20, paddingRight: 30, paddingBottom: 0, paddingTop: 0, zIndex: 1 }}>
                 <View style={[styles.fileHeader, { backgroundColor: 'transparent', padding: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { fontSize: 10, flex: 1 }]}>
+                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, isMe && { color: '#FFFFFF' }, { fontSize: 10, flex: 1 }]}>
                         {formatFileName(fileName || fallbackLabel)}
                     </ThemedText>
-                    <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText, { fontSize: 8, marginLeft: 8 }]}>
+                    <ThemedText style={[styles.fileSize, isMe ? styles.otherTimeText : styles.myTimeText, { fontSize: 8, marginLeft: 8 }]}>
                         {formatSize(fileSize)}
                     </ThemedText>
                 </View>
@@ -331,7 +331,7 @@ const MessageBubble = memo(
             if (messageType === 'unsent') {
                 return (
                     <View style={styles.contentPadding}>
-                        <ThemedText style={[styles.unsentText, isMe && styles.myUnsentText]}>
+                        <ThemedText style={[styles.unsentText, !isMe && styles.myUnsentText]}>
                             Message unsent
                         </ThemedText>
                     </View>
@@ -364,7 +364,7 @@ const MessageBubble = memo(
                         {renderProgressBar()}
                         {/* Only show caption if user-provided caption exists */}
                         {!!text && (
-                            <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
+                            <ThemedText style={[styles.caption, styles.bubbleText, isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
                         )}
@@ -382,10 +382,10 @@ const MessageBubble = memo(
                                     <IconSymbol name={isVideo ? 'video.fill' : 'waveform'} size={24} color={theme.colors.primary} />
                                 </View>
                                 <View style={styles.fileInfo}>
-                                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
+                                    <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, isMe && { color: '#FFFFFF' }]}>
                                         {formatFileName(fileName || (isVideo ? 'Video' : 'Audio'))}
                                     </ThemedText>
-                                    <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
+                                    <ThemedText style={[styles.fileSize, isMe ? styles.otherTimeText : styles.myTimeText]}>
                                         {(status === 'preparing' || status === 'pending' || status === 'sending') ? 'Preparing...' : 'Resolving...'}
                                     </ThemedText>
                                 </View>
@@ -448,7 +448,7 @@ const MessageBubble = memo(
                         {renderProgressBar()}
                         {/* Only show caption if user-provided caption exists */}
                         {!!text && (
-                            <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
+                            <ThemedText style={[styles.caption, styles.bubbleText, isMe && { color: '#FFFFFF' }, { marginTop: 0 }]}>
                                 {text}
                             </ThemedText>
                         )}
@@ -471,10 +471,10 @@ const MessageBubble = memo(
                                 )}
                             </View>
                             <View style={styles.fileInfo}>
-                                <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
+                                <ThemedText numberOfLines={1} style={[styles.fileName, styles.bubbleText, isMe && { color: '#FFFFFF' }]}>
                                     {formatFileName(fileName || 'Attachment')}
                                 </ThemedText>
-                                <ThemedText style={[styles.fileSize, isMe ? styles.myTimeText : styles.otherTimeText]}>
+                                <ThemedText style={[styles.fileSize, isMe ? styles.otherTimeText : styles.myTimeText]}>
                                     {(!isResolved && status !== 'pending' && status !== 'sending') ? 'Resolving link...' : formatSize(fileSize)}
                                 </ThemedText>
                             </View>
@@ -482,7 +482,7 @@ const MessageBubble = memo(
                         {renderProgressBar()}
                         {/* Only show caption if user-provided caption exists */}
                         {!!text && (
-                            <ThemedText style={[styles.caption, styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>
+                            <ThemedText style={[styles.caption, styles.bubbleText, isMe && { color: '#FFFFFF' }]}>
                                 {text}
                             </ThemedText>
                         )}
@@ -493,7 +493,7 @@ const MessageBubble = memo(
             // Plain text
             return (
                 <View style={styles.contentPadding}>
-                    <ThemedText style={[styles.bubbleText, !isMe && { color: '#FFFFFF' }]}>{text}</ThemedText>
+                    <ThemedText style={[styles.bubbleText, isMe && { color: '#FFFFFF' }]}>{text}</ThemedText>
                 </View>
             );
         };
@@ -509,7 +509,7 @@ const MessageBubble = memo(
                 hitSlop={0}
                 style={({ pressed }) => [
                     { opacity: pressed ? 0.7 : 1 },
-                    !isMe ? styles.myBubbleContainer : styles.otherBubbleContainer,
+                    isMe ? styles.myBubbleContainer : styles.otherBubbleContainer,
                 ]}
                 // On native, once media is loaded, touches should still trigger options.
                 // We rely on child Pressables (like play buttons) to handle their own taps.
@@ -532,7 +532,7 @@ const MessageBubble = memo(
                     {renderContent()}
 
                     <View style={styles.footer}>
-                        <ThemedText style={[styles.timeText, isMe ? styles.myTimeText : styles.otherTimeText]}>
+                        <ThemedText style={[styles.timeText, isMe ? styles.otherTimeText : styles.myTimeText]}>
                             {formatTime(createdAt)}
                         </ThemedText>
                         {renderStatusIcon()}
@@ -1079,7 +1079,7 @@ const AudioInlinePlayer = memo(({
                         <View style={[styles.audioProgressFill, { width: `${displayProgress * 100}%` }]} />
                     </View>
                 </Pressable>
-                <ThemedText style={[styles.audioTimer, isMe ? styles.myTimeText : styles.otherTimeText]}>
+                <ThemedText style={[styles.audioTimer, isMe ? styles.otherTimeText : styles.myTimeText]}>
                     {duration > 0 ? `${formatDuration(uiTime)} / ${formatDuration(duration)}` : '-- / --'}
                 </ThemedText>
             </View>
@@ -1108,7 +1108,7 @@ const AudioPlaceholder = memo(({ isMe, isReady, isError }: { isMe: boolean, isRe
                         <View style={[styles.audioProgressFill, { width: '0%' }]} />
                     </View>
                 </View>
-                <ThemedText style={[styles.audioTimer, isMe ? styles.myTimeText : styles.otherTimeText]} />
+                <ThemedText style={[styles.audioTimer, isMe ? styles.otherTimeText : styles.myTimeText]} />
             </View>
         </View>
     );
@@ -1139,12 +1139,12 @@ const styles = StyleSheet.create((theme) => ({
         // No maxWidth/minWidth here — they live on the Pressable container above
     },
     myBubble: {
-        backgroundColor: theme.colors.card1,
-        borderBottomRightRadius: 4,  // swapped
+        backgroundColor: theme.colors.bubblePurple,
+        borderBottomLeftRadius: 4,
     },
     otherBubble: {
-        backgroundColor: theme.colors.bubblePurple,
-        borderBottomLeftRadius: 4,   // swapped
+        backgroundColor: theme.colors.card1,
+        borderBottomRightRadius: 4,
     },
     mediaBubble: {
         width: 300,
