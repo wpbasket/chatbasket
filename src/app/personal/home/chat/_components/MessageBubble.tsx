@@ -292,7 +292,7 @@ const MessageBubble = memo(
 
             if (status === 'preparing' || status === 'pending' || status === 'sending') return (
                 <View style={styles.statusContainer}>
-                    <IconSymbol name="clock" size={15} color="#999" />
+                    <IconSymbol name="clock" size={15} color="#FFFFFF" />
                 </View>
             );
 
@@ -305,7 +305,7 @@ const MessageBubble = memo(
                     <View style={styles.statusContainer}>
                         <MaterialCommunityIcon
                             name="checkmark.all"
-                            color={isRead ? "#10B981" : "#999"}
+                            color={isRead ? "#00E676" : "#FFFFFF"}
                             size={20}
                         />
                     </View>
@@ -314,7 +314,7 @@ const MessageBubble = memo(
 
             if (status === 'sent' || status === 'read' || status === 'delivered') return (
                 <View style={styles.statusContainer}>
-                    <MaterialCommunityIcon name="checkmark" size={20} color="#999" />
+                    <MaterialCommunityIcon name="checkmark" size={20} color="#FFFFFF" />
                 </View>
             );
 
