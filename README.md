@@ -2,7 +2,7 @@
 
 🌐 **Website**: [chatbasket.live](https://chatbasket.live)
 
-A modern, cross-platform social messaging application built with **React Native** and **Expo SDK 55**. ChatBasket is designed around a **dual-mode architecture** — two distinct experiences living inside one app:
+A modern, cross-platform social messaging application built with **React Native** and **Expo SDK 56**. ChatBasket is designed around a **dual-mode architecture** — two distinct experiences living inside one app:
 
 | Mode | Status | Description |
 |------|--------|-------------|
@@ -23,6 +23,7 @@ A modern, cross-platform social messaging application built with **React Native*
 - **Advanced Chat Engine**: Implements a **Primary-Device-Centric Relay Architecture** with **Double-Primary(Sender and Recipient Primary devices) Acknowledgment**, **Dual-Transport (WebSocket/REST) fallback**.
 - **Cross-Device Sync**: **P2P Synchronization [Upcoming]** via WebRTC ensures consistent read/delivery state across all devices(sessions).
 - **Local-First Persistence**: Messages are persisted to local storage(SQLite in Native, IndexedDB in Web) before acknowledgment or UI updates, ensuring zero data loss.
+- **End-to-End Encryption (E2EE)**: Messages are secured using XSalsa20-Poly1305 (secretbox) and X25519 ECDH key exchange. The backend acts as a blind relay for chat payloads.
 - **Hybrid Status Tracking**: Combines per-message metadata with chat-level bulk timestamps for efficient status visualization.
 
 ### Chat Engine Pillars
@@ -60,6 +61,14 @@ When a user unsends or deletes a message:
 
 #### 10. P2P WebRTC Synchronization [Upcoming]
 Secondary devices will sync directly with the Primary via WebRTC data channels — no fallback to backend bandwidth if P2P fails.
+
+#### 11. End-to-End Encrypted Messages (E2EE)
+
+All payloads are sealed client-side using keys derived from an X25519 ECDH exchange. The server routes opaque ciphertexts, ensuring true zero-knowledge messaging.
+
+#### 12. Secure Contact Management
+
+Contact relationships and metadata are symmetrically encrypted at rest by the backend to prevent statistical pattern leakage and database exposure.
 
 For a deeper dive, see [Chat System Details](./src/app/personal/home/chat/README_CHAT.md).
 
@@ -123,13 +132,24 @@ For new developers, here is how the app boots up:
 ## ✨ Features
 
 ### 🔐 Authentication
-- Multi-step secure login: Email + 6-digit PIN → OTP verification → session establishment
+
+- **Two Login Methods**:
+  - **Standard Login (2FA)**: Email + Password followed by mandatory OTP verification.
+  - **QR Code Sync**: Instantly authorize secondary devices by scanning a QR code from an active Primary device.
 - **Native**: Session tokens stored in encrypted secure storage; API calls use Bearer token headers
 - **Web**: Session token lives in HttpOnly cookies (never exposed to JS); only expiry is persisted client-side
 - Session expiry enforced on hydration — expired sessions trigger automatic cleanup
 - Protected route guards gated on login state and app mode
 
 ### 💬 Real-Time Messaging
+
+- End-to-End Encrypted (E2EE) chat payloads using X25519 and XSalsa20-Poly1305.
+- WebSocket-first with seamless REST fallbacks for reliability.
+- Offline Outbox queueing with automatic background draining.
+
+### 🛡️ Privacy & Security
+
+- **Device-Local Cryptography**: Private keys are generated and stored exclusively on each of your devices (both primary and secondary), never in the cloud.
 
 ### 🔔 Push Notifications
 
