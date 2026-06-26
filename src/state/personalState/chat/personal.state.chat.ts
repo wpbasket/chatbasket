@@ -401,6 +401,11 @@ const state$ = observable({
         }
         state$.chatsById[normalized.chat_id].set(normalized);
 
+        // Protect this newly upserted count from being wiped by stale DB queries
+        if (normalized.local_message_count != null) {
+            state$.chatsById[normalized.chat_id]._count_updated_at.set(Date.now());
+        }
+
         ChatStorage.insertChats([normalized]).catch(err =>
             console.warn('[ChatListState] insertChats failed in upsertChat', err)
         );
@@ -454,12 +459,18 @@ const state$ = observable({
      * Called after bulk operations that change message counts (setChats, syncPendingMessages, etc.)
      */
     async refreshMessageCounts() {
+        const queryStart = Date.now();
         try {
             const counts = await ChatStorage.getMessageCountsByChatId();
             batch(() => {
                 const byId = state$.chatsById.peek();
                 for (const chatId of Object.keys(byId)) {
-                    state$.chatsById[chatId].local_message_count.set(counts[chatId] ?? 0);
+                    // Prevent stale DB queries from overwriting in-flight memory updates
+                    const lastUpdated = state$.chatsById[chatId]._count_updated_at?.peek() || 0;
+                    if (lastUpdated <= queryStart) {
+                        state$.chatsById[chatId].local_message_count.set(counts[chatId] ?? 0);
+                        state$.chatsById[chatId]._count_updated_at.set(Date.now());
+                    }
                 }
             });
         } catch (err) {
@@ -475,6 +486,7 @@ const state$ = observable({
         if (chat$?.peek()) {
             const current = chat$.local_message_count.peek() ?? 0;
             chat$.local_message_count.set(Math.max(0, current + delta));
+            chat$._count_updated_at.set(Date.now());
         }
     },
     /**

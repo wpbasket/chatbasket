@@ -37,6 +37,7 @@ export interface ChatEntry {
     cached_avatar_file_id: string | null;    // Local-only: what version we have on disk
     is_contactable?: boolean;                // false when server omits this chat (blocked/private)
     local_message_count?: number;            // Count of non-deleted messages in local DB (0 = hidden from chat list)
+    _count_updated_at?: number;              // Local-only state tracking to prevent race conditions during hydration
 }
 
 /**

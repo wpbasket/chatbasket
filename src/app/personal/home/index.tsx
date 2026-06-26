@@ -11,7 +11,8 @@ import { $contactsState, type ContactEntry } from '@/state/personalState/contact
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
-import { showAlert, showConfirmDialog, showControllersModal } from '@/utils/commonUtils/util.modal';
+import { showAlert, showConfirmDialog, showControllersModal, runWithLoading } from '@/utils/commonUtils/util.modal';
+import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { PersonalStorageGetUser } from '@/lib/storage/personalStorage/profile/personal.storage.user';
 import { useValue, Memo } from '@legendapp/state/react';
@@ -114,6 +115,18 @@ const PersonalHome = React.memo(() => {
         console.error('[Home] Failed to reload user from storage', err);
       }
     }
+    // If still empty (fresh login), fetch from API to be absolutely sure
+    if (!user) {
+      await runWithLoading(async () => {
+        try {
+          await PersonalUtilGetUser();
+          user = $personalStateUser.user.peek();
+        } catch (err) {
+          console.error('[Home] Failed to fetch user from API', err);
+        }
+      });
+    }
+
     if (!user) {
       router.replace('/personal/profile');
     } else {
