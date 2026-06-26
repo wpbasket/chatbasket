@@ -14,8 +14,10 @@
  *
  * WS-first actions:   sendMessage, acknowledgeDelivery, acknowledgeDeliveryBatch,
  *                     markChatRead, unsendMessage, deleteMessageForMe, acknowledgeSyncAction
+ * WS-first actions:   sendMessage, acknowledgeDelivery, acknowledgeDeliveryBatch,
+ *                     markChatRead, unsendMessage, deleteMessageForMe, acknowledgeSyncAction
  * REST-only actions:  getMessages, getPendingMessages, getUserChats, getSyncActions,
- *                     getFileURL, uploadFile, uploadFileWithProgress,
+ *                     getFileURL, presignChatUpload, confirmChatUpload,
  *                     checkEligibility, createChat
  */
 import { wsClient } from './ws.client';
@@ -105,10 +107,10 @@ export const ChatTransport = {
     getMessages:             PersonalChatApi.getMessages,
     getPendingMessages:      PersonalChatApi.getPendingMessages,
     getUserChats:            PersonalChatApi.getUserChats,
-    getSyncActions:          PersonalChatApi.getSyncActions,
+    presignChatUpload:       PersonalChatApi.presignChatUpload,
+    confirmChatUpload:       PersonalChatApi.confirmChatUpload,
     getFileURL:              PersonalChatApi.getFileURL,
-    uploadFile:              PersonalChatApi.uploadFile,
-    uploadFileWithProgress:  PersonalChatApi.uploadFileWithProgress,
+    getSyncActions:          PersonalChatApi.getSyncActions,
     checkEligibility:        PersonalChatApi.checkEligibility,
     createChat:              PersonalChatApi.createChat,
 };

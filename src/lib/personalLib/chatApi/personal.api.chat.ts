@@ -8,7 +8,7 @@ import type {
     AckDeliveryResponse,
     AckDeliveryBatchResponse,
     StatusOkayResponse,
-    UploadFileResponse,
+    ConfirmChatUploadResponse,
     GetFileURLResponse,
     CheckEligibilityPayload,
     CreateChatPayload,
@@ -23,6 +23,9 @@ import type {
     GetSyncActionsQuery,
     GetSyncActionsResponse,
     AcknowledgeSyncActionPayload,
+    PresignChatUploadPayload,
+    PresignChatUploadResponse,
+    ConfirmChatUploadPayload,
     ChatEntry,
     MessageEntry,
 } from "@/lib/personalLib";
@@ -78,83 +81,14 @@ async function getUserChats(): Promise<GetChatsResponse> {
     return apiClient.get<GetChatsResponse>('/personal/chat/list');
 }
 
-/** POST /personal/chat/upload (multipart/form-data) */
-async function uploadFile(formData: FormData): Promise<UploadFileResponse> {
-    return apiClient.post<UploadFileResponse>('/personal/chat/upload', formData);
+/** POST /personal/chat/presign */
+async function presignChatUpload(payload: PresignChatUploadPayload, signal?: AbortSignal): Promise<PresignChatUploadResponse> {
+    return apiClient.post<PresignChatUploadResponse>('/personal/chat/presign', payload, { signal });
 }
 
-/**
- * POST /personal/chat/upload with progress tracking using XMLHttpRequest.
- * fetch() does not support upload progress tracking.
- */
-function uploadFileWithProgress(
-    formData: FormData,
-    onProgress: (progress: number) => void,
-    signal?: AbortSignal
-): Promise<UploadFileResponse> {
-    return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        const url = `${apiClient.baseURL}/personal/chat/upload`.replace(/\/+$/, '');
-
-        xhr.open('POST', url);
-
-        // Standard headers
-        xhr.setRequestHeader('Accept', 'application/json');
-
-        // Add Authorization header for mobile (syncing with ApiClient logic)
-        const isWeb = Platform.OS === 'web';
-        const sessionId = authState.sessionId.peek();
-        const userId = authState.userId.peek();
-
-        if (sessionId && userId && !isWeb) {
-            xhr.setRequestHeader('Authorization', `Bearer ${sessionId}:${userId}`);
-        }
-
-        // Web credentials mode
-        if (isWeb) {
-            xhr.withCredentials = true;
-        }
-
-        // Handle abort signal
-        if (signal) {
-            signal.addEventListener('abort', () => {
-                console.log('[API] Upload aborted by signal');
-                xhr.abort();
-                reject(new Error('Upload aborted'));
-            });
-        }
-
-        xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-                const progress = Math.round((event.loaded / event.total) * 100);
-                onProgress(progress);
-            }
-        };
-
-        xhr.onload = () => {
-            console.log(`[API] Upload XHR onload. Status: ${xhr.status}`);
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    const response = JSON.parse(xhr.responseText);
-                    resolve(response);
-                } catch (e) {
-                    reject(new Error('Failed to parse upload response'));
-                }
-            } else {
-                try {
-                    const errorData = JSON.parse(xhr.responseText);
-                    reject(errorData);
-                } catch {
-                    reject(new Error(`Upload failed with status ${xhr.status}`));
-                }
-            }
-        };
-
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-        xhr.onabort = () => reject(new Error('Upload aborted'));
-
-        xhr.send(formData);
-    });
+/** POST /personal/chat/confirm */
+async function confirmChatUpload(payload: ConfirmChatUploadPayload, signal?: AbortSignal): Promise<ConfirmChatUploadResponse> {
+    return apiClient.post<ConfirmChatUploadResponse>('/personal/chat/confirm', payload, { signal });
 }
 
 /** GET /personal/chat/file-url?message_id= */
@@ -207,8 +141,8 @@ export const PersonalChatApi = {
     acknowledgeDelivery,
     acknowledgeDeliveryBatch,
     getUserChats,
-    uploadFile,
-    uploadFileWithProgress,
+    presignChatUpload,
+    confirmChatUpload,
     getFileURL,
     markChatRead,
     unsendMessage,

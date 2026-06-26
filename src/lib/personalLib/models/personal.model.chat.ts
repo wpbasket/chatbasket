@@ -136,23 +136,50 @@ export interface StatusOkayResponse {
 }
 
 /**
- * UploadFileResponse wraps the file upload endpoint response.
- * Maps to Go `UploadFileResponse`.
+ * ConfirmChatUploadResponse wraps the file upload confirmation response.
+ * Maps to Go `ConfirmChatUploadResponse`.
  */
-export interface UploadFileResponse {
-    message_id: string;
-    sender_keys_revision: number;
-    file_id: string;
-    message_type: string;
-    file_mime_type?: string | null;
-    view_url?: string;
-    download_url: string;
-    file_name: string | null;
-    file_size: number | null;
-    created_at: string;
-    expires_at: string;
-    file_token_expiry?: string | null;
+export interface ConfirmChatUploadResponse {
+    message_id: string;      // Go string
+    chat_id: string;         // Go string
+    recipient_id: string;    // Go string
+    sender_keys_revision: number; // Go int32
+    file_id: string;         // Go string
+    message_type: string;    // Go string
+    view_url?: string;       // Go string (omitempty)
+    download_url: string;    // Go string
+    created_at: string;      // Go time.Time
+    expires_at: string;      // Go time.Time
 }
+
+// ============================================================================
+// R2 PRESIGN & CONFIRM FLOW PAYLOADS
+// ============================================================================
+
+export interface PresignChatUploadPayload {
+    recipient_id: string;
+    message_type: string;
+    recipient_keys_revision: number;
+    sender_keys_revision: number;
+}
+
+export interface PresignChatUploadResponse {
+    presigned_url: string;
+    file_id: string;
+}
+
+export interface ConfirmChatUploadPayload {
+    recipient_id: string;
+    file_id: string;
+    content: string;
+    message_type: string;
+    recipient_keys_revision: number;
+    sender_keys_revision: number;
+}
+
+// ============================================================================
+// WEBSOCKET MODELS
+// ============================================================================
 
 /**
  * GetFileURLResponse wraps the file URL fetch response.

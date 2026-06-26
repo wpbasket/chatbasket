@@ -85,7 +85,7 @@ export async function resolveAvatarUri(
 
   // 3. Check if cached version matches server version
   if (effectiveCachedId === serverFileId) {
-    const localUri = await getLocalAvatarUri(userId);
+    const localUri = await getLocalAvatarUri(userId, serverFileId);
     if (localUri) {
       console.log(`[AvatarCache] ${userId} CACHE_HIT (match: ${serverFileId})`);
       return { uri: localUri, needsDownload: false };
@@ -93,6 +93,15 @@ export async function resolveAvatarUri(
     console.log(`[AvatarCache] ${userId} CACHE_MISS (ID matches but file missing)`);
   } else {
     console.log(`[AvatarCache] ${userId} VERSION_MISMATCH (Server: ${serverFileId}, Local: ${effectiveCachedId})`);
+    // CRITICAL: Before claiming we need to download, check if THIS specific serverFileId 
+    // is already on disk. This prevents infinite render loops when two screens 
+    // (e.g. Chat vs Contacts) have out-of-sync local memory states but the file 
+    // was already downloaded by one of them.
+    const existingLocalUri = await getLocalAvatarUri(userId, serverFileId);
+    if (existingLocalUri) {
+      console.log(`[AvatarCache] ${userId} SILENT_HIT (Mismatch in memory, but file exists on disk)`);
+      return { uri: existingLocalUri, needsDownload: false };
+    }
   }
 
   // 4. Mismatch or missing file -> Show server URL but trigger download
@@ -138,7 +147,7 @@ export function downloadAndCacheAvatar(
       // because state can be wiped when the server refreshes overwrite local-only
       // fields (e.g. navigating to Contacts tab triggers setContacts() with
       // server data that has no cachedAvatarFileId).
-      const existingLocalUri = await getLocalAvatarUri(userId);
+      const existingLocalUri = await getLocalAvatarUri(userId, fileId);
       if (existingLocalUri) {
         console.log(`[AvatarCache] ${userId} PRE-FLIGHT HIT — file already exists locally, skipping network fetch`);
         // Re-sync the markers since they may have been wiped by a server refresh
@@ -155,10 +164,10 @@ export function downloadAndCacheAvatar(
       let localUri: string | null = null;
 
       if (Platform.OS === 'web') {
-        localUri = await saveAvatarToIDB(blob, userId);
+        localUri = await saveAvatarToIDB(blob, userId, fileId);
         console.log(`[AvatarCache] ${userId} stored to IndexedDB`);
       } else {
-        localUri = await saveAvatarToFS(blob, NATIVE_AVATAR_DIR, `${userId}.jpg`);
+        localUri = await saveAvatarToFS(blob, NATIVE_AVATAR_DIR, `${userId}.jpg`, fileId);
         console.log(`[AvatarCache] ${userId} stored to FileSystem: ${localUri}`);
       }
 

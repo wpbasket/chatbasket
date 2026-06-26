@@ -11,17 +11,16 @@ import { storeProfileAvatarBlob } from '@/lib/storage/personalStorage/profile/pr
  * - Native: Uses XMLHttpRequest with arraybuffer (the "Chat way") for maximum stability and performance.
  */
 export async function fetchAvatarBlob(url: string): Promise<Blob | Uint8Array> {
-    const downloadUrl = url + (url.includes('?') ? '&' : '?') + 'cb=' + Date.now();
-    console.log('[AvatarCommon] Fetching:', downloadUrl);
+    console.log('[AvatarCommon] Fetching:', url);
 
     if (Platform.OS === 'web') {
-        const response = await fetch(downloadUrl);
+        const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP ${response.status} downloading avatar`);
         return await response.blob();
     } else {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.open('GET', downloadUrl, true);
+            xhr.open('GET', url, true);
             xhr.responseType = 'arraybuffer';
             xhr.timeout = 10000;
 
@@ -42,27 +41,41 @@ export async function fetchAvatarBlob(url: string): Promise<Blob | Uint8Array> {
 /**
  * Shared utility to save an avatar (Blob or Uint8Array) to IndexedDB (Web).
  */
-export async function saveAvatarToIDB(data: Blob | Uint8Array, key: string): Promise<string> {
+export async function saveAvatarToIDB(data: Blob | Uint8Array, key: string, fileId?: string): Promise<string> {
     if (Platform.OS !== 'web') throw new Error('saveAvatarToIDB is web-only');
-    console.log(`[AvatarCommon] Saving to IDB with key: ${key}`);
+    
+    // Replace colons with underscores to avoid filesystem/URI issues
+    const safeFileId = fileId ? fileId.replace(/:/g, '_') : '';
+    const uniqueKey = fileId ? `${key}_${safeFileId}` : key;
+    
+    console.log(`[AvatarCommon] Saving to IDB with key: ${uniqueKey}`);
     const blob = data instanceof Uint8Array ? new Blob([data as any]) : data;
-    await storeProfileAvatarBlob(blob, key);
-    return `idb://${key}?t=${Date.now()}`;
+    await storeProfileAvatarBlob(blob, uniqueKey);
+    return `idb://${uniqueKey}?t=${Date.now()}`;
 }
 
 /**
  * Shared utility to save an avatar (Blob or Uint8Array) to the native filesystem.
  */
-export async function saveAvatarToFS(data: Blob | Uint8Array, directory: string, filename: string): Promise<string> {
+export async function saveAvatarToFS(data: Blob | Uint8Array, directory: string, filename: string, fileId?: string): Promise<string> {
     if (Platform.OS === 'web') throw new Error('saveAvatarToFS is native-only');
-    console.log(`[AvatarCommon] Saving to FS: ${directory}/${filename}`);
     
+    // Convert e.g. "uuid.jpg" to "uuid_fileId.jpg" if fileId is provided
+    let newFilename = filename;
+    if (fileId) {
+        const safeFileId = fileId.replace(/:/g, '_');
+        const baseName = filename.replace('.jpg', '');
+        newFilename = `${baseName}_${safeFileId}.jpg`;
+    }
+    
+    console.log(`[AvatarCommon] Saving to FS: ${directory}/${newFilename}`);
+
     const { File, Directory, Paths } = await import('expo-file-system');
     const dir = new Directory(Paths.document, directory);
     if (!dir.exists) {
         dir.create({ intermediates: true });
     }
-    const avatarFile = new File(dir, filename);
+    const avatarFile = new File(dir, newFilename);
     
     if (avatarFile.exists) {
         try { avatarFile.delete(); } catch (e) { /* ignore */ }
@@ -88,26 +101,51 @@ export async function saveAvatarToFS(data: Blob | Uint8Array, directory: string,
 }
 /**
  * Shared utility to delete an avatar blob from local storage.
+ * If fileId is provided, deletes that specific version.
+ * If fileId is omitted, deletes ALL avatar versions for that user.
  */
-export async function deleteAvatarLocally(key: string, isMe: boolean = false): Promise<void> {
-    console.log(`[AvatarCommon] Deleting local avatar for key: ${key} (isMe: ${isMe})`);
+export async function deleteAvatarLocally(key: string, isMe: boolean = false, fileId?: string): Promise<void> {
+    console.log(`[AvatarCommon] Deleting local avatar for key: ${key} (fileId: ${fileId}) (isMe: ${isMe})`);
     if (Platform.OS === 'web') {
-        const { deleteProfileAvatarBlob } = await import('@/lib/storage/personalStorage/profile/profile.storage');
-        await deleteProfileAvatarBlob(key);
-        console.log(`[AvatarCommon] Deleted from IDB: ${key}`);
+        const { deleteProfileAvatarBlob, deleteProfileAvatarsByUserId } = await import('@/lib/storage/personalStorage/profile/profile.storage');
+        
+        if (fileId) {
+            const safeFileId = fileId.replace(/:/g, '_');
+            const uniqueKey = `${key}_${safeFileId}`;
+            await deleteProfileAvatarBlob(uniqueKey);
+            console.log(`[AvatarCommon] Deleted from IDB: ${uniqueKey}`);
+        } else {
+            await deleteProfileAvatarsByUserId(key);
+            console.log(`[AvatarCommon] Deleted all versions from IDB for: ${key}`);
+        }
     } else {
         try {
             const { File, Directory, Paths } = await import('expo-file-system');
             const directory = isMe ? 'profiles' : 'profiles/others';
-            const filename = isMe ? 'me_avatar.jpg' : `${key}.jpg`;
-            
             const dir = new Directory(Paths.document, directory);
-            const avatarFile = new File(dir, filename);
-            if (avatarFile.exists) {
-                avatarFile.delete();
-                console.log(`[AvatarCommon] Deleted from FS: ${avatarFile.uri}`);
+            
+            if (fileId) {
+                const safeFileId = fileId.replace(/:/g, '_');
+                const filename = isMe ? `me_avatar_${safeFileId}.jpg` : `${key}_${safeFileId}.jpg`;
+                const avatarFile = new File(dir, filename);
+                if (avatarFile.exists) {
+                    avatarFile.delete();
+                    console.log(`[AvatarCommon] Deleted from FS: ${avatarFile.uri}`);
+                } else {
+                    console.log(`[AvatarCommon] File not found in FS, nothing to delete: ${filename}`);
+                }
             } else {
-                console.log(`[AvatarCommon] File not found in FS, nothing to delete: ${filename}`);
+                // Delete all versions for this user
+                const prefix = isMe ? 'me_avatar_' : `${key}_`;
+                if (dir.exists) {
+                    const files = dir.list();
+                    for (const file of files) {
+                        if (file.name.startsWith(prefix)) {
+                            file.delete();
+                            console.log(`[AvatarCommon] Deleted from FS (wildcard): ${file.uri}`);
+                        }
+                    }
+                }
             }
         } catch (e) {
             console.error('[AvatarCommon] Failed to delete local avatar:', e);
@@ -117,17 +155,19 @@ export async function deleteAvatarLocally(key: string, isMe: boolean = false): P
 /**
  * Shared utility to get the local URI of an avatar if it exists.
  */
-export async function getLocalAvatarUri(userId: string): Promise<string | null> {
+export async function getLocalAvatarUri(userId: string, fileId: string): Promise<string | null> {
+    const safeFileId = fileId.replace(/:/g, '_');
     if (Platform.OS === 'web') {
         const { getProfileAvatarBlob } = await import('@/lib/storage/personalStorage/profile/profile.storage');
-        const blob = await getProfileAvatarBlob(userId);
-        return blob ? `idb://${userId}` : null;
+        const uniqueKey = `${userId}_${safeFileId}`;
+        const blob = await getProfileAvatarBlob(uniqueKey);
+        return blob ? `idb://${uniqueKey}` : null;
     } else {
         try {
             const { File, Directory, Paths } = await import('expo-file-system');
             const directory = 'profiles/others';
             const dir = new Directory(Paths.document, directory);
-            const avatarFile = new File(dir, `${userId}.jpg`);
+            const avatarFile = new File(dir, `${userId}_${safeFileId}.jpg`);
             return avatarFile.exists ? avatarFile.uri : null;
         } catch {
             return null;

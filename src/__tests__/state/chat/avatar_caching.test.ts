@@ -50,7 +50,7 @@ jest.mock('@/utils/personalUtils/util.avatarCommon', () => ({
     fetchAvatarBlob: jest.fn(),
     saveAvatarToFS: jest.fn(),
     deleteAvatarLocally: jest.fn().mockResolvedValue(undefined),
-    getLocalAvatarUri: jest.fn().mockImplementation((userId) => Promise.resolve(`file://mock-path/${userId}.jpg`)),
+    getLocalAvatarUri: jest.fn().mockImplementation((userId, fileId) => Promise.resolve(`file://mock-path/${userId}_${fileId}.jpg`)),
 }));
 
 import { $chatListState } from '@/state/personalState/chat/personal.state.chat';

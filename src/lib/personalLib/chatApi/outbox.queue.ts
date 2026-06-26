@@ -30,6 +30,8 @@ import {
     type EncryptedMediaBlobUpload,
 } from '@/lib/personalLib/e2ee/e2ee.service';
 
+import { uploadFileToR2WithProgress } from '@/lib/personalLib/fileSystem/file.upload';
+
 const TAG = '[OutboxQueue]';
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2_000;
@@ -579,14 +581,47 @@ class OutboxQueue {
             e2ee = prepared.media;
         }
 
-        let response: Awaited<ReturnType<typeof ChatTransport.uploadFileWithProgress>>;
+        let response: Awaited<ReturnType<typeof ChatTransport.confirmChatUpload>>;
         try {
-            const formData = await this.buildFormDataForRetry(msg, e2ee, recipientKeysRevision);
-            response = await ChatTransport.uploadFileWithProgress(formData, (progress) => {
-                this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
-                    status: 'sending',
-                    progress,
-                });
+            console.log(`${TAG} sendFile: requesting presigned URL`);
+            const presign = await ChatTransport.presignChatUpload({
+                recipient_id: msg.recipient_id,
+                message_type: msg.message_type,
+                recipient_keys_revision: recipientKeysRevision,
+                sender_keys_revision: authState.keys_revision.peek() || 0,
+            }, signal);
+
+            let filePayload: string | Blob;
+            if (Platform.OS === 'web' && 'encryptedBlob' in e2ee) {
+                filePayload = e2ee.encryptedBlob;
+            } else if (Platform.OS !== 'web' && 'encryptedUri' in e2ee) {
+                filePayload = e2ee.encryptedUri;
+            } else {
+                throw new E2EESecureSendBlockedError('invalid_payload', msg.message_id);
+            }
+
+            console.log(`${TAG} sendFile: uploading directly to R2`);
+            await uploadFileToR2WithProgress(
+                presign.presigned_url,
+                filePayload,
+                FALLBACK_MIME_TYPE, // E2EE files are always binary octet-stream
+                (progress) => {
+                    this.syncInMemoryMessageStatus(msg.chat_id, msg.message_id, {
+                        status: 'sending',
+                        progress,
+                    });
+                },
+                signal
+            );
+
+            console.log(`${TAG} sendFile: confirming upload with backend`);
+            response = await ChatTransport.confirmChatUpload({
+                recipient_id: msg.recipient_id,
+                file_id: presign.file_id,
+                content: e2ee.wrappedKey, // E2EE envelope travels as caption/content
+                message_type: msg.message_type,
+                recipient_keys_revision: recipientKeysRevision,
+                sender_keys_revision: authState.keys_revision.peek() || 0,
             }, signal);
         } finally {
             // Always delete the encrypted temp copy once the upload settles
@@ -606,14 +641,13 @@ class OutboxQueue {
             error_message: null,
             content: e2ee.wrappedKey,
             file_id: response.file_id ?? null,
-            file_name: msg.file_name ?? response.file_name,
-            file_size: msg.file_size ?? response.file_size,
-            file_mime_type: msg.file_mime_type ?? response.file_mime_type,
+            file_name: msg.file_name,
+            file_size: msg.file_size,
+            file_mime_type: msg.file_mime_type,
             view_url: response.view_url ?? null,
             download_url: response.download_url ?? null,
             created_at: response.created_at,
             expires_at: response.expires_at ?? null,
-            file_token_expiry: response.file_token_expiry ?? null,
         });
 
         const sentMessage = {
@@ -627,15 +661,15 @@ class OutboxQueue {
             delivered_to_recipient: false,
             synced_to_sender_primary: true,
             local_uri: msg.local_uri,
-            file_name: msg.file_name ?? response.file_name,
-            file_size: msg.file_size ?? response.file_size,
-            file_mime_type: msg.file_mime_type ?? response.file_mime_type,
+            file_name: msg.file_name,
+            file_size: msg.file_size,
+            file_mime_type: msg.file_mime_type,
             view_url: response.view_url || msg.local_uri || undefined,
             download_url: response.download_url,
             progress: 100,
             file_id: response.file_id ?? null,
             expires_at: response.expires_at,
-            file_token_expiry: response.file_token_expiry,
+            file_token_expiry: null,
         } as MessageEntry;
 
         await this.promoteTempMessage(msg, sentMessage);
@@ -683,42 +717,6 @@ class OutboxQueue {
             last_message_is_unsent: false,
             updated_at: resolvedEntry.created_at,
         } as ChatEntry);
-    }
-
-    private async buildFormDataForRetry(
-        msg: LocalMessageEntry,
-        e2ee: EncryptedMediaUpload | EncryptedMediaBlobUpload,
-        recipientKeysRevision: number,
-    ): Promise<FormData> {
-        console.log(`${TAG} sendFile: building FormData with V3 envelope`, {
-            messageId: msg.message_id,
-            recipientId: msg.recipient_id,
-            messageType: msg.message_type,
-        });
-        const formData = new FormData();
-        formData.append('recipient_id', msg.recipient_id);
-        formData.append('message_type', msg.message_type);
-        formData.append('recipient_keys_revision', String(recipientKeysRevision));
-        formData.append('sender_keys_revision', String(authState.keys_revision.peek() || 0));
-        // E2EE: encrypted media envelope travels as caption → stored as message content.
-        // No plaintext caption/file branch exists in strict outbox transport.
-        formData.append('caption', e2ee.wrappedKey);
-        if (Platform.OS === 'web' && 'encryptedBlob' in e2ee) {
-            const encryptedFile = new File([e2ee.encryptedBlob], e2ee.uploadFileName, {
-                type: FALLBACK_MIME_TYPE,
-            });
-            formData.append('file', encryptedFile);
-        } else if (Platform.OS !== 'web' && 'encryptedUri' in e2ee) {
-            formData.append('file', {
-                uri: e2ee.encryptedUri,
-                name: e2ee.uploadFileName,
-                type: FALLBACK_MIME_TYPE,
-            } as any);
-        } else {
-            throw new E2EESecureSendBlockedError('invalid_payload', msg.message_id);
-        }
-
-        return formData;
     }
 
     /**

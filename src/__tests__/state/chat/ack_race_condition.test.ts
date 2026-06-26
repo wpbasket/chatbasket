@@ -676,4 +676,35 @@ describe('syncPendingMessages ACK race condition', () => {
             success: true,
         });
     });
+    it('does not SENDER sync ACK visible incoming media until local_uri exists', async () => {
+        const media = makeMessage({
+            message_id: 'msg-sender-sync-media',
+            is_from_me: true,
+            message_type: 'image',
+            file_id: 'file-123',
+            download_url: 'https://files.local/image.jpg',
+            local_uri: null,
+            sender_id: 'user-1',
+            recipient_id: 'user-2',
+            synced_to_sender_primary: false,
+        });
+
+        // Try to ACK; it should be blocked by needsIncomingMediaLocalPersistence
+        await ackIncomingMessages([media]);
+
+        expect(mockAckDelivery).not.toHaveBeenCalledWith(expect.objectContaining({
+            message_id: 'msg-sender-sync-media',
+            acknowledged_by: 'sender',
+        }));
+
+        // Now simulate the local_uri being added after download
+        (media as any).local_uri = 'idb://image.jpg';
+        await ackIncomingMessages([media]);
+
+        expect(mockAckDelivery).toHaveBeenCalledWith({
+            message_id: 'msg-sender-sync-media',
+            acknowledged_by: 'sender',
+            success: true,
+        });
+    });
 });

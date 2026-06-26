@@ -59,3 +59,15 @@ export interface StaleKeysError {
     details: StaleKeysErrorDetails;
 }
 
+// ============================================================================
+// R2 PRESIGN & CONFIRM FLOW PAYLOADS
+// ============================================================================
+
+export interface PresignAvatarUploadResponse {
+    presigned_url: string;
+    file_id: string;
+}
+
+export interface ConfirmAvatarUploadPayload {
+    file_id: string;
+}

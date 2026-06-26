@@ -38,7 +38,9 @@ function classifyMediaDownloadFailure(err: unknown): E2EEInboundFailureReason {
 const MEDIA_MESSAGE_TYPES = ['image', 'video', 'audio', 'file'];
 
 function needsIncomingMediaLocalPersistence(m: Partial<MessageEntry> & Record<string, any>): boolean {
-    if (m.is_from_me) return false;
+    // Note: We used to return false if m.is_from_me. We removed this because
+    // sender sync messages (sent from other devices) DO need local persistence
+    // before we can safely ACK them.
     if (!MEDIA_MESSAGE_TYPES.includes(m.message_type as string)) return false;
 
     const hasRemoteMedia = !!m.file_id || !!m.download_url;
@@ -140,9 +142,17 @@ export const ackIncomingMessages = async (messages: MessageEntry[], options?: { 
 
     // --- PART B: Sender Sync ACK (Messages sent from other devices) ---
     if (isPrimary && !options?.skipSenderSync) {
-        const unackedSync = messages.filter(m =>
-            m.is_from_me && !m.synced_to_sender_primary
-        );
+        const unackedSync = messages.filter(m => {
+            if (!m.is_from_me || m.synced_to_sender_primary) return false;
+            
+            // --- Safety Filter: NEVER ACK visible incoming media without local persistence ---
+            if (!options?.skipMediaCheck) {
+                if (needsIncomingMediaLocalPersistence(m)) {
+                    return false;
+                }
+            }
+            return true;
+        });
 
         for (const m of unackedSync) {
             try {

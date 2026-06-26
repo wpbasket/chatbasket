@@ -5,6 +5,7 @@ import { IconSymbol } from '@/components/ui/fonts/IconSymbol';
 import { pressableAnimation } from '@/hooks/commonHooks/hooks.pressableAnimation';
 import { ApiError } from '@/lib/constantLib';
 import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
+import { ProfileService } from '@/lib/personalLib/profileApi/profile.service';
 import { authState } from '@/state/auth/state.auth';
 import { modalActions } from '@/state/modals/state.modals';
 import { $personalStateUpdateProfile } from '@/state/personalState/profile/personal.state.profile.updateProfile';
@@ -177,7 +178,7 @@ export default function PersonalUpdateProfile() {
         const formData = await buildFormDataFromAsset(currentAvatarFile, { fieldName: 'avatar' });
 
         const response = await runWithLoading(
-          () => PersonalProfileApi.uploadAvatar(formData),
+          () => ProfileService.uploadAvatar(formData),
           { message: 'Uploading avatar' }
         );
 

@@ -1,6 +1,5 @@
-import { PersonalCreateProfilePayload, PersonalGetE2EEKeyResponse, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateE2EEKeyPayload, PersonalUpdateE2EEKeyResponse, PersonalUpdateUserProfilePayload, RegisterTokenPayload } from "@/lib/personalLib";
-import { apiClient, fileUploadClient, BooleanResponse } from "@/lib/constantLib";
-
+import { PersonalCreateProfilePayload, PersonalGetE2EEKeyResponse, PersonalLogoutPayload, PersonalProfileResponse, PersonalUpdateE2EEKeyPayload, PersonalUpdateE2EEKeyResponse, PersonalUpdateUserProfilePayload, PresignAvatarUploadResponse, ConfirmAvatarUploadPayload } from "@/lib/personalLib";
+import { apiClient, BooleanResponse } from "@/lib/constantLib";
 
 
 /**
@@ -35,10 +34,15 @@ async function updateProfile(payload: PersonalUpdateUserProfilePayload): Promise
     return apiClient.post<BooleanResponse>('/personal/profile/update-profile', payload);
 }
 
-
-async function uploadAvatar(formData: FormData): Promise<BooleanResponse> {
-    return fileUploadClient.uploadFile<BooleanResponse>('/personal/profile/upload-avatar', formData);
+async function presignAvatarUpload(): Promise<PresignAvatarUploadResponse> {
+    return apiClient.post<PresignAvatarUploadResponse>('/personal/profile/presign-avatar', {});
 }
+
+async function confirmAvatarUpload(payload: ConfirmAvatarUploadPayload): Promise<BooleanResponse> {
+    return apiClient.post<BooleanResponse>('/personal/profile/confirm-avatar', payload);
+}
+
+
 
 
 async function removeAvatar(): Promise<BooleanResponse> {
@@ -71,7 +75,8 @@ export const PersonalProfileApi = {
     getProfile,
     createProfile,
     updateProfile,
-    uploadAvatar,
+    presignAvatarUpload,
+    confirmAvatarUpload,
     removeAvatar,
     updateE2EEKey,
     getE2EEKey,

@@ -83,6 +83,33 @@ export async function deleteProfileAvatarBlob(key: string = AVATAR_KEY): Promise
 }
 
 /**
+ * Deletes all avatar blobs for a specific user ID from ProfileStorage.
+ */
+export async function deleteProfileAvatarsByUserId(userId: string): Promise<void> {
+    if (Platform.OS !== 'web') return;
+
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.openCursor();
+        
+        request.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+            if (cursor) {
+                if (typeof cursor.key === 'string' && cursor.key.startsWith(`${userId}_`)) {
+                    cursor.delete();
+                }
+                cursor.continue();
+            } else {
+                resolve();
+            }
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+/**
  * Deletes the full ProfileStorage IndexedDB.
  * Used on logout + logged-out boot safety cleanup.
  */
