@@ -44,6 +44,13 @@ jest.mock('@/lib/personalLib/fileSystem/file.download', () => ({
     downloadIncomingFile: jest.fn().mockResolvedValue(null),
 }));
 
+// file.upload imports expo-file-system (which references `EventEmitter` and
+// other Node-style globals that don't exist in jest's jsdom env). Mock the
+// module so loading outbox.queue.ts doesn't transitively pull expo-file-system.
+jest.mock('@/lib/personalLib/fileSystem/file.upload', () => ({
+    uploadFileToR2WithProgress: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('@/lib/storage/personalStorage/chat/chat.storage.normalize', () => ({
     normalizeChatEntry: jest.fn((input: any) => input),
     normalizeChatEntries: jest.fn((input: any[]) => input),
