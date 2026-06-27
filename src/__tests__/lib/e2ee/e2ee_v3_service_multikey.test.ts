@@ -41,8 +41,8 @@ jest.mock('@/lib/storage/personalStorage/chat/chat.storage', () => ({
         updated_at: 'now',
     }))),
     getUserKeysRevision: jest.fn(async (userId: string) => mockRegistry.get(userId)?.revision || 0),
-    setUserKeys: jest.fn(async (userId: string, keys: Array<{ device_key: string; keys_revision: number }>) => {
-        mockRegistry.set(userId, { keys: keys.map(k => k.device_key), revision: keys[0]?.keys_revision || 0 });
+    setUserKeys: jest.fn(async (userId: string, keys: Array<{ device_key: string; keys_revision: number }>, revision: number) => {
+        mockRegistry.set(userId, { keys: keys.map(k => k.device_key), revision });
     }),
     getFirstUserKey: jest.fn(async (userId: string) => mockRegistry.get(userId)?.keys[0] || null),
 }));

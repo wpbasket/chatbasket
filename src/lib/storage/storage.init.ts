@@ -23,7 +23,7 @@ async function seedOwnSiblingKeysOnce(): Promise<void> {
         const keys = (res.e2ee_public_keys || [])
             .filter(isValidPublicKeyB64)
             .map(device_key => ({ device_key, keys_revision: revision }));
-        await setUserKeys(userId, keys);
+        await setUserKeys(userId, keys, revision);
         await setOwnKeysInitialized(true);
         console.log('[StorageInit] Own sibling E2EE keys seeded', { count: keys.length, keys_revision: revision });
     } catch (err) {

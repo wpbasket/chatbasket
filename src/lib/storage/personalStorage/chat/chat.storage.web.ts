@@ -306,7 +306,7 @@ export interface UserKeyRecord {
     updated_at: string;
 }
 
-export async function setUserKeys(userId: string, keys: Array<{ device_key: string; keys_revision: number }>): Promise<void> {
+export async function setUserKeys(userId: string, keys: Array<{ device_key: string; keys_revision: number }>, revision: number): Promise<void> {
     const db = await openDataDb();
     const tx = db.transaction(USER_KEYS_STORE, 'readwrite');
     const store = tx.objectStore(USER_KEYS_STORE);
@@ -314,6 +314,10 @@ export async function setUserKeys(userId: string, keys: Array<{ device_key: stri
     const existing = await idbGetAll<UserKeyRecord>(idx, userId);
     for (const rec of existing) store.delete([rec.user_id, rec.device_key] as IDBValidKey);
     const ts = new Date().toISOString();
+    if (keys.length === 0) {
+        await idbPut(store, { user_id: userId, device_key: '__empty__', keys_revision: revision, updated_at: ts });
+        return;
+    }
     for (const k of keys) await idbPut(store, { user_id: userId, device_key: k.device_key, keys_revision: k.keys_revision, updated_at: ts });
 }
 
@@ -321,7 +325,8 @@ export async function getUserKeys(userId: string): Promise<UserKeyRecord[]> {
     const db = await openDataDb();
     const tx = db.transaction(USER_KEYS_STORE, 'readonly');
     const idx = tx.objectStore(USER_KEYS_STORE).index('idx_user_id');
-    return await idbGetAll<UserKeyRecord>(idx, userId);
+    const rows = await idbGetAll<UserKeyRecord>(idx, userId);
+    return (rows ?? []).filter(r => r.device_key !== '__empty__');
 }
 
 export async function getFirstUserKey(userId: string): Promise<string | null> {
@@ -330,8 +335,11 @@ export async function getFirstUserKey(userId: string): Promise<string | null> {
 }
 
 export async function getUserKeysRevision(userId: string): Promise<number> {
-    const keys = await getUserKeys(userId);
-    return keys.length > 0 ? keys[0].keys_revision : 0;
+    const db = await openDataDb();
+    const tx = db.transaction(USER_KEYS_STORE, 'readonly');
+    const idx = tx.objectStore(USER_KEYS_STORE).index('idx_user_id');
+    const rows = await idbGetAll<UserKeyRecord>(idx, userId);
+    return rows.length > 0 ? rows[0].keys_revision : -1;
 }
 
 export async function deleteUserKeys(userId: string): Promise<void> {

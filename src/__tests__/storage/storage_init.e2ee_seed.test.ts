@@ -87,7 +87,7 @@ describe('hydratePersonalModules E2EE self-key seed', () => {
 
     expect(mockInitializeE2EEKeys).toHaveBeenCalled();
     expect(mockGetE2EEKey).toHaveBeenCalledWith('owner-1');
-    expect(mockSetUserKeys).toHaveBeenCalledWith('owner-1', [{ device_key: VALID_KEY, keys_revision: 5 }]);
+    expect(mockSetUserKeys).toHaveBeenCalledWith('owner-1', [{ device_key: VALID_KEY, keys_revision: 5 }], 5);
     expect(mockSetOwnKeysInitialized).toHaveBeenCalledWith(true);
   });
 

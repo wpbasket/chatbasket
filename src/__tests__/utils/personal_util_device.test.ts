@@ -85,7 +85,7 @@ describe('PersonalUtilRefreshDeviceStatus E2EE keys sync at startup', () => {
         expect(setUserKeys).toHaveBeenCalledWith('user-2', [
             { device_key: 'key-a', keys_revision: 8 },
             { device_key: 'key-b', keys_revision: 8 },
-        ]);
+        ], 8);
     });
 
     it('proactively fetches fresh sibling keys if local cache is empty', async () => {
@@ -95,7 +95,7 @@ describe('PersonalUtilRefreshDeviceStatus E2EE keys sync at startup', () => {
             primaryDeviceName: 'Primary',
             keys_revision: 0,
         });
-        (getUserKeysRevision as jest.Mock).mockResolvedValue(0);
+        (getUserKeysRevision as jest.Mock).mockResolvedValue(-1); // empty cache is -1
         mockGetUserKeys.mockResolvedValue([]); // empty cache
         (PersonalProfileApi.getE2EEKey as jest.Mock).mockResolvedValue({
             keys_revision: 0,
@@ -107,6 +107,42 @@ describe('PersonalUtilRefreshDeviceStatus E2EE keys sync at startup', () => {
         expect(PersonalProfileApi.getE2EEKey).toHaveBeenCalledWith('user-3');
         expect(setUserKeys).toHaveBeenCalledWith('user-3', [
             { device_key: 'key-first', keys_revision: 0 },
-        ]);
+        ], 0);
+    });
+
+    it('proactively fetches fresh keys on mismatch and stores empty sentinel if remote has no sibling keys', async () => {
+        (commonAuthApi.getMe as jest.Mock).mockResolvedValue({
+            userId: 'user-4',
+            isPrimary: true,
+            primaryDeviceName: 'Primary Device',
+            keys_revision: 7,
+        });
+        (getUserKeysRevision as jest.Mock).mockResolvedValue(-1); // empty cache
+        mockGetUserKeys.mockResolvedValue([]); // empty cache
+        (PersonalProfileApi.getE2EEKey as jest.Mock).mockResolvedValue({
+            keys_revision: 7,
+            e2ee_public_keys: [], // no sibling keys
+        });
+
+        await PersonalUtilRefreshDeviceStatus();
+
+        expect(PersonalProfileApi.getE2EEKey).toHaveBeenCalledWith('user-4');
+        expect(setUserKeys).toHaveBeenCalledWith('user-4', [], 7);
+    });
+
+    it('does not fetch keys if cached revision is equal to remote revision even if keys are empty', async () => {
+        (commonAuthApi.getMe as jest.Mock).mockResolvedValue({
+            userId: 'user-5',
+            isPrimary: true,
+            primaryDeviceName: 'Primary Device',
+            keys_revision: 7,
+        });
+        (getUserKeysRevision as jest.Mock).mockResolvedValue(7); // already synced at revision 7
+        mockGetUserKeys.mockResolvedValue([]); // getUserKeys filters out sentinel and returns []
+
+        await PersonalUtilRefreshDeviceStatus();
+
+        expect(PersonalProfileApi.getE2EEKey).not.toHaveBeenCalled();
+        expect(setUserKeys).not.toHaveBeenCalled();
     });
 });

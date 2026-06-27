@@ -233,7 +233,7 @@ export async function saveUserKeys(userId: string, publicKeys: Array<string | nu
     const revision = normalizeRevision(keysRevision);
     const keys = uniqueValidKeys(publicKeys).map(device_key => ({ device_key, keys_revision: revision }));
     try {
-        await ChatStorage.setUserKeys(userId, keys);
+        await ChatStorage.setUserKeys(userId, keys, revision);
         e2eeLog(TAG, 'Registry: keys replaced', { userId, count: keys.length, keys_revision: revision });
     } catch (err) {
         console.warn(`${TAG} Failed to save keys for ${userId}`, err);
@@ -250,7 +250,7 @@ export async function saveUserPublicKey(userId: string, publicKey: string | null
         await ChatStorage.setUserKeys(userId, [
             ...existing.map(k => ({ device_key: k.device_key, keys_revision: k.keys_revision })),
             { device_key: publicKey, keys_revision: revision },
-        ]);
+        ], revision);
         e2eeLog(TAG, 'Registry: key appended', { userId, key: keyFp(publicKey), keys_revision: revision });
     } catch (err) {
         console.warn(`${TAG} Failed to append public key for ${userId}`, err);
@@ -262,16 +262,15 @@ export async function resolveUserPublicKeys(userId: string): Promise<string[]> {
     try {
         const currentRevision = authState.keys_revision?.peek?.() ?? 0;
         const cachedRevision = await ChatStorage.getUserKeysRevision(userId);
-        const cachedKeys = await ChatStorage.getUserKeys(userId);
-        if (cachedKeys.length === 0 || (currentRevision > 0 && cachedRevision < currentRevision)) {
-            e2eeLog(TAG, 'Self sibling keys stale or empty, fetching...', { cachedRevision, currentRevision, cachedCount: cachedKeys.length });
+        if (cachedRevision < currentRevision) {
+            e2eeLog(TAG, 'Self sibling keys stale, fetching...', { cachedRevision, currentRevision });
             if (typeof PersonalProfileApi?.getE2EEKey === 'function') {
                 const res = await PersonalProfileApi.getE2EEKey(userId);
                 const freshRevision = Number.isFinite(res?.keys_revision) ? Math.max(0, Math.trunc(res.keys_revision)) : 0;
                 const keys = (res?.e2ee_public_keys || [])
                     .filter(isValidPublicKeyB64)
                     .map(device_key => ({ device_key, keys_revision: freshRevision }));
-                await ChatStorage.setUserKeys(userId, keys);
+                await ChatStorage.setUserKeys(userId, keys, freshRevision);
             }
         }
     } catch (err) {

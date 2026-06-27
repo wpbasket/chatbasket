@@ -533,11 +533,15 @@ export interface UserKeyRecord {
     updated_at: string;
 }
 
-export async function setUserKeys(userId: string, keys: Array<{ device_key: string; keys_revision: number }>): Promise<void> {
+export async function setUserKeys(userId: string, keys: Array<{ device_key: string; keys_revision: number }>, revision: number): Promise<void> {
     const d = getDb();
     await withTxMutex(async () => {
         await d.runAsync(`DELETE FROM user_keys WHERE user_id = ?`, [userId]);
-        if (keys.length === 0) return;
+        if (keys.length === 0) {
+            const ts = new Date().toISOString();
+            await d.runAsync(`INSERT OR REPLACE INTO user_keys (user_id, device_key, keys_revision, updated_at) VALUES (?, ?, ?, ?)`, [userId, '__empty__', revision, ts]);
+            return;
+        }
         const ts = new Date().toISOString();
         const placeholders = keys.map(() => '(?, ?, ?, ?)').join(', ');
         const params: (string | number)[] = [];
@@ -549,7 +553,7 @@ export async function setUserKeys(userId: string, keys: Array<{ device_key: stri
 export async function getUserKeys(userId: string): Promise<UserKeyRecord[]> {
     const d = getDb();
     const rows = await d.getAllAsync<UserKeyRecord>(`SELECT user_id, device_key, keys_revision, updated_at FROM user_keys WHERE user_id = ? ORDER BY updated_at ASC`, [userId]);
-    return rows ?? [];
+    return (rows ?? []).filter(r => r.device_key !== '__empty__');
 }
 
 export async function getFirstUserKey(userId: string): Promise<string | null> {
@@ -560,7 +564,7 @@ export async function getFirstUserKey(userId: string): Promise<string | null> {
 export async function getUserKeysRevision(userId: string): Promise<number> {
     const d = getDb();
     const row = await d.getFirstAsync<{ keys_revision: number }>(`SELECT keys_revision FROM user_keys WHERE user_id = ? LIMIT 1`, [userId]);
-    return row === null || row === undefined ? 0 : row.keys_revision;
+    return row === null || row === undefined ? -1 : row.keys_revision;
 }
 
 export async function deleteUserKeys(userId: string): Promise<void> {
