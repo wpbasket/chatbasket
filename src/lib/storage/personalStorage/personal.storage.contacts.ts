@@ -24,7 +24,7 @@ type ContactsSchema = {
 let contactsStorage: AppStorage<ContactsSchema> | null = null;
 export const initializeContactsStorage = async (): Promise<void> => {
   if (!contactsStorage) {
-    contactsStorage = await AppStorage.createSecure<ContactsSchema>("personal-contacts");
+    contactsStorage = await AppStorage.createSecure<ContactsSchema>("personal-contacts", { webBackend: 'indexeddb' });
   }
 }
 

@@ -1,8 +1,8 @@
 import { observable } from '@legendapp/state';
 import { initializeSecureStorage, restoreAuthState, isOwnKeysInitialized, setOwnKeysInitialized } from './commonStorage/storage.auth';
-import { initializeContactsStorage, PersonalStorageLoadContactRequests, PersonalStorageLoadContacts } from './personalStorage/personal.storage.contacts';
-import { PersonalStorageGetDeviceStatus } from './personalStorage/personal.storage.device';
-import { PersonalStorageGetUser, clearProfileStorage } from './personalStorage/profile/personal.storage.user';
+import { initializeContactsStorage, PersonalStorageLoadContactRequests, PersonalStorageLoadContacts, PersonalStorageRemoveContacts, PersonalStorageRemoveContactRequests } from './personalStorage/personal.storage.contacts';
+import { PersonalStorageGetDeviceStatus, PersonalStorageRemoveDeviceStatus } from './personalStorage/personal.storage.device';
+import { PersonalStorageGetUser, PersonalStorageRemoveUser, clearProfileStorage } from './personalStorage/profile/personal.storage.user';
 import { initChatStorage, clearAllChatStorage, purgeDeletedMessages, cleanupOrphanedMedia, setUserKeys } from './personalStorage/chat/chat.storage';
 import { connectionWatcher } from '@/lib/personalLib/chatApi/connection.watcher';
 import { wsClient } from '@/lib/personalLib/chatApi/ws.client';
@@ -161,6 +161,12 @@ export const initializeAppStorage = async (): Promise<void> => {
                     clearAllChatStorage(),
                     clearProfileStorage(),
                     deleteLocalE2EEKeys(),
+                    // Wipe the migrated personal scopes in AppStorageIDB (matches
+                    // auth.clearSession() so fresh boot == logout cleanup).
+                    PersonalStorageRemoveUser(),
+                    PersonalStorageRemoveContacts(),
+                    PersonalStorageRemoveContactRequests(),
+                    PersonalStorageRemoveDeviceStatus(),
                 ]);
                 console.log('[StorageInit] Cleaned up leftover personal storage (not logged in)');
             } catch (err) {

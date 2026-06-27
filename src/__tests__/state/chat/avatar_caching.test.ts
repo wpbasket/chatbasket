@@ -103,14 +103,18 @@ describe('Avatar Caching & Privacy Logic', () => {
         $chatListState.upsertChat(chat);
 
         const result = await resolveAvatarUri('u1', 'https://url', 'v1', 'v1');
-        
-        expect(result.uri).toContain('u1.jpg');
+
+        // getLocalAvatarUri mock returns file://mock-path/u1_v1.jpg
+        expect(result.uri).toContain('u1_v1.jpg');
         expect(result.needsDownload).toBe(false);
     });
 
-    it('CACHE_MISS: triggers download if file IDs mismatch', async () => {
+    it('CACHE_MISS: file IDs mismatch but file on disk → SILENT_HIT (no download)', async () => {
+        // Mocked getLocalAvatarUri returns a path for any (userId, fileId), so
+        // the SILENT_HIT branch fires (file already on disk despite memory mismatch).
         const result = await resolveAvatarUri('u1', 'https://url', 'v2', 'v1');
-        expect(result.needsDownload).toBe(true);
+        expect(result.needsDownload).toBe(false);
+        expect(result.uri).toContain('u1_v2.jpg');
     });
 
     it('CIRCUIT_BREAKER: purges local data if server returns null (Privacy Restriction)', async () => {

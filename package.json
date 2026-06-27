@@ -20,7 +20,6 @@
     "@legendapp/list": "^2.0.19",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.47",
-    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "expo": "~56.0.11",
     "expo-asset": "~56.0.17",

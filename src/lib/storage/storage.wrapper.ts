@@ -1,6 +1,15 @@
+// CANDIDATE replacement for storage.wrapper.ts — UNDER TEST.
+// Differences vs original:
+//   - WebBackend = 'sync' | 'indexeddb'  (AsyncStorage / 'async' removed)
+//   - New 'indexeddb' web backend: per-scope object store in a shared
+//     AppStorageIDB database. Encrypt-before-transaction pattern (mirrors
+//     chat.storage.web.ts) to avoid IDB TransactionInactiveError.
+//   - createSecure forwards webBackend (defaults to 'indexeddb').
+// Native (MMKV) path is byte-for-byte identical to the original.
+// WebVault (non-extractable AES-GCM master key in IndexedDB) unchanged.
+
 import { Platform } from 'react-native';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 
@@ -110,7 +119,84 @@ class WebVault {
     }
 }
 
-type WebBackend = 'async' | 'sync';
+type WebBackend = 'sync' | 'indexeddb';
+
+// ─── IndexedDB engine (web only) ───────────────────────────────────────────
+// Single shared DB (v1) with ONE object store 'kv'. Each record is keyed by
+// `${scope}\u0000${key}` (null separator never appears in scope/key names).
+// This avoids per-scope version bumps entirely — version bumps are blocked by
+// any other open connection (DevTools, another tab, a leaked connection), so a
+// fixed v1 schema with composite keys is the robust pattern. clearAll(scope)
+// deletes a key range covering exactly that scope's prefix.
+
+const IDB_DB_NAME = 'AppStorageIDB';
+const IDB_STORE = 'kv';
+const SEP = '\u0000';
+let _idbDb: IDBDatabase | null = null;
+let _idbReady: Promise<IDBDatabase> | null = null;
+
+function openIdb(): Promise<IDBDatabase> {
+    if (_idbDb) return Promise.resolve(_idbDb);
+    if (_idbReady) return _idbReady;
+    _idbReady = new Promise<IDBDatabase>((resolve, reject) => {
+        // Fixed v1 schema: AppStorageIDB + single 'kv' store.
+        const req = indexedDB.open(IDB_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            if (!req.result.objectStoreNames.contains(IDB_STORE)) {
+                req.result.createObjectStore(IDB_STORE);
+            }
+        };
+        req.onsuccess = () => { _idbDb = req.result; resolve(_idbDb); };
+        req.onerror = () => { _idbReady = null; reject(req.error); };
+    });
+    return _idbReady;
+}
+
+function ckey(scope: string, key: string): string {
+    return scope + SEP + key;
+}
+
+function scopeRange(scope: string): IDBKeyRange {
+    // lower inclusive = scope + SEP, upper exclusive = scope + next char after SEP
+    // → covers every key `scope\u0000*` without touching other scopes.
+    return IDBKeyRange.bound(scope + SEP, scope + '\u0001', false, true);
+}
+
+function idbPut(scope: string, key: string, value: string): Promise<void> {
+    return openIdb().then(db => new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const req = tx.objectStore(IDB_STORE).put(value, ckey(scope, key));
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    }));
+}
+
+function idbGet(scope: string, key: string): Promise<string | null> {
+    return openIdb().then(db => new Promise<string | null>((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(ckey(scope, key));
+        req.onsuccess = () => resolve(req.result === undefined ? null : (req.result as string));
+        req.onerror = () => reject(req.error);
+    }));
+}
+
+function idbDelete(scope: string, key: string): Promise<void> {
+    return openIdb().then(db => new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const req = tx.objectStore(IDB_STORE).delete(ckey(scope, key));
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    }));
+}
+
+function idbClear(scope: string): Promise<void> {
+    return openIdb().then(db => new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const req = tx.objectStore(IDB_STORE).delete(scopeRange(scope));
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    }));
+}
 
 export class AppStorage<T extends Record<string, any>> {
     private mmkv: MMKV | null = null;
@@ -122,7 +208,7 @@ export class AppStorage<T extends Record<string, any>> {
     constructor(id: string, config?: any, options?: { disableWebPrefix?: boolean, webBackend?: WebBackend, isSecure?: boolean }) {
         this.id = id;
         this.disableWebPrefix = options?.disableWebPrefix ?? false;
-        this.webBackend = options?.webBackend ?? 'async';
+        this.webBackend = options?.webBackend ?? 'indexeddb';
         this.isSecure = options?.isSecure ?? false;
 
         if (Platform.OS !== 'web') {
@@ -130,7 +216,7 @@ export class AppStorage<T extends Record<string, any>> {
         }
     }
 
-    static async createSecure<T extends Record<string, any>>(id: string): Promise<AppStorage<T>> {
+    static async createSecure<T extends Record<string, any>>(id: string, options?: { webBackend?: WebBackend }): Promise<AppStorage<T>> {
         let encryptionKey: string | undefined;
 
         if (Platform.OS !== 'web') {
@@ -153,7 +239,10 @@ export class AppStorage<T extends Record<string, any>> {
             }
         }
 
-        return new AppStorage<T>(id, { encryptionKey }, { isSecure: true });
+        return new AppStorage<T>(id, { encryptionKey }, {
+            isSecure: true,
+            webBackend: options?.webBackend ?? 'indexeddb',
+        });
     }
 
     private getWebKey(key: string): string {
@@ -178,19 +267,22 @@ export class AppStorage<T extends Record<string, any>> {
         const valStr = JSON.stringify(value);
 
         if (Platform.OS === 'web') {
-            const webKey = this.getWebKey(keyStr);
             try {
+                // ENCRYPT BEFORE OPENING THE IDB TRANSACTION.
+                // Awaiting crypto.subtle inside an open IDB tx causes auto-commit
+                // (TransactionInactiveError) — mirrors chat.storage.web.ts pattern.
                 let finalVal = valStr;
                 if (this.isSecure) {
                     finalVal = await WebVault.encrypt(valStr);
                 }
 
                 if (this.webBackend === 'sync') {
+                    const webKey = this.getWebKey(keyStr);
                     if (typeof window !== 'undefined') {
                         window.localStorage.setItem(webKey, finalVal);
                     }
                 } else {
-                    await AsyncStorage.setItem(webKey, finalVal);
+                    await idbPut(this.id, keyStr, finalVal);
                 }
             } catch (e) {
                 console.error(`[AppStorage] Failed to set ${keyStr}`, e);
@@ -216,22 +308,19 @@ export class AppStorage<T extends Record<string, any>> {
         let valStr: string | null = null;
 
         if (Platform.OS === 'web') {
-            const webKey = this.getWebKey(keyStr);
-            try {
-                if (this.webBackend === 'sync') {
-                    if (typeof window !== 'undefined') {
-                        valStr = window.localStorage.getItem(webKey);
-                    }
-                } else {
-                    valStr = await AsyncStorage.getItem(webKey);
+            // IndexedDB reads fail LOUD: a missing/broken read is a real bug the
+            // caller must see. localStorage reads are sync and infallible, so
+            // they keep the silent-null contract.
+            if (this.webBackend === 'sync') {
+                const webKey = this.getWebKey(keyStr);
+                if (typeof window !== 'undefined') {
+                    valStr = window.localStorage.getItem(webKey);
                 }
-
+            } else {
+                valStr = await idbGet(this.id, keyStr);
                 if (this.isSecure && valStr) {
                     valStr = await WebVault.decrypt(valStr);
                 }
-            } catch (e) {
-                console.error(`[AppStorage] Failed to get ${keyStr}`, e);
-                return null;
             }
         } else {
             valStr = this.mmkv?.getString(keyStr) || null;
@@ -245,7 +334,10 @@ export class AppStorage<T extends Record<string, any>> {
         let valStr: string | null = null;
 
         if (Platform.OS === 'web') {
-            if (this.webBackend === 'async') return null;
+            // IndexedDB is async-only — getSync returns null on the indexeddb backend
+            // (same behavior as the old 'async' backend). Only 'sync' (localStorage)
+            // can serve a synchronous read.
+            if (this.webBackend !== 'sync') return null;
             if (typeof window !== 'undefined') {
                 valStr = window.localStorage.getItem(this.getWebKey(keyStr));
             }
@@ -303,11 +395,11 @@ export class AppStorage<T extends Record<string, any>> {
     async has<K extends keyof T>(key: K): Promise<boolean> {
         const keyStr = String(key);
         if (Platform.OS === 'web') {
-            const webKey = this.getWebKey(keyStr);
             if (this.webBackend === 'sync') {
+                const webKey = this.getWebKey(keyStr);
                 return typeof window !== 'undefined' && !!window.localStorage.getItem(webKey);
             }
-            const val = await AsyncStorage.getItem(webKey);
+            const val = await idbGet(this.id, keyStr);
             return val !== null;
         } else {
             return this.mmkv?.contains(keyStr) ?? false;
@@ -317,14 +409,14 @@ export class AppStorage<T extends Record<string, any>> {
     async remove<K extends keyof T>(key: K): Promise<void> {
         const keyStr = String(key);
         if (Platform.OS === 'web') {
-            const webKey = this.getWebKey(keyStr);
             try {
                 if (this.webBackend === 'sync') {
+                    const webKey = this.getWebKey(keyStr);
                     if (typeof window !== 'undefined') {
                         window.localStorage.removeItem(webKey);
                     }
                 } else {
-                    await AsyncStorage.removeItem(webKey);
+                    await idbDelete(this.id, keyStr);
                 }
             } catch (e) {
                 console.error(`[AppStorage] Failed to remove ${keyStr}`, e);
@@ -336,21 +428,17 @@ export class AppStorage<T extends Record<string, any>> {
 
     async clearAll(): Promise<void> {
         if (Platform.OS === 'web') {
-            const prefix = this.disableWebPrefix ? '' : `${this.id}-`;
             if (this.webBackend === 'sync') {
+                const prefix = this.disableWebPrefix ? '' : `${this.id}-`;
                 if (typeof window !== 'undefined') {
                     Object.keys(window.localStorage).forEach(k => {
                         if (k.startsWith(prefix)) window.localStorage.removeItem(k);
                     });
                 }
             } else {
-                // Scoped clear for AsyncStorage on Web
+                // Per-scope object store → clear() removes exactly this scope's keys.
                 try {
-                    const allKeys = await AsyncStorage.getAllKeys();
-                    const targetKeys = allKeys.filter(k => k.startsWith(prefix));
-                    if (targetKeys.length > 0) {
-                        await AsyncStorage.multiRemove(targetKeys);
-                    }
+                    await idbClear(this.id);
                 } catch (e) {
                     console.error(`[AppStorage] Failed to clearAll for ${this.id}`, e);
                 }

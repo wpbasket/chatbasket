@@ -26,7 +26,7 @@ let authStorage: AppStorage<AuthSchema> | null = null;
  */
 export const initializeSecureStorage = async (): Promise<void> => {
   try {
-    authStorage = await AppStorage.createSecure<AuthSchema>('secure-auth-storage');
+    authStorage = await AppStorage.createSecure<AuthSchema>('secure-auth-storage', { webBackend: 'indexeddb' });
 
     // Quick verification (Native Only)
     if (Platform.OS !== 'web') {

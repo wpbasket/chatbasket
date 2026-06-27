@@ -15,7 +15,7 @@ let deviceStorage: AppStorage<PersonalDeviceSchema> | null = null;
 
 const getStorage = async (): Promise<AppStorage<PersonalDeviceSchema>> => {
     if (!deviceStorage) {
-        deviceStorage = await AppStorage.createSecure<PersonalDeviceSchema>('personal-device');
+        deviceStorage = await AppStorage.createSecure<PersonalDeviceSchema>('personal-device', { webBackend: 'indexeddb' });
     }
     return deviceStorage;
 }

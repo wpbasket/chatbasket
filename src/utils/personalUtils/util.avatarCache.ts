@@ -8,6 +8,17 @@ import { $contactsState, $contactRequestsState } from '@/state/personalState/con
 const NATIVE_AVATAR_DIR = 'profiles/others';
 const pendingDownloads = new Map<string, Promise<string | null>>();
 
+// Pending debounced-cleanup timers per user (canceled if a real avatar comes back).
+const pendingCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Negative cache: userIds whose "server has no avatar" verdict was confirmed.
+// Until this expires, resolveAvatarUri short-circuits the entire cleanup branch,
+// so a re-render with undefined avatarFileId won't re-trigger the (debounced) cleanup.
+const NEGATIVE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const confirmedNoAvatar = new Map<string, number>(); // userId → expiresAt
+
+const CLEANUP_DEBOUNCE_MS = 50; // swallows React render races (one frame = ~16ms)
+
 export interface AvatarResolution {
   uri: string | null;
   needsDownload: boolean;
@@ -64,20 +75,40 @@ export async function resolveAvatarUri(
 ): Promise<AvatarResolution> {
   // 1. No avatar on server (or restricted by privacy circuit breaker)
   if (!serverUrl || !serverFileId) {
-    // If we have a local cache marker, we should proactively clean it up
+    // Short-circuit: this user was already confirmed "no avatar" within the TTL —
+    // skip the whole branch to prevent the cleanup cycle from ever firing again.
+    const expiresAt = confirmedNoAvatar.get(userId);
+    if (expiresAt && Date.now() < expiresAt) {
+      return { uri: null, needsDownload: false };
+    }
+
+    // If we have a local cache marker, schedule a DEBOUNCED cleanup. If a real
+    // avatarFileId arrives during the debounce window (React render race / state
+    // hydration), the "has avatar" branch cancels the timer below — preventing
+    // the delete-then-redownload loop that previously flooded the logs.
     const effectiveCachedId = cachedFileId || findCachedFileIdAcrossStates(userId);
-    if (effectiveCachedId) {
-      console.log(`[AvatarCache] ${userId} Server has no avatar (or restricted), cleaning up stale local cache`);
-      // Async cleanup without blocking the return
-      (async () => {
-        await deleteAvatarLocally(userId, false);
-        $chatListState.updateCachedAvatarFileId(userId, null);
-        $contactsState.updateCachedAvatarFileId(userId, null);
-        $contactRequestsState.updateCachedAvatarFileId(userId, null);
-        await updateChatCachedAvatarFileIdByUserId(userId, null);
-      })();
+    if (effectiveCachedId && !pendingCleanupTimers.has(userId)) {
+      pendingCleanupTimers.set(userId, setTimeout(() => {
+        pendingCleanupTimers.delete(userId);
+        (async () => {
+          console.log(`[AvatarCache] ${userId} Server has no avatar (or restricted), cleaning up stale local cache`);
+          await deleteAvatarLocally(userId, false);
+          $chatListState.updateCachedAvatarFileId(userId, null);
+          $contactsState.updateCachedAvatarFileId(userId, null);
+          $contactRequestsState.updateCachedAvatarFileId(userId, null);
+          await updateChatCachedAvatarFileIdByUserId(userId, null);
+          confirmedNoAvatar.set(userId, Date.now() + NEGATIVE_CACHE_TTL_MS);
+        })();
+      }, CLEANUP_DEBOUNCE_MS));
     }
     return { uri: null, needsDownload: false };
+  }
+
+  // Server has an avatar → cancel any pending cleanup (avatar came back during debounce)
+  const pendingCleanup = pendingCleanupTimers.get(userId);
+  if (pendingCleanup) {
+    clearTimeout(pendingCleanup);
+    pendingCleanupTimers.delete(userId);
   }
 
   // 2. Determine the effective cached ID: use caller's prop, or cross-check all states

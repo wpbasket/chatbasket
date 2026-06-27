@@ -31,6 +31,7 @@ jest.mock('@/lib/storage/personalStorage/profile/profile.storage', () => ({
     getProfileAvatarBlob: jest.fn(),
     storeProfileAvatarBlob: jest.fn(),
     deleteProfileAvatarBlob: jest.fn(),
+    deleteProfileAvatarsByUserId: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock fetch
@@ -47,6 +48,7 @@ import { getProfileAvatarBlob, storeProfileAvatarBlob, deleteProfileAvatarBlob }
 const mockGetProfileAvatarBlob = getProfileAvatarBlob as jest.Mock;
 const mockStoreProfileAvatarBlob = storeProfileAvatarBlob as jest.Mock;
 const mockDeleteProfileAvatarBlob = deleteProfileAvatarBlob as jest.Mock;
+const mockDeleteProfileAvatarsByUserId = (require('@/lib/storage/personalStorage/profile/profile.storage') as any).deleteProfileAvatarsByUserId as jest.Mock;
 const mockUserGet = ($personalStateUser.user as any).get as jest.Mock;
 const mockAvatarUriSet = ($personalStateUser.avatarUri as any).set as jest.Mock;
 
@@ -131,7 +133,10 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, 'old-file-id');
 
-        expect(mockDeleteProfileAvatarBlob).toHaveBeenCalled();
+        // cleanupProfileAvatar() calls deleteAvatarLocally('ME_PROFILE_AVATAR', true)
+        // with no fileId → wildcard delete branch (deleteProfileAvatarsByUserId)
+        expect(mockDeleteProfileAvatarsByUserId).toHaveBeenCalledWith('ME_PROFILE_AVATAR');
+        expect(mockDeleteProfileAvatarBlob).not.toHaveBeenCalled();
         expect(mockAvatarUriSet).toHaveBeenCalledWith(null);
         expect(mockFetch).not.toHaveBeenCalled();
     });
@@ -141,7 +146,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, 'old-file-id');
 
-        expect(mockDeleteProfileAvatarBlob).toHaveBeenCalled();
+        expect(mockDeleteProfileAvatarsByUserId).toHaveBeenCalledWith('ME_PROFILE_AVATAR');
         expect(mockAvatarUriSet).toHaveBeenCalledWith(null);
     });
 
@@ -165,7 +170,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, 'same-id');
 
-        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg\?cb=\d+$/));
+        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg$/));
         expect(mockStoreProfileAvatarBlob).toHaveBeenCalled();
         expect(mockAvatarUriSet).toHaveBeenCalledWith(expect.stringMatching(/^idb:\/\/ME_PROFILE_AVATAR\?t=\d+$/));
     });
@@ -179,7 +184,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, 'old-id');
 
-        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg\?cb=\d+$/));
+        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg$/));
         expect(mockStoreProfileAvatarBlob).toHaveBeenCalled();
         expect(mockAvatarUriSet).toHaveBeenCalledWith(expect.stringMatching(/^idb:\/\/ME_PROFILE_AVATAR\?t=\d+$/));
     });
@@ -207,7 +212,7 @@ describe('syncProfileAvatar', () => {
 
         await syncProfileAvatar(profile as any, null);
 
-        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg\?cb=\d+$/));
+        expect(mockFetch).toHaveBeenCalledWith(expect.stringMatching(/avatar\.jpg$/));
         expect(mockAvatarUriSet).toHaveBeenCalledWith(expect.stringMatching(/^idb:\/\/ME_PROFILE_AVATAR\?t=\d+$/));
     });
 

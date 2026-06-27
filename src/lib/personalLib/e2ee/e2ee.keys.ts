@@ -90,7 +90,7 @@ let webKeystorePromise: Promise<AppStorage<E2EEKeystoreSchema>> | null = null;
 function getWebKeystore(): Promise<AppStorage<E2EEKeystoreSchema>> {
     if (!webKeystorePromise) {
         webKeystorePromise = import('@/lib/storage/storage.wrapper').then((m) =>
-            m.AppStorage.createSecure<E2EEKeystoreSchema>('secure-e2ee-storage'),
+            m.AppStorage.createSecure<E2EEKeystoreSchema>('secure-e2ee-storage', { webBackend: 'indexeddb' }),
         );
     }
     return webKeystorePromise;

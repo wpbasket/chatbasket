@@ -13,7 +13,7 @@ let mmkv: AppStorage<PersonalUserSchema> | null = null;
 
 const getStorage = async (): Promise<AppStorage<PersonalUserSchema>> => {
   if (!mmkv) {
-    mmkv = await AppStorage.createSecure<PersonalUserSchema>('personal-user');
+    mmkv = await AppStorage.createSecure<PersonalUserSchema>('personal-user', { webBackend: 'indexeddb' });
   }
   return mmkv;
 };
@@ -52,7 +52,7 @@ export const PersonalStorageRemoveUser = async (): Promise<void> => {
  * Called during logout + logged-out boot safety cleanup.
  */
 export const clearProfileStorage = async (): Promise<void> => {
-  // Profile AppStorage scope (Native MMKV / Web AsyncStorage)
+  // Profile AppStorage scope (Native MMKV / Web IndexedDB)
   try {
     const storage = await getStorage();
     await storage.clearAll();
