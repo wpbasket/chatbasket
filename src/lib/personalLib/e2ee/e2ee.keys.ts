@@ -1,6 +1,6 @@
 // lib/personalLib/e2ee/e2ee.keys.ts
 //
-// E2EE identity keypair lifecycle (native + web parity — except key generation).
+// E2EE identity keypair lifecycle (native + web parity).
 //
 // - Private key lives ONLY on this device:
 //   - Native: Expo Secure Store (hardware-backed keychain/keystore).
@@ -52,9 +52,9 @@ function isPrimaryDevice(): boolean {
     return authState.isPrimary.peek() === true;
 }
 
-// In-session primary promotion watcher: a device that skipped generation
-// because it was secondary (or status was unknown) generates its keypair the
-// moment it becomes primary (settings → setCentralDevice, or the device-status
+// In-session primary promotion watcher: handles key initialization/retry if
+// E2EE keys were not successfully initialized previously and the device status
+// changes to primary (settings → setCentralDevice, or the device-status
 // refresh resolving after hydration). Started lazily, once per app lifecycle.
 let primaryWatchStarted = false;
 
@@ -206,11 +206,8 @@ let keyLoadInFlight: Promise<void> | null = null;
 /**
  * Initializes the device identity keypair (native and web alike).
  *
- * Loads the keypair from the platform keystore. When none exists:
- * - PRIMARY device: generates + persists a new one (first launch / promotion).
- * - Secondary or unknown-status device: never generates — it waits for an
- *   in-session promotion (watcher) or the Phase 2 WebRTC key sync
- *   (`importIdentityKeypair`).
+ * Loads the keypair from the platform keystore. When none exists, a new keypair
+ * is generated and persisted (for both primary and secondary devices).
  * Then schedules public-key upload in the background (retried until confirmed).
  *
  * Never throws — hydration must not be blocked by E2EE setup failures.
@@ -306,8 +303,8 @@ export async function importIdentityKeypair(privateKey: string, publicKey: strin
 /**
  * Uploads the public key to the backend unless already confirmed uploaded.
  * Safe to call repeatedly; failures are retried on the next launch.
- * Primary-gated: a device demoted before its upload was confirmed must never
- * overwrite the key registered by the current primary device.
+ * Device-specific: each device uploads its public key for its specific session,
+ * enabling multi-device E2EE support.
  */
 export async function uploadPublicKeyIfNeeded(): Promise<void> {
     if (!isKnownPlatform || !myPublicKey) return;

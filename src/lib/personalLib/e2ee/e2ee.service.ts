@@ -14,12 +14,11 @@
 //   persisted plaintext copy (written by the outbox promotion path) is
 //   restored when it exists — e.g. on history reloads after a page refresh —
 //   otherwise generic failed placeholder is shown (other devices, Phase 1 limitation).
-// - Web parity (until Phase 2): web runs the SAME pipeline as native — registry
-//   sync, text/media encrypt + decrypt, fail-closed placeholders. Key GENERATION is
-//   primary-device-only on both platforms (`authState.isPrimary`): secondary/
-//   unknown devices hold no keys until promotion or the Phase 2 key sync, and
-//   degrade gracefully exactly like a key-less native device. Only the media
-//   byte source differs (IndexedDB blobs instead of file:// URIs).
+// - Web parity: web runs the SAME pipeline as native — registry sync, text/media
+//   encrypt + decrypt, fail-closed placeholders. All devices (both primary and
+//   secondary) generate their own keypair, and messages are encrypted for all
+//   registered device keys. Only the media byte source differs (IndexedDB blobs
+//   instead of file:// URIs).
 
 import { Platform } from 'react-native';
 import mime from 'react-native-mime-types';
