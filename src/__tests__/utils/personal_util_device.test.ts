@@ -1,7 +1,8 @@
 import { PersonalUtilRefreshDeviceStatus } from '@/utils/personalUtils/personal.util.device';
 import { commonAuthApi } from '@/lib/commonLib/authApi/common.api.auth';
 import { PersonalStorageSetDeviceStatus } from '@/lib/storage/personalStorage/personal.storage.device';
-import { setStoredKeysRevision } from '@/lib/storage/commonStorage/storage.auth';
+import { setStoredKeysRevision, setStoredPrimaryKey } from '@/lib/storage/commonStorage/storage.auth';
+import { authState } from '@/state/auth/state.auth';
 import { getUserKeysRevision, setUserKeys, getUserKeys } from '@/lib/storage/personalStorage/chat/chat.storage';
 import { PersonalProfileApi } from '@/lib/personalLib/profileApi/personal.api.profile';
 
@@ -17,6 +18,15 @@ jest.mock('@/lib/storage/personalStorage/personal.storage.device', () => ({
 
 jest.mock('@/lib/storage/commonStorage/storage.auth', () => ({
     setStoredKeysRevision: jest.fn(),
+    setStoredPrimaryKey: jest.fn(),
+}));
+
+jest.mock('@/state/auth/state.auth', () => ({
+    authState: {
+        primaryKey: {
+            peek: jest.fn(),
+        },
+    },
 }));
 
 const mockGetUserKeys = jest.fn();
@@ -144,5 +154,37 @@ describe('PersonalUtilRefreshDeviceStatus E2EE keys sync at startup', () => {
 
         expect(PersonalProfileApi.getE2EEKey).not.toHaveBeenCalled();
         expect(setUserKeys).not.toHaveBeenCalled();
+    });
+
+    it('syncs primaryKey if it differs from local authState', async () => {
+        (commonAuthApi.getMe as jest.Mock).mockResolvedValue({
+            userId: 'user-7',
+            isPrimary: false,
+            primaryDeviceName: 'Primary',
+            keys_revision: 5,
+            primaryKey: 'new-primary-key',
+        });
+        (authState.primaryKey.peek as jest.Mock).mockReturnValue('old-primary-key');
+        (getUserKeysRevision as jest.Mock).mockResolvedValue(5);
+
+        await PersonalUtilRefreshDeviceStatus();
+
+        expect(setStoredPrimaryKey).toHaveBeenCalledWith('new-primary-key');
+    });
+
+    it('does not sync primaryKey if it matches local authState', async () => {
+        (commonAuthApi.getMe as jest.Mock).mockResolvedValue({
+            userId: 'user-8',
+            isPrimary: false,
+            primaryDeviceName: 'Primary',
+            keys_revision: 5,
+            primaryKey: 'same-primary-key',
+        });
+        (authState.primaryKey.peek as jest.Mock).mockReturnValue('same-primary-key');
+        (getUserKeysRevision as jest.Mock).mockResolvedValue(5);
+
+        await PersonalUtilRefreshDeviceStatus();
+
+        expect(setStoredPrimaryKey).not.toHaveBeenCalled();
     });
 });

@@ -37,6 +37,7 @@ jest.mock('@/state/auth/state.auth', () => ({
     isLoggedIn: mockCell('isLoggedIn'),
     isSentOtp: mockCell('isSentOtp'),
     keys_revision: mockCell('keys_revision'),
+    primaryKey: mockCell('primaryKey'),
     set: jest.fn((value: Record<string, any>) => Object.assign(mockAuthValues, value)),
   },
 }));

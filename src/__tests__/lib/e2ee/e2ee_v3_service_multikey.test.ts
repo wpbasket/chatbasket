@@ -41,6 +41,7 @@ jest.mock('@/lib/storage/personalStorage/chat/chat.storage', () => ({
         updated_at: 'now',
     }))),
     getUserKeysRevision: jest.fn(async (userId: string) => mockRegistry.get(userId)?.revision || 0),
+    getMessagesByIds: jest.fn(async () => []),
     setUserKeys: jest.fn(async (userId: string, keys: Array<{ device_key: string; keys_revision: number }>, revision: number) => {
         mockRegistry.set(userId, { keys: keys.map(k => k.device_key), revision });
     }),
@@ -187,6 +188,29 @@ describe('E2EE V3 service multi-device envelopes', () => {
         expect(textChat.last_message_content).toBe('preview text');
         expect(fileChat.last_message_content).toBe('receipt.pdf');
         expect(badChat.last_message_content).toBe(E2EE_FAILED_TO_LOAD_TEXT);
+    });
+
+    it('processIncomingChats automatically heals failed previews using local plaintext storage', async () => {
+        const ChatStorage = require('@/lib/storage/personalStorage/chat/chat.storage');
+        const badChat = {
+            chat_id: 'chat-heal-test',
+            last_message_id: 'msg-heal-1',
+            last_message_type: 'text',
+            last_message_content: encryptPayloadEnvelope({ type: 'text', text: 'not for me' }, [outsider.publicKey]),
+        } as ChatEntry;
+
+        const localPlaintextMessage = makeMessage({ 
+            message_id: 'msg-heal-1', 
+            content: 'healed local plaintext', 
+            message_type: 'text' 
+        });
+        
+        ChatStorage.getMessagesByIds.mockResolvedValueOnce([localPlaintextMessage]);
+
+        await processIncomingChats([badChat]);
+
+        expect(ChatStorage.getMessagesByIds).toHaveBeenCalledWith(['msg-heal-1']);
+        expect(badChat.last_message_content).toBe('healed local plaintext');
     });
 
     it('local replay permits explicit plaintext rows while V3 rows still decrypt', async () => {

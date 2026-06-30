@@ -14,4 +14,5 @@ export const authState = observable({
   isPrimary: null as boolean | null,
   primaryDeviceName: null as string | null,
   keys_revision: null as number | null,
+  primaryKey: null as string | null,
 });

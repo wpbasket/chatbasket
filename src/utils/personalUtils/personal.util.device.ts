@@ -13,6 +13,15 @@ export async function PersonalUtilRefreshDeviceStatus() {
                 isPrimary: me.isPrimary,
                 deviceName: me.primaryDeviceName || null
             });
+            
+            // Sync primaryKey if it doesn't match local state
+            const { authState } = await import('@/state/auth/state.auth');
+            if (me.primaryKey && me.primaryKey !== authState.primaryKey.peek()) {
+                console.log('[PersonalUtilDevice] Primary key mismatch on boot. Updating local primary key...');
+                const { setStoredPrimaryKey } = await import('@/lib/storage/commonStorage/storage.auth');
+                await setStoredPrimaryKey(me.primaryKey);
+            }
+
             if (typeof me.keys_revision === 'number') {
                 const { setStoredKeysRevision } = await import('@/lib/storage/commonStorage/storage.auth');
                 await setStoredKeysRevision(me.keys_revision);

@@ -11,6 +11,9 @@ const MAPPING = {
   'list': 'list-ul',
   'plus': 'plus',
   'arrow.long.left': 'long-arrow-alt-left',
+  'sync-alt': 'sync-alt',
+  'check-circle': 'check-circle',
+  'exclamation-circle': 'exclamation-circle',
 } as const;
 
 export type FontAwesome5IconName = keyof typeof MAPPING;

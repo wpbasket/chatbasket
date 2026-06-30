@@ -290,3 +290,21 @@ export interface GetSyncActionsQuery {
 export interface AcknowledgeSyncActionPayload {
     action_id: string;
 }
+
+export interface HistorySyncRequestPayload {
+    chats_cipher: string;
+    used_primary_key: string;
+}
+
+export interface HistorySyncResponse {
+    request_id: string;
+}
+
+export interface HistorySyncUploadPayload {
+    request_id: string;
+    payload_cipher: string;
+}
+
+export interface HistorySyncDownloadResponse {
+    payload_cipher: string;
+}

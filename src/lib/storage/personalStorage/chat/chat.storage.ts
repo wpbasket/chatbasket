@@ -119,3 +119,9 @@ export const cleanupMessageMedia: typeof import('./chat.storage.native').cleanup
     (...args: any[]) => (ChatStorageImpl.cleanupMessageMedia as any)(...args);
 export const cleanupOrphanedMedia: typeof import('./chat.storage.native').cleanupOrphanedMedia =
     (...args: any[]) => (ChatStorageImpl.cleanupOrphanedMedia as any)(...args);
+
+export const getHistorySyncHaveIds: typeof import('./chat.storage.native').getHistorySyncHaveIds =
+    (...args: any[]) => (ChatStorageImpl.getHistorySyncHaveIds as any)(...args);
+export const getHistorySyncPayload: typeof import('./chat.storage.native').getHistorySyncPayload =
+    (...args: any[]) => (ChatStorageImpl.getHistorySyncPayload as any)(...args);
+

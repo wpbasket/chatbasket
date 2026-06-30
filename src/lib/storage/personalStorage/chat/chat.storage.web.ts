@@ -1,5 +1,4 @@
 // lib/storage/personalStorage/chat/chat.storage.web.ts
-
 import type { ChatEntry, MessageEntry } from '@/lib/personalLib';
 import type { LocalChatEntry, LocalMessageEntry } from './chat.storage.schema';
 import { normalizeChatEntries } from './chat.storage.normalize';
@@ -43,21 +42,31 @@ async function getOrCreateKey(): Promise<CryptoKey> {
         ['encrypt', 'decrypt']
     );
 
-    // Step 3: Store key in a fresh read-write transaction
-    await new Promise<void>((resolve, reject) => {
+    // Step 3: Store key in a fresh read-write transaction (double-check before put to avoid overwriting a key written concurrently by another tab)
+    const finalKey = await new Promise<CryptoKey>((resolve, reject) => {
         const request = indexedDB.open(VAULT_DB_NAME, 1);
         request.onsuccess = () => {
             const db = request.result;
             const tx = db.transaction(VAULT_STORE, 'readwrite');
-            const putReq = tx.objectStore(VAULT_STORE).put(key, VAULT_KEY_NAME);
-            putReq.onsuccess = () => resolve();
-            putReq.onerror = () => reject(putReq.error);
+            const store = tx.objectStore(VAULT_STORE);
+
+            const getReq = store.get(VAULT_KEY_NAME);
+            getReq.onsuccess = () => {
+                if (getReq.result) {
+                    resolve(getReq.result as CryptoKey);
+                } else {
+                    const putReq = store.put(key, VAULT_KEY_NAME);
+                    putReq.onsuccess = () => resolve(key);
+                    putReq.onerror = () => reject(putReq.error);
+                }
+            };
+            getReq.onerror = () => reject(getReq.error);
         };
         request.onerror = () => reject(request.error);
     });
 
-    cryptoKey = key;
-    return key;
+    cryptoKey = finalKey;
+    return finalKey;
 }
 
 async function encrypt(data: string): Promise<ArrayBuffer> {
@@ -501,10 +510,11 @@ export async function getMessagesByChat(chatId: string, limit: number = 50, offs
 
     // Decrypt, filter deleted, sort by created_at DESC, paginate
     const decrypted = await Promise.all(records.map(r => decryptEntry(r)));
-    return decrypted
+    const sorted = decrypted
         .filter(m => !m.deleted_for_me)
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .slice(offset, offset + limit);
+    return sorted;
 }
 
 async function updateMessageStatusUnlocked(messageId: string, updates: Partial<LocalMessageEntry>): Promise<void> {
@@ -1064,4 +1074,56 @@ export async function cleanupOrphanedMedia(): Promise<void> {
     } catch (err) {
         console.warn('[ChatStorage] Error during orphaned media blob cleanup', err);
     }
+}
+
+export async function getHistorySyncHaveIds(): Promise<Record<string, string[]>> {
+    const db = await openDataDb();
+    const tx = db.transaction(MESSAGES_STORE, 'readonly');
+    const store = tx.objectStore(MESSAGES_STORE);
+    const all = await idbGetAll<any>(store);
+
+    const result: Record<string, string[]> = {};
+    for (const record of all) {
+        if (!record.deleted_for_me) {
+            try {
+                const entry = await decryptEntry(record);
+                if (entry.message_type === 'text' || entry.message_type === 'unsent') {
+                    if (!result[entry.chat_id]) {
+                        result[entry.chat_id] = [];
+                    }
+                    result[entry.chat_id].push(entry.message_id);
+                }
+            } catch { /* ignore */ }
+        }
+    }
+    return result;
+}
+
+export async function getHistorySyncPayload(chatId: string, haveIds: string[]): Promise<MessageEntry[]> {
+    const db = await openDataDb();
+    const tx = db.transaction(MESSAGES_STORE, 'readonly');
+    const index = tx.objectStore(MESSAGES_STORE).index('idx_chat_id');
+    const records = await idbGetAll<any>(index, chatId);
+
+    const haveSet = new Set(haveIds);
+    const results: MessageEntry[] = [];
+    for (const record of records) {
+        if (!record.deleted_for_me && !haveSet.has(record.message_id)) {
+            try {
+                const entry = await decryptEntry(record);
+                if (entry.message_type === 'text' || entry.message_type === 'unsent') {
+                    if (!entry.is_from_me || entry.status === 'sent' || entry.status === 'delivered' || entry.status === 'read') {
+                        results.push({
+                            ...entry,
+                            content: entry.content || '',
+                            expires_at: entry.expires_at || '',
+                        } as MessageEntry);
+                    }
+                }
+            } catch (err) {
+                console.error('[ChatStorage:Web] getHistorySyncPayload decrypt failed for message:', record.message_id, err);
+            }
+        }
+    }
+    return results;
 }

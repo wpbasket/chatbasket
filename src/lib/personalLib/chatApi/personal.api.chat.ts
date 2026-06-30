@@ -28,6 +28,10 @@ import type {
     ConfirmChatUploadPayload,
     ChatEntry,
     MessageEntry,
+    HistorySyncRequestPayload,
+    HistorySyncResponse,
+    HistorySyncUploadPayload,
+    HistorySyncDownloadResponse,
 } from "@/lib/personalLib";
 
 /** POST /personal/chat/check-eligibility */
@@ -132,6 +136,21 @@ async function getPendingMessages(query: { limit?: number }): Promise<GetMessage
     return apiClient.get<GetMessagesResponse>(`/personal/chat/pending?${params.toString()}`);
 }
 
+/** POST /personal/chat/history-sync/request */
+async function requestHistorySync(payload: HistorySyncRequestPayload): Promise<HistorySyncResponse> {
+    return apiClient.post<HistorySyncResponse>('/personal/chat/history-sync/request', payload);
+}
+
+/** POST /personal/chat/history-sync/upload */
+async function uploadHistorySync(payload: HistorySyncUploadPayload): Promise<void> {
+    return apiClient.post<void>('/personal/chat/history-sync/upload', payload);
+}
+
+/** GET /personal/chat/history-sync?request_id= */
+async function downloadHistorySync(request_id: string): Promise<HistorySyncDownloadResponse> {
+    const params = new URLSearchParams({ request_id });
+    return apiClient.get<HistorySyncDownloadResponse>(`/personal/chat/history-sync?${params.toString()}`);
+}
 
 export const PersonalChatApi = {
     checkEligibility,
@@ -150,4 +169,7 @@ export const PersonalChatApi = {
     getSyncActions,
     acknowledgeSyncAction,
     getPendingMessages,
+    requestHistorySync,
+    uploadHistorySync,
+    downloadHistorySync,
 };

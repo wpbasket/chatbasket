@@ -16,6 +16,7 @@ type AuthSchema = {
   user: ProfileResponse;
   keys_revision: number;
   own_keys_initialized: boolean;
+  primaryKey?: string;
 };
 
 let authStorage: AppStorage<AuthSchema> | null = null;
@@ -51,8 +52,8 @@ const getStorage = (): AppStorage<AuthSchema> => {
   return authStorage;
 };
 
-export const setSession = async (session: { sessionId: string; userId: string; sessionExpiry: string; keys_revision?: number; user?: ProfileResponse | null }) => {
-  const { sessionId, userId, sessionExpiry, user, keys_revision } = session;
+export const setSession = async (session: { sessionId: string; userId: string; sessionExpiry: string; keys_revision?: number; primaryKey?: string; user?: ProfileResponse | null }) => {
+  const { sessionId, userId, sessionExpiry, user, keys_revision, primaryKey } = session;
   const storage = getStorage();
 
   if (Platform.OS === 'web') {
@@ -62,6 +63,7 @@ export const setSession = async (session: { sessionId: string; userId: string; s
       sessionExpiry,
       keys_revision: keys_revision ?? 0,
       own_keys_initialized: false,
+      primaryKey: primaryKey || undefined
     } as any);
   } else {
     // Native: Store all session data atomically
@@ -71,6 +73,7 @@ export const setSession = async (session: { sessionId: string; userId: string; s
       sessionExpiry,
       keys_revision: keys_revision ?? 0,
       own_keys_initialized: false,
+      primaryKey: primaryKey || undefined,
       user: user || undefined
     } as any);
   }
@@ -80,6 +83,7 @@ export const setSession = async (session: { sessionId: string; userId: string; s
   authState.userId.set(userId || '');
   authState.sessionExpiry.set(sessionExpiry);
   authState.keys_revision.set(keys_revision ?? 0);
+  authState.primaryKey.set(primaryKey || null);
   authState.isLoggedIn.set(true);
   authState.isSentOtp.set(false);
 
@@ -100,7 +104,7 @@ export const getSession = async () => {
 
   if (Platform.OS === 'web') {
     // Web: Only retrieve session expiry, user, and userId from storage
-    const data = await storage.getMany(['sessionExpiry', 'user', 'keys_revision', 'own_keys_initialized', 'userId']);
+    const data = await storage.getMany(['sessionExpiry', 'user', 'keys_revision', 'own_keys_initialized', 'userId', 'primaryKey']);
     return {
       sessionId: '',
       userId: data.userId || '',
@@ -108,10 +112,11 @@ export const getSession = async () => {
       user: data.user || null,
       keys_revision: data.keys_revision ?? 0,
       own_keys_initialized: data.own_keys_initialized === true,
+      primaryKey: data.primaryKey || null,
     };
   } else {
     // Native: Retrieve all session data
-    const data = await storage.getMany(['sessionId', 'userId', 'sessionExpiry', 'user', 'keys_revision', 'own_keys_initialized']);
+    const data = await storage.getMany(['sessionId', 'userId', 'sessionExpiry', 'user', 'keys_revision', 'own_keys_initialized', 'primaryKey']);
     return {
       sessionId: data.sessionId || '',
       userId: data.userId || '',
@@ -119,6 +124,7 @@ export const getSession = async () => {
       user: data.user || null,
       keys_revision: data.keys_revision ?? 0,
       own_keys_initialized: data.own_keys_initialized === true,
+      primaryKey: data.primaryKey || null,
     };
   }
 };
@@ -223,6 +229,7 @@ export const resetAuthStateAfterLogout = () => {
     isPrimary: null,
     primaryDeviceName: null,
     keys_revision: null,
+    primaryKey: null,
   });
 
   // Reset App Mode to Public
@@ -263,6 +270,7 @@ export const restoreAuthState = async (): Promise<void> => {
         authState.sessionExpiry.set(session.sessionExpiry);
         authState.user.set(session.user);
         authState.keys_revision.set(session.keys_revision ?? 0);
+        authState.primaryKey.set(session.primaryKey || null);
         authState.isLoggedIn.set(true);
         await PersonalStorageGetDeviceStatus();
       } else {
@@ -272,6 +280,7 @@ export const restoreAuthState = async (): Promise<void> => {
           authState.sessionExpiry.set(session.sessionExpiry);
           authState.user.set(session.user);
           authState.keys_revision.set(session.keys_revision ?? 0);
+          authState.primaryKey.set(session.primaryKey || null);
           authState.isLoggedIn.set(true);
           await PersonalStorageGetDeviceStatus();
         } else {
@@ -304,7 +313,8 @@ export const getCurrentSessionInfo = () => {
     sessionExpiry: authState.sessionExpiry.get(),
     user: authState.user.get(),
     isLoggedIn: authState.isLoggedIn.get(),
-    isSentOtp: authState.isSentOtp.get()
+    isSentOtp: authState.isSentOtp.get(),
+    primaryKey: authState.primaryKey.get()
   };
 };
 
@@ -316,6 +326,7 @@ export const clearAuthState = () => {
   authState.user.set(null);
   authState.isSentOtp.set(false);
   authState.keys_revision.set(null);
+  authState.primaryKey.set(null);
 };
 
 export const setUserInStorage = async (): Promise<void> => {
@@ -341,4 +352,14 @@ export const isOwnKeysInitialized = async (): Promise<boolean> => {
 export const setOwnKeysInitialized = async (value: boolean): Promise<void> => {
   const storage = getStorage();
   await storage.set('own_keys_initialized' as any, value as any);
+};
+
+export const setStoredPrimaryKey = async (primaryKey: string | null): Promise<void> => {
+  authState.primaryKey.set(primaryKey);
+  const storage = getStorage();
+  if (primaryKey) {
+    await storage.set('primaryKey' as any, primaryKey as any);
+  } else {
+    await storage.remove('primaryKey' as any);
+  }
 };

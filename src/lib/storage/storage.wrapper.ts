@@ -58,21 +58,31 @@ class WebVault {
             ['encrypt', 'decrypt']
         );
 
-        // Step 3: Store key in a fresh read-write transaction
-        await new Promise<void>((resolve, reject) => {
+        // Step 3: Store key in a fresh read-write transaction (double-check before put to avoid overwriting a key written concurrently by another tab)
+        const finalKey = await new Promise<CryptoKey>((resolve, reject) => {
             const request = indexedDB.open(this.DB_NAME, 1);
             request.onsuccess = () => {
                 const db = request.result;
                 const tx = db.transaction(this.STORE_NAME, 'readwrite');
-                const putReq = tx.objectStore(this.STORE_NAME).put(key, this.KEY_NAME);
-                putReq.onsuccess = () => resolve();
-                putReq.onerror = () => reject(putReq.error);
+                const store = tx.objectStore(this.STORE_NAME);
+
+                const getReq = store.get(this.KEY_NAME);
+                getReq.onsuccess = () => {
+                    if (getReq.result) {
+                        resolve(getReq.result as CryptoKey);
+                    } else {
+                        const putReq = store.put(key, this.KEY_NAME);
+                        putReq.onsuccess = () => resolve(key);
+                        putReq.onerror = () => reject(putReq.error);
+                    }
+                };
+                getReq.onerror = () => reject(getReq.error);
             };
             request.onerror = () => reject(request.error);
         });
 
-        this.cryptoKey = key;
-        return key;
+        this.cryptoKey = finalKey;
+        return finalKey;
     }
 
     static async encrypt(data: string): Promise<string> {
@@ -113,6 +123,7 @@ class WebVault {
 
             return new TextDecoder().decode(decryptedBuffer);
         } catch (e) {
+            console.error('[WebVault:decrypt] Failed to decrypt payload:', e);
             // If decryption fails or it's not JSON, return as-is (fallback)
             return encryptedPayload;
         }

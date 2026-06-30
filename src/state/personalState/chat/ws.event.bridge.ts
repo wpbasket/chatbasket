@@ -27,6 +27,7 @@ import {
     shouldAckE2EEInboundFailure,
     type E2EEInboundFailureReason,
 } from '@/lib/personalLib/e2ee/e2ee.service';
+import { handlePrimaryUploadRequest, processHistorySyncReady } from '@/lib/personalLib/chatApi/history.sync';
 
 // Production-safe debug logger — compiled out in release builds
 const dbg = __DEV__ ? console.log.bind(console) : () => { };
@@ -476,6 +477,22 @@ export function routeWSEvent(event: WSEvent): void {
             break;
         case 'ping_response':
             // Server acknowledged our keepalive ping — no action needed.
+            break;
+        case 'history_sync_requested':
+            if (event.payload) {
+                handlePrimaryUploadRequest(
+                    event.payload.request_id,
+                    event.payload.requester_public_key,
+                    event.payload.chats_cipher
+                ).catch(err => console.error('[WS Bridge] handlePrimaryUploadRequest FAILED:', err));
+            }
+            break;
+        case 'history_sync_ready':
+            if (event.payload && event.payload.request_id) {
+                processHistorySyncReady(event.payload.request_id).catch(err =>
+                    console.error('[WS Bridge] processHistorySyncReady FAILED:', err)
+                );
+            }
             break;
         case 'error':
             console.error(`[WS Bridge] Server reported error:`, event.error);

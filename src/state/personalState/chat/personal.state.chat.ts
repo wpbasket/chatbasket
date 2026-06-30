@@ -17,6 +17,7 @@ import {
     shouldAckE2EEInboundFailure,
     type E2EEInboundFailureReason,
 } from '@/lib/personalLib/e2ee/e2ee.service';
+import { E2EE_FAILED_TO_LOAD_TEXT } from '@/lib/personalLib/e2ee/e2ee.crypto';
 
 
 let isSyncingPending = false;
@@ -468,7 +469,8 @@ const state$ = observable({
                     // Prevent stale DB queries from overwriting in-flight memory updates
                     const lastUpdated = state$.chatsById[chatId]._count_updated_at?.peek() || 0;
                     if (lastUpdated <= queryStart) {
-                        state$.chatsById[chatId].local_message_count.set(counts[chatId] ?? 0);
+                        const newCount = counts[chatId] ?? 0;
+                        state$.chatsById[chatId].local_message_count.set(newCount);
                         state$.chatsById[chatId]._count_updated_at.set(Date.now());
                     }
                 }
@@ -718,7 +720,41 @@ const chatActions = {
             chat.offset.set(mergedList.length);
 
             // Update local_message_count to reflect actual merged state
-            $chatListState.incrementMessageCount(chatId, mergedList.length - ($chatListState.chatsById[chatId]?.local_message_count.peek() ?? 0));
+            const beforeCount = $chatListState.chatsById[chatId]?.local_message_count.peek() ?? 0;
+            const diff = mergedList.length - beforeCount;
+            $chatListState.incrementMessageCount(chatId, diff);
+
+            // [Phase D]: Update Chat List previews for History Sync and setMessages flows
+            const currentEntry = $chatListState.chatsById[chatId]?.peek();
+            const validEntries = ackEligibleEntries.filter(e => !deletedSet.has(e.message_id));
+            if (currentEntry && validEntries.length > 0) {
+                const sortedSynced = [...validEntries].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                const lastMsg = sortedSynced[sortedSynced.length - 1];
+
+                const serverPreview = currentEntry.last_message_content;
+                const candidatePreview = getPreviewText(lastMsg);
+                
+                const isBlankedPreview = serverPreview === null || serverPreview === '' || serverPreview === E2EE_FAILED_TO_LOAD_TEXT;
+                const healsBlankedPreview = isBlankedPreview && !!candidatePreview && candidatePreview !== E2EE_FAILED_TO_LOAD_TEXT;
+                
+                const isNewer = !currentEntry.last_message_created_at || (new Date(lastMsg.created_at).getTime() > new Date(currentEntry.last_message_created_at).getTime());
+                
+                if (isNewer || healsBlankedPreview) {
+                    const currentUserId = authState.userId.peek();
+                    $chatListState.upsertChat({
+                        ...currentEntry,
+                        last_message_content: candidatePreview,
+                        last_message_created_at: lastMsg.created_at,
+                        last_message_type: lastMsg.message_type,
+                        last_message_is_from_me: lastMsg.is_from_me,
+                        last_message_status: lastMsg.status ?? 'sent',
+                        last_message_sender_id: lastMsg.is_from_me ? (currentUserId || null) : currentEntry.other_user_id,
+                        last_message_id: lastMsg.message_id,
+                        last_message_is_unsent: lastMsg.message_type === 'unsent',
+                        updated_at: lastMsg.created_at,
+                    });
+                }
+            }
         });
 
         // ACK safe messages immediately; pending media is skipped by the local_uri guard.
@@ -1640,18 +1676,19 @@ const chatActions = {
 
                         const serverPreview = currentEntry.last_message_content;
                         const candidatePreview = getPreviewText(lastMsg);
-                        // E2EE: a blank/absent preview can be HEALED by the freshly
+                        // E2EE: a blank/absent (or failed) preview can be HEALED by the freshly
                         // decrypted pending message. On first open `setChats` runs
                         // BEFORE pending sync, so the chat-list pass had no local
                         // plaintext row to restore an encrypted preview from and
-                        // blanked it to "" — without this, the blank guard below
+                        // blanked it to "" (or left it as E2EE_FAILED_TO_LOAD_TEXT) 
+                        // — without this, the blank guard below
                         // (and the strict `isNewer` check: the blanked server
                         // preview references the SAME pending message, equal
                         // timestamps) kept the home screen empty until a manual
                         // refresh. `getPreviewText` is display-safe (never cipher).
-                        const healsBlankedPreview =
-                            (serverPreview === null || serverPreview === '') && !!candidatePreview;
-                        if ((serverPreview === null || serverPreview === '') && !healsBlankedPreview) {
+                        const isBlankedPreview = serverPreview === null || serverPreview === '' || serverPreview === E2EE_FAILED_TO_LOAD_TEXT;
+                        const healsBlankedPreview = isBlankedPreview && !!candidatePreview && candidatePreview !== E2EE_FAILED_TO_LOAD_TEXT;
+                        if (isBlankedPreview && !healsBlankedPreview) {
                             continue; // Phase D fix: was `return` which broke the entire for loop
                         }
 

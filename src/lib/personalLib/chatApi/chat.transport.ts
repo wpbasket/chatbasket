@@ -113,4 +113,7 @@ export const ChatTransport = {
     getSyncActions:          PersonalChatApi.getSyncActions,
     checkEligibility:        PersonalChatApi.checkEligibility,
     createChat:              PersonalChatApi.createChat,
+    requestHistorySync:      PersonalChatApi.requestHistorySync,
+    uploadHistorySync:       PersonalChatApi.uploadHistorySync,
+    downloadHistorySync:     PersonalChatApi.downloadHistorySync,
 };

@@ -41,6 +41,7 @@ import {
 } from './e2ee.crypto';
 import { getMyPrivateKey, getMyPublicKey, requireStrictE2EEReadyForSend, whenKeyInitSettled } from './e2ee.keys';
 import { e2eeLog, keyFp } from './e2ee.log';
+import { getPreviewText } from '@/utils/personalUtils/util.chatPreview';
 
 const TAG = '[E2EE]';
 // Defensive: Platform is undefined in the bare Jest environment — treat
@@ -630,7 +631,6 @@ export async function processIncomingMessages(
 
         if (msg.message_type === 'text' && options?.allowLocalPlaintext === true) {
             stats.plaintext++;
-            e2eeLog(TAG, 'Ingress: local plaintext replay (allowed)', { messageId: msg.message_id });
             continue;
         }
 
@@ -679,7 +679,8 @@ export async function processIncomingChats(chats: ChatEntry[]): Promise<ChatEntr
     if (!isKnownPlatform || chats.length === 0) return chats;
     await whenKeyInitSettled();
 
-    const stats = { decrypted: 0, blanked: 0 };
+    const stats = { decrypted: 0, blanked: 0, healed: 0 };
+    const failedChats: ChatEntry[] = [];
 
     for (const chat of chats) {
         if (isV3Envelope(chat.last_message_content)) {
@@ -690,18 +691,44 @@ export async function processIncomingChats(chats: ChatEntry[]): Promise<ChatEntr
                 stats.decrypted++;
                 e2eeLog(TAG, 'Chat preview: decrypted', { chatId: chat.chat_id, previewType: payload.type });
             } catch (err) {
-                markChatPreviewAsFailed(chat);
+                failedChats.push(chat);
                 stats.blanked++;
-                e2eeLog(TAG, 'Chat preview: decrypt FAILED', { chatId: chat.chat_id, error: err instanceof Error ? err.message : String(err) });
-                console.warn(`${TAG} Failed to decrypt v3 preview for chat ${chat.chat_id}`, err);
+                e2eeLog(TAG, 'Chat preview: decrypt FAILED (queueing for heal check)', { chatId: chat.chat_id, error: err instanceof Error ? err.message : String(err) });
             }
             continue;
         }
 
         if (chat.last_message_content) {
-            e2eeLog(TAG, 'Chat preview: non-V3 content fail-closed', { chatId: chat.chat_id });
-            markChatPreviewAsFailed(chat);
+            e2eeLog(TAG, 'Chat preview: non-V3 content fail-closed (queueing for heal check)', { chatId: chat.chat_id });
+            failedChats.push(chat);
             stats.blanked++;
+        }
+    }
+
+    // HEAL PREVIEWS USING LOCAL HISTORY SYNC DATA
+    // If decryption failed, check if the message payload exists in local storage as plaintext!
+    if (failedChats.length > 0) {
+        const messageIdsToHeal = failedChats.map(c => c.last_message_id).filter((id): id is string => !!id);
+        if (messageIdsToHeal.length > 0 && typeof ChatStorage.getMessagesByIds === 'function') {
+            try {
+                const localMessages = await ChatStorage.getMessagesByIds(messageIdsToHeal);
+                const localMsgMap = new Map(localMessages.map(m => [m.message_id, m]));
+                for (const chat of failedChats) {
+                    const localMsg = chat.last_message_id ? localMsgMap.get(chat.last_message_id) : null;
+                    if (localMsg) {
+                        chat.last_message_content = getPreviewText(localMsg as any);
+                        stats.healed++;
+                        e2eeLog(TAG, 'Chat preview: HEALED from local storage', { chatId: chat.chat_id });
+                    } else {
+                        markChatPreviewAsFailed(chat);
+                    }
+                }
+            } catch (err) {
+                console.error(`${TAG} Failed to fetch local messages for preview heal:`, err);
+                for (const chat of failedChats) markChatPreviewAsFailed(chat);
+            }
+        } else {
+            for (const chat of failedChats) markChatPreviewAsFailed(chat);
         }
     }
 

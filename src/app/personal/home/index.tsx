@@ -9,9 +9,12 @@ import { appMode$, setAppMode } from '@/state/appMode/state.appMode';
 import { $chatListState, $chatMessagesState } from '@/state/personalState/chat/personal.state.chat';
 import { $contactsState, type ContactEntry } from '@/state/personalState/contacts/personal.state.contacts';
 import { $personalStateUser } from '@/state/personalState/user/personal.state.user';
+import { authState } from '@/state/auth/state.auth';
 import { ChatTransport } from '@/lib/personalLib/chatApi/chat.transport';
 import { getChatErrorMessage } from '@/utils/personalUtils/util.chatErrors';
 import { showAlert, showConfirmDialog, showControllersModal, runWithLoading } from '@/utils/commonUtils/util.modal';
+import { initiateHistorySync, historySyncStatus$ } from '@/lib/personalLib/chatApi/history.sync';
+import { type FontAwesome5IconName } from '@/components/ui/fonts/fontAwesome5';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { PersonalStorageGetUser } from '@/lib/storage/personalStorage/profile/personal.storage.user';
@@ -140,6 +143,9 @@ const PersonalHome = React.memo(() => {
       const response = await ChatTransport.getUserChats();
       await $chatListState.setChats(response?.chats ?? []);
       $chatListState.markFetched();
+      setTimeout(() => {
+        void initiateHistorySync();
+      }, 5000);
     } catch (err: any) {
       $chatListState.setError(getChatErrorMessage(err, 'Could not load conversations.'));
     } finally {
@@ -191,6 +197,38 @@ const PersonalHome = React.memo(() => {
 
       {/* New Chat Section */}
       <ThemedView style={styles.newChatSection}>
+        {/* Sync Button */}
+        <Memo>
+          {() => {
+            if (authState.isPrimary.get() !== false) {
+              return null;
+            }
+            const syncStatus = historySyncStatus$.get();
+            let syncColor = '#8e8e93'; // default / idle / syncing
+            let iconName: FontAwesome5IconName = 'sync-alt';
+            if (syncStatus === 'success') {
+              syncColor = '#34C759'; // green
+              iconName = 'check-circle';
+            } else if (syncStatus === 'failed') {
+              syncColor = '#FF3B30'; // red
+              iconName = 'exclamation-circle';
+            }
+
+            return (
+              <AppButton
+                label={syncStatus === 'syncing' ? "Syncing..." : "Sync"}
+                icon={<FontAwesome5Icon name={iconName} size={14} color={syncColor} />}
+                onPress={() => initiateHistorySync(true)}
+                onPressIn={handlePressIn}
+                pressedOpacity={0.1}
+                textType="default"
+                labelStyle={[styles.newChatText, { color: syncColor }]}
+                style={[styles.newChatButton, { marginRight: 10 }]}
+              />
+            );
+          }}
+        </Memo>
+
         <AppButton
           label="New Chat"
           icon={<FontAwesome5Icon name="plus" size={14} />}
@@ -303,8 +341,11 @@ const styles = StyleSheet.create((theme, rt) => ({
     fontWeight: 'bold',
   },
   newChatSection: {
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   newChatButton: {
     alignSelf: 'flex-end',

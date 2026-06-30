@@ -350,7 +350,8 @@ export async function getMessagesByChat(chatId: string, limit: number = 50, offs
          ORDER BY created_at DESC LIMIT ? OFFSET ?`,
         [chatId, limit, offset]
     );
-    return (rows || []).map(sqliteRowToLocal);
+    const mapped = (rows || []).map(sqliteRowToLocal);
+    return mapped;
 }
 
 export async function updateMessageStatus(messageId: string, updates: Partial<LocalMessageEntry>): Promise<void> {
@@ -889,3 +890,44 @@ function cleanupOrphanedFiles(activeUris: string[]): void {
         console.warn('[ChatStorage:Native]', 'Orphan cleanup failed:', err);
     }
 }
+
+export async function getHistorySyncHaveIds(): Promise<Record<string, string[]>> {
+    const database = getDb();
+    const rows = await database.getAllAsync<any>(
+        `SELECT chat_id, message_id FROM messages WHERE message_type IN ('text', 'unsent') AND deleted_for_me = 0`
+    );
+    const result: Record<string, string[]> = {};
+    for (const row of rows) {
+        if (!result[row.chat_id]) {
+            result[row.chat_id] = [];
+        }
+        result[row.chat_id].push(row.message_id);
+    }
+    return result;
+}
+
+export async function getHistorySyncPayload(chatId: string, haveIds: string[]): Promise<MessageEntry[]> {
+    const database = getDb();
+    if (haveIds.length === 0) {
+        const rows = await database.getAllAsync<any>(
+            `SELECT * FROM messages
+             WHERE chat_id = ?
+               AND message_type IN ('text', 'unsent')
+               AND deleted_for_me = 0
+               AND (is_from_me = 0 OR status IN ('sent', 'delivered', 'read'))`,
+            [chatId]
+        );
+        return rows.map(r => ({ ...sqliteRowToLocal(r), content: r.content || '', expires_at: r.expires_at || '' } as MessageEntry));
+    }
+
+    const placeholders = haveIds.map(() => '?').join(',');
+    const query = `SELECT * FROM messages
+                   WHERE chat_id = ?
+                     AND message_type IN ('text', 'unsent')
+                     AND deleted_for_me = 0
+                     AND message_id NOT IN (${placeholders})
+                     AND (is_from_me = 0 OR status IN ('sent', 'delivered', 'read'))`;
+    const rows = await database.getAllAsync<any>(query, [chatId, ...haveIds]);
+    return rows.map(r => ({ ...sqliteRowToLocal(r), content: r.content || '', expires_at: r.expires_at || '' } as MessageEntry));
+}
+

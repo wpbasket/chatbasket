@@ -34,6 +34,7 @@ export interface SessionResponse {
     isPrimary: boolean;
     primaryDeviceName?: string;
     keys_revision: number;
+    primaryKey?: string;
 }
 
 export interface ResendOTPPayload {
