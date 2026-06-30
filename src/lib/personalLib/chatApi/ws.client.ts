@@ -232,13 +232,20 @@ class WSClientManager {
         if (!baseUrl) return null;
 
         // Convert http(s) to ws(s)
-        const wsBase = baseUrl
+        let wsBase = baseUrl;
+        
+        // Force WSS if the web app itself is loaded securely (fixes Opera proxy downgrades)
+        const isWeb = Platform.OS === 'web';
+        if (isWeb && typeof window !== 'undefined' && window.location.protocol === 'https:') {
+            wsBase = wsBase.replace(/^http:\/\//, 'https://');
+        }
+
+        wsBase = wsBase
             .replace(/^https:\/\//, 'wss://')
             .replace(/^http:\/\//, 'ws://')
             .replace(/\/+$/, '');
 
         // On web, cookies handle auth automatically — no need for query params.
-        const isWeb = Platform.OS === 'web';
         if (isWeb) {
             return `${wsBase}/api/personal/chat/ws`;
         }
