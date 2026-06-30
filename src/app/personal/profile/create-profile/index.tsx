@@ -61,7 +61,7 @@ export default function PersonalCreateProfile() {
     try {
       const response: any = await runWithLoading(
         () => PersonalProfileApi.createProfile({
-          name: name!,
+          name: name!.trim(),
           profile_type: profileType!,
         }),
         { message: 'Creating profile' }

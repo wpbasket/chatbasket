@@ -26,7 +26,7 @@ export const PersonalUtilAddContactById = async ({
 }: AddContactByIdOptions): Promise<CreateContactResponse> => {
   const task = () => PersonalContactApi.createContact({
     contact_user_id: contactUserId,
-    nickname,
+    nickname: nickname ? nickname.trim() : null,
   });
 
   return useLoading ? runWithLoading(task) : task();

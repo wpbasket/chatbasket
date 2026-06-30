@@ -245,8 +245,8 @@ export default function PersonalUpdateProfile() {
     try {
       const response = await runWithLoading(
         () => PersonalProfileApi.updateProfile({
-          name: name ?? undefined,
-          bio: bio ?? undefined,
+          name: name ? name.trim() : undefined,
+          bio: bio ? bio.trim() : undefined,
           profile_type: profileVisibleTo ?? undefined,
         }),
         { message: 'Updating profile' }

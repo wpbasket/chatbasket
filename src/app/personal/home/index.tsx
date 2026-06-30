@@ -45,7 +45,7 @@ const PersonalHome = React.memo(() => {
       params: {
         chat_id: chat.chat_id,
         recipient_id: chat.other_user_id,
-        recipient_name: displayName,
+        recipient_name: displayName.trim(),
       },
     });
   }, [router]);

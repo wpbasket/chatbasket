@@ -141,7 +141,7 @@ export default function ContactsScreen() {
         params: {
           chat_id: existingChat.chat_id,
           recipient_id: entry.id,
-          recipient_name: entry.nickname ?? entry.name,
+          recipient_name: (entry.nickname ?? entry.name).trim(),
         },
       });
       return;
@@ -180,7 +180,7 @@ export default function ContactsScreen() {
         params: {
           chat_id: chat.chat_id,
           recipient_id: entry.id,
-          recipient_name: entry.nickname ?? entry.name,
+          recipient_name: (entry.nickname ?? entry.name).trim(),
         },
       });
     } catch (err: unknown) {

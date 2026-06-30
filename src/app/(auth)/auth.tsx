@@ -192,7 +192,7 @@ export default function Auth() {
     }
     await runWithLoading(async () => {
       try {
-        const response = await authApi.signup({ name: name!, email: email!, password: password! });
+        const response = await authApi.signup({ name: name!.trim(), email: email!, password: password! });
         if (response.status) {
           authState.isSentOtp.set(true);
           loginOrSignup$.isSignup.set(true);
