@@ -18,7 +18,7 @@ import { type FontAwesome5IconName } from '@/components/ui/fonts/fontAwesome5';
 import { PersonalUtilGetUser } from '@/utils/personalUtils/personal.util.profile';
 import * as ChatStorage from '@/lib/storage/personalStorage/chat/chat.storage';
 import { PersonalStorageGetUser } from '@/lib/storage/personalStorage/profile/personal.storage.user';
-import { useValue, Memo } from '@legendapp/state/react';
+import { useValue, Memo, useObservable } from '@legendapp/state/react';
 import { useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native-unistyles';
 import ChatListItem from './_components/ChatListItem';
@@ -27,6 +27,25 @@ import type { ChatEntry } from '@/lib/personalLib';
 const PersonalHome = React.memo(() => {
   const router = useRouter();
   const { handlePressIn } = React.useMemo(() => pressableAnimation(), []);
+
+  const showSyncButton$ = useObservable(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      showSyncButton$.set(true);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const globalSyncStatus = useValue(historySyncStatus$);
+  useEffect(() => {
+    if (globalSyncStatus === 'failed') {
+      showAlert('History sync failed. Please try again.');
+      historySyncStatus$.set('idle');
+    } else if (globalSyncStatus === 'primary_offline') {
+      showAlert('Primary device is offline. Could not complete sync.');
+      historySyncStatus$.set('idle');
+    }
+  }, [globalSyncStatus]);
 
   const toggleMode = useCallback(() => {
     const current = appMode$.mode.peek();
@@ -200,7 +219,7 @@ const PersonalHome = React.memo(() => {
         {/* Sync Button */}
         <Memo>
           {() => {
-            if (authState.isPrimary.get() !== false) {
+            if (authState.isPrimary.get() !== false || !showSyncButton$.get()) {
               return null;
             }
             const syncStatus = historySyncStatus$.get();
@@ -211,19 +230,26 @@ const PersonalHome = React.memo(() => {
               iconName = 'check-circle';
             } else if (syncStatus === 'failed') {
               syncColor = '#FF3B30'; // red
-              iconName = 'exclamation-circle';
+            } else if (syncStatus === 'primary_offline') {
+              syncColor = '#FFCC00'; // yellow
             }
 
             return (
               <AppButton
                 label={syncStatus === 'syncing' ? "Syncing..." : "Sync"}
                 icon={<FontAwesome5Icon name={iconName} size={14} color={syncColor} />}
-                onPress={() => initiateHistorySync(true)}
+                onPress={() => {
+                  if (syncStatus !== 'syncing') {
+                    initiateHistorySync(true);
+                  }
+                }}
+                disabled={syncStatus === 'syncing'}
                 onPressIn={handlePressIn}
                 pressedOpacity={0.1}
                 textType="default"
+                forceSymmetricRadii={true}
                 labelStyle={[styles.newChatText, { color: syncColor }]}
-                style={[styles.newChatButton, { marginRight: 10 }]}
+                style={[styles.newChatButton, { marginRight: 'auto' }]}
               />
             );
           }}

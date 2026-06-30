@@ -9,8 +9,8 @@ import type { MessageEntry } from '@/lib/personalLib';
 import { observable } from '@legendapp/state';
 
 let hasCompletedHistorySyncThisSession = false;
-export const historySyncStatus$ = observable<'idle' | 'syncing' | 'success' | 'failed'>('idle');
-
+export const historySyncStatus$ = observable<'idle' | 'syncing' | 'success' | 'failed' | 'primary_offline'>('idle');
+let syncTimeoutHandle: NodeJS.Timeout | null = null;
 export async function initiateHistorySync(force = false): Promise<void> {
     if (authState.isPrimary.peek() !== false) {
         return; // Guard #6: Only secondary devices request history sync
@@ -58,10 +58,21 @@ export async function initiateHistorySync(force = false): Promise<void> {
             [primaryPublicKey, myPublicKey]
         );
 
+
         await ChatTransport.requestHistorySync({ 
             chats_cipher: chatsCipher, 
             used_primary_key: primaryPublicKey 
         });
+
+        if (syncTimeoutHandle) {
+            clearTimeout(syncTimeoutHandle);
+        }
+        syncTimeoutHandle = setTimeout(() => {
+            if (historySyncStatus$.peek() === 'syncing') {
+                console.warn('[HistorySync] Timeout waiting for primary response.');
+                historySyncStatus$.set('failed');
+            }
+        }, 30000);
 
         // We do not wait for the promise blockingly in the trigger path.
         // It will be resolved when the WS event bridge receives 'history_sync_ready'.
@@ -81,6 +92,12 @@ export async function initiateHistorySync(force = false): Promise<void> {
             } catch (retryErr) {
                 console.error('[HistorySync] Failed to recover from key_mismatch:', retryErr);
             }
+        }
+
+        if (err?.type === 'primary_offline') {
+            console.warn('[HistorySync] Primary device is offline.');
+            historySyncStatus$.set('primary_offline');
+            return;
         }
 
         historySyncStatus$.set('failed');

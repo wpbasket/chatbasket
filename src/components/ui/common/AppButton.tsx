@@ -36,6 +36,8 @@ export type AppButtonProps = {
   asymmetric?: boolean;
   /** Enable hover effect on web. Default: true. */
   hover?: boolean;
+  /** Force the right border radii to match the left border radii, creating a symmetric shape while preserving the border */
+  forceSymmetricRadii?: boolean;
 };
 
 /**
@@ -58,6 +60,7 @@ export const AppButton = React.memo(({
   pressedOpacity = 0.6,
   asymmetric = true,
   hover = true,
+  forceSymmetricRadii = false,
 }: AppButtonProps) => {
   const clicked$ = useObservable(false);
   const clicked = useValue(clicked$);
@@ -81,6 +84,8 @@ export const AppButton = React.memo(({
       style={({ pressed }) => [
         styles.container,
         asymmetric ? styles.asymmetric : styles.symmetric,
+        forceSymmetricRadii && styles.forceSymmetric,
+        !disabled && hover && styles.hoverEnabled,
         pressed && !(Platform.OS === 'web' && hover) && { opacity: pressedOpacity },
         disabled && styles.disabled,
         width != null && { width: width as any },
@@ -124,6 +129,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingRight: 30,
     marginLeft: -12,
     marginRight: -30,
+  },
+  forceSymmetric: {
+    borderTopRightRadius: (theme.radii.asymmetric as any).borderTopLeftRadius,
+    borderBottomRightRadius: (theme.radii.asymmetric as any).borderBottomLeftRadius,
+    paddingRight: 13,
   },
   hoverEnabled: {
     _web: {
